@@ -35,30 +35,36 @@ select,input{width:100%;padding:9px 10px;border:1px solid var(--border2);border-
   <input type="password" id="drv-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')doLogin()">
   <div class="err" id="err-msg"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
   <button class="btn btn-green" onclick="doLogin()"><i class="ti ti-steering-wheel"></i> 登入</button>
-
 </div>
 <script>
 firebase.initializeApp({apiKey:"AIzaSyAQNo3CGRWbFdGfyO2GFetJYjc4MGAc-yU",authDomain:"travel-booking-233b7.firebaseapp.com",projectId:"travel-booking-233b7",storageBucket:"travel-booking-233b7.firebasestorage.app",messagingSenderId:"1020869295331",appId:"1:1020869295331:web:deb14c36d3199a3654d9d6"});
 const db=firebase.firestore();
 const DRV_KEY='driverDeviceTrusted_v1';
 let drivers=[];
+// [修正] 加入旗標，防止自動跳轉在 onSnapshot 多次觸發時重複執行
+let redirected=false;
 
-db.collection('drivers').onSnapshot(s=>{
+const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
   drivers=s.docs.map(d=>({id:d.id,...d.data()})).filter(d=>d.type==='own');
   const sel=document.getElementById('drv-sel');
   sel.innerHTML=drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 
-  // 若裝置已記住某位司機，自動跳轉
-  const saved=localStorage.getItem(DRV_KEY);
-  if(saved){
-    try{
-      const info=JSON.parse(saved);
-      const drv=drivers.find(d=>d.id===info.id);
-      if(drv){
-        sessionStorage.setItem('driverLogin',JSON.stringify({id:drv.id,name:drv.name}));
-        window.location.href='index.html#driver';
-      }
-    }catch(e){localStorage.removeItem(DRV_KEY);}
+  // 若裝置已記住某位司機，自動跳轉（只執行一次）
+  if(!redirected){
+    const saved=localStorage.getItem(DRV_KEY);
+    if(saved){
+      try{
+        const info=JSON.parse(saved);
+        const drv=drivers.find(d=>d.id===info.id);
+        if(drv){
+          redirected=true;
+          // [修正] 跳轉前先取消訂閱，避免重複觸發
+          unsubDrivers();
+          sessionStorage.setItem('driverLogin',JSON.stringify({id:drv.id,name:drv.name}));
+          window.location.href='index.html#driver';
+        }
+      }catch(e){localStorage.removeItem(DRV_KEY);}
+    }
   }
 });
 

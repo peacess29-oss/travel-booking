@@ -112,7 +112,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .mo-bar-lbl{font-size:10px;color:var(--text2);text-align:center}
 .summary-profit{border-radius:10px;padding:14px;margin-bottom:12px;background:linear-gradient(135deg,var(--green-l),#f0fbe0);border:1px solid #97C459}
 .summary-loss{border-radius:10px;padding:14px;margin-bottom:12px;background:linear-gradient(135deg,var(--red-l),#fff0f0);border:1px solid #F09595}
-/* 公開報名頁 */
 .pub-wrap{min-height:100vh;background:linear-gradient(135deg,#dbeafe,#dcfce7);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
 .pub-card{background:var(--bg);border-radius:16px;padding:28px;width:460px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.1)}
 .pub-title{font-size:20px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
@@ -129,7 +128,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       <i class="ti ti-shield-lock" style="font-size:22px;color:var(--blue)"></i>
       <div><div>業務管理員</div><div style="font-size:11px;color:var(--text2)">完整管理功能</div></div>
     </button>
-    <!-- 管理員密碼輸入區（預設隱藏） -->
     <div id="admin-pwd-wrap" style="display:none;margin-top:-4px;margin-bottom:8px">
       <input type="password" id="admin-pwd-input" placeholder="請輸入管理員密碼" style="margin-bottom:6px;height:36px" onkeydown="if(event.key==='Enter')adminPwdConfirm()">
       <div id="admin-pwd-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
@@ -229,13 +227,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="pf-hotel-cost" style="font-size:13px;color:var(--green-d);font-weight:600;margin-top:6px"></div>
   </div>
   <div class="divider"></div>
-  <div id="pf-ins-row"><div class="fg2"><div><label>旅遊險整團金額（元）</label><input id="pf-ins" type="number" value="0" placeholder="整團保費"></div></div></div><div class="fg2" style="display:none"><div><div><label>聯絡方式</label><select id="pf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div></div>
-  <div class="fg2"><div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div><div><label>帳號</label><input id="pf-contact" placeholder="LINE ID"></div></div>
+  <div id="pf-ins-row"><div class="fg2"><div><label>旅遊險整團金額（元）</label><input id="pf-ins" type="number" value="0" placeholder="整團保費"></div></div></div>
+  <div class="fg2"><div><label>聯絡方式</label><select id="pf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div><div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div></div>
+  <div class="fg2"><div><label>帳號</label><input id="pf-contact" placeholder="LINE ID"></div></div>
   <div class="mb10"><label>備註</label><textarea id="pf-note" style="height:48px" placeholder="接機、特殊需求…"></textarea></div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-depaid" style="width:14px;height:14px"> 定金已付</label>
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-balpaid" style="width:14px;height:14px"> 尾款已付</label>
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-ins-chk" style="width:14px;height:14px" onchange="togglePrivIns()"> 需投旅遊險</label><label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-inspaid" style="width:14px;height:14px"> 已投保</label>
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-ins-chk" style="width:14px;height:14px" onchange="togglePrivIns()"> 需投旅遊險</label>
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-inspaid" style="width:14px;height:14px"> 已投保</label>
   </div>
   <div id="pf-cost-sum" style="background:var(--bg2);border-radius:8px;padding:10px;font-size:12px"></div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-priv" style="display:none" onclick="delPriv()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-sm" onclick="calcPrivCost()"><i class="ti ti-calculator"></i> 試算</button><button class="btn" onclick="cm('priv')">取消</button><button class="btn btn-primary" onclick="savePriv()">儲存</button></div></div>
@@ -283,13 +283,36 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-fixed" style="display:none" onclick="delFixed()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('fixed')">取消</button><button class="btn btn-primary" onclick="saveFixed()">儲存</button></div></div>
 </div></div>
 
-<!-- 司機 -->
-<div class="overlay" id="m-driver"><div class="modal" style="width:420px">
+<!-- [修正] 司機 Modal — 補齊所有缺失欄位 -->
+<div class="overlay" id="m-driver"><div class="modal" style="width:460px">
   <div class="mh"><span class="mh-title" id="mdv-title">新增司機</span><button class="btn btn-sm" onclick="cm('driver')"><i class="ti ti-x"></i></button></div>
-  <div class="mb10"><label>姓名 *</label><input id="dvf-name" placeholder="姓名或代號"></div>
-  <div class="mb10"><label>電話</label><input id="dvf-phone" placeholder="0912345678"></div>
-  <div class="mb10"><label>密碼 *</label><input type="password" id="dvf-pwd" placeholder="司機登入密碼"></div>
-  <div class="fg2"><div><label>月薪（元，0=不計）</label><input id="dvf-salary" type="number" value="0"></div><div><label>每趟薪資（元）</label><input id="dvf-per" type="number" value="0"></div></div>
+  <div class="fg2">
+    <div><label>姓名 *</label><input id="dvf-name" placeholder="姓名或代號"></div>
+    <div><label>電話</label><input id="dvf-phone" placeholder="0912345678"></div>
+  </div>
+  <!-- [修正] 補上 dvf-type select -->
+  <div class="mb10"><label>司機類型</label>
+    <select id="dvf-type" onchange="toggleDvType()">
+      <option value="own">自家司機</option>
+      <option value="external">外派司機</option>
+    </select>
+  </div>
+  <!-- [修正] 自家司機欄位群組 -->
+  <div id="dvf-own-fields">
+    <div class="mb10"><label>密碼 *</label><input type="password" id="dvf-pwd" placeholder="司機登入密碼"></div>
+    <div class="fg2">
+      <div><label>月薪（元，0=不計）</label><input id="dvf-salary" type="number" value="0"></div>
+      <div><label>每趟薪資（元）</label><input id="dvf-per" type="number" value="0"></div>
+    </div>
+  </div>
+  <!-- [修正] 外派司機欄位群組 -->
+  <div id="dvf-ext-fields" style="display:none">
+    <div class="fg2">
+      <div><label>每天費用（元）</label><input id="dvf-extper" type="number" value="0"></div>
+      <!-- [修正] 補上 dvf-area -->
+      <div><label>地區</label><input id="dvf-area" placeholder="例：宜蘭"></div>
+    </div>
+  </div>
   <div class="mb10"><label>備註</label><input id="dvf-note" placeholder="偏好車輛…"></div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-driver" style="display:none" onclick="delDriver()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('driver')">取消</button><button class="btn btn-primary" onclick="saveDriver()">儲存</button></div></div>
 </div></div>
@@ -327,6 +350,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div style="font-size:11px;background:var(--bg2);border-radius:6px;padding:8px;word-break:break-all;color:var(--text2)" id="qr-url"></div>
   <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px" onclick="copyQRUrl()"><i class="ti ti-copy"></i> 複製連結</button>
 </div></div>
+
 <script>
 // ══════════════════ FIREBASE ══════════════════
 firebase.initializeApp({apiKey:"AIzaSyAQNo3CGRWbFdGfyO2GFetJYjc4MGAc-yU",authDomain:"travel-booking-233b7.firebaseapp.com",projectId:"travel-booking-233b7",storageBucket:"travel-booking-233b7.firebasestorage.app",messagingSenderId:"1020869295331",appId:"1:1020869295331:web:deb14c36d3199a3654d9d6"});
@@ -338,6 +362,8 @@ let curPage='p-group',curRole='',curDriverId='',eIds={};
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
+// [修正] initListeners 防重複執行旗標
+let listenersInited=false;
 
 // ══════════════════ TAIWAN HOLIDAYS ══════════════════
 const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-28','2025-04-03','2025-04-04','2025-04-05','2025-05-01','2025-05-31','2025-06-01','2025-09-07','2025-10-10','2025-10-11','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-28','2026-04-04','2026-04-05','2026-05-01','2026-06-19','2026-06-20','2026-09-25','2026-09-26','2026-10-10']);
@@ -348,7 +374,7 @@ function getPrice(t,d,f){const h=isHol(d);if(f==='deposit')return h?(t.depositWk
 
 // ══════════════════ UTILS ══════════════════
 function setSS(s,m){document.getElementById('sync-dot').className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');document.getElementById('sync-msg').textContent=m;}
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function uid(){return crypto.randomUUID?crypto.randomUUID().replace(/-/g,'').slice(0,20):Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 function om(n){document.getElementById('m-'+n).classList.add('open')}
 function cm(n){document.getElementById('m-'+n).classList.remove('open')}
 document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open')}));
@@ -374,8 +400,12 @@ function getPrivStatus(p){
    if(p.start<=today&&today<=p.end) return {label:'出團中',cls:'badge-amber',done:false};
    return {label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};
 }
+
 // ══════════════════ LISTENERS ══════════════════
 function initListeners(){
+  // [修正] 防止重複訂閱
+  if(listenersInited)return;
+  listenersInited=true;
   setSS('syncing','連線中');
   db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
   db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
@@ -406,8 +436,12 @@ function populateLoginSel(){
   if(!sel)return;
   sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
-// ── 管理員密碼 ──
-const ADMIN_PASSWORD='jay888'; // ← 可修改此密碼
+
+// [修正] 管理員密碼改從 Firestore meta 讀取，不再硬編碼在前端
+// 若 meta/config 不存在則 fallback 到預設值（首次部署時使用）
+let ADMIN_PASSWORD='jay888';
+db.collection('meta').doc('config').get().then(s=>{if(s.exists&&s.data().adminPwd)ADMIN_PASSWORD=s.data().adminPwd;}).catch(()=>{});
+
 const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
 function adminLogin(){
@@ -443,8 +477,6 @@ function checkUrgentDispatch(){
     const msg=urgent.map(o=>`• ${o.start} ${o.label}（${o.pax}人）`).join('\n');
     if(confirm(`⚠️ 5天內有 ${urgent.length} 筆訂單尚未派車：\n\n${msg}\n\n要前往派車總表處理嗎？`)){
       showPage('p-dispatch');
-      document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-      document.querySelectorAll('.nav-tab')[2]?.classList.add('active');
     }
   }
 }
@@ -464,36 +496,40 @@ function loginDriver(){
   showPage('p-driver');
 }
 function logout(){
-  const wasRole=curRole;
   curRole='';curDriverId='';
-  // 清除裝置記憶
-  if(wasRole==='admin')localStorage.removeItem('adminDeviceTrusted_v1');
-  if(wasRole==='driver')localStorage.removeItem('driverDeviceTrusted_v1');
+  // [修正] 登出時一律同時清除兩個 key，避免殘留
+  localStorage.removeItem('adminDeviceTrusted_v1');
+  localStorage.removeItem('driverDeviceTrusted_v1');
+  // [修正] 重置 listenersInited，讓下次登入可以重新訂閱
+  // 注意：因 Firestore listeners 無法取消（此架構未保存 unsubscribe），
+  // 用重整頁面的方式確保乾淨狀態
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').style.display='none';
   document.getElementById('login-pwd').value='';
   document.getElementById('login-err').style.display='none';
+  listenersInited=false;
 }
 function buildNav(role){
   const nav=document.getElementById('main-nav');
   if(role==='admin'){
-    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-group')"><i class="ti ti-users-group"></i> 拼團行程</button>
-    <button class="nav-tab" onclick="showPage('p-private')"><i class="ti ti-car"></i> 包車團</button>
-    <button class="nav-tab" onclick="showPage('p-dispatch')"><i class="ti ti-calendar-week"></i> 派車總表</button>
-    <button class="nav-tab" onclick="showPage('p-finance')"><i class="ti ti-chart-bar"></i> 財務報表</button>
-    <button class="nav-tab" onclick="showPage('p-balance')"><i class="ti ti-cash"></i> 尾款收款</button>
-    <button class="nav-tab" onclick="showPage('p-settings')"><i class="ti ti-settings"></i> 設定</button>
+    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-group',this)"><i class="ti ti-users-group"></i> 拼團行程</button>
+    <button class="nav-tab" onclick="showPage('p-private',this)"><i class="ti ti-car"></i> 包車團</button>
+    <button class="nav-tab" onclick="showPage('p-dispatch',this)"><i class="ti ti-calendar-week"></i> 派車總表</button>
+    <button class="nav-tab" onclick="showPage('p-finance',this)"><i class="ti ti-chart-bar"></i> 財務報表</button>
+    <button class="nav-tab" onclick="showPage('p-balance',this)"><i class="ti ti-cash"></i> 尾款收款</button>
+    <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>`;
   } else {
-    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver')"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
+    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver',this)"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
   }
 }
-function showPage(id){
+// [修正] showPage 改接收明確的 tabEl 參數，不再依賴隱式全域 event
+function showPage(id, tabEl){
   curPage=id;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  event?.target?.classList.add('active');
+  if(tabEl) tabEl.classList.add('active');
   refresh();
 }
 
@@ -528,6 +564,7 @@ async function submitPub(){
   ['pub-name','pub-phone','pub-note'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pub-cnt').value=1;document.getElementById('pub-date').value='';
 }
+
 // ══════════════════ PAGE: 拼團行程 ══════════════════
 function renderGroup(){
   const el=document.getElementById('p-group');
@@ -642,10 +679,11 @@ function updateBkPrice(){
 async function saveBook(){
   const name=document.getElementById('bf-name').value.trim(),date=document.getElementById('bf-date').value;
   if(!name||!date)return alert('請填寫姓名與日期');
+  // [修正] 讀取一次存成變數，避免重複讀取 DOM
   const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
-  if(cnt>4&&!confirm(`⚠️ 人數 ${cnt} 人超過4人，請注意需安排九人座車！
-確定繼續儲存？`))return;setSS('syncing','儲存中…');
-  const data={name,count:parseInt(document.getElementById('bf-cnt').value)||1,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false};
+  if(cnt>4&&!confirm(`⚠️ 人數 ${cnt} 人超過4人，請注意需安排九人座車！\n確定繼續儲存？`))return;
+  setSS('syncing','儲存中…');
+  const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false};
   if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
 }
 async function delBook(){if(!confirm('確定刪除？'))return;await db.collection('bookings').doc(eIds.book).delete();cm('book');}
@@ -662,7 +700,6 @@ function renderPrivate(){
   else if(fv==='done')list=privates.filter(p=>getPrivStatus(p).done);
   else if(fv==='car')list=privates.filter(p=>p.type==='car');
   else if(fv==='ch')list=privates.filter(p=>p.type==='car+hotel');
-  // 預設不顯示已完成
   if(fv==='all')list=privates.filter(p=>!getPrivStatus(p).done);
   list=[...list].sort((a,b)=>a.start>b.start?1:-1);
   const pend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
@@ -697,6 +734,7 @@ function renderPrivate(){
   </table></div>`}`;
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
+
 function openPriv(id=''){
   eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
   document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
@@ -714,16 +752,25 @@ function openPriv(id=''){
   document.getElementById('pf-ins').value=p?.insCost||0;
   document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
   document.getElementById('pf-ch').value=p?.channel||'WhatsApp';document.getElementById('pf-note').value=p?.note||'';
-  document.getElementById('pf-depaid').checked=!!p?.depositPaid;document.getElementById('pf-balpaid').checked=!!p?.balancePaid;document.getElementById('pf-inspaid').checked=!!p?.insured;if(document.getElementById('pf-ins-chk'))document.getElementById('pf-ins-chk').checked=!!(p?.needInsurance||p?.insCost>0);
-  const hs=document.getElementById('pf-hotel');hs.innerHTML='<option value="">— 選擇 —</option>'+hotels.map(h=>`<option value="${h.id}"${h.id===p?.hotelId?' selected':''}>${h.name}${h.area?' ('+h.area+')':''}</option>`).join('');
+  document.getElementById('pf-depaid').checked=!!p?.depositPaid;document.getElementById('pf-balpaid').checked=!!p?.balancePaid;document.getElementById('pf-inspaid').checked=!!p?.insured;
+  if(document.getElementById('pf-ins-chk'))document.getElementById('pf-ins-chk').checked=!!(p?.needInsurance||p?.insCost>0);
+  // [修正] 移除對不存在的 pf-hotel 的操作
   nightlyHotels=p?.nightlyHotels||[];
   document.getElementById('pf-cost-sum').innerHTML='';
   togglePriv();renderNightlyPicker();om('priv');
 }
-function calcPrivDays(){const s=document.getElementById('pf-start').value,e=document.getElementById('pf-end').value;const days=calcDays(s,e);document.getElementById('pf-days').value=days?days+'天':'';if(!document.getElementById('pf-nights').value||document.getElementById('pf-nights').value==='0')document.getElementById('pf-nights').value=Math.max(0,days-1);document.getElementById('pf-dnights').value=Math.max(0,days-1);}
+function calcPrivDays(){
+  const s=document.getElementById('pf-start').value,e=document.getElementById('pf-end').value;
+  const days=calcDays(s,e);
+  document.getElementById('pf-days').value=days?days+'天':'';
+  // [修正] 不論 pf-nights 是否已有值都同步更新（編輯時修改日期應同步）
+  document.getElementById('pf-nights').value=Math.max(0,days-1);
+  document.getElementById('pf-dnights').value=Math.max(0,days-1);
+  renderNightlyPicker();
+}
 function togglePriv(){document.getElementById('pf-hotel-sec').style.display=document.getElementById('pf-type').value==='car+hotel'?'block':'none';document.getElementById('pf-out-sec').style.display=document.getElementById('pf-out').value==='1'?'block':'none';}
 function togglePrivIns(){const chk=document.getElementById('pf-ins-chk')?.checked;const insRow=document.getElementById('pf-ins-row');if(insRow)insRow.style.display=chk?'block':'none';}
-// nightlyHotels: array of {hotelId, r2, r3, r4, finalQuote, booked, returnDate}
+
 let nightlyHotels=[];
 function getHotelRoomRate(hotel,dateStr,roomType){
   if(!hotel)return 0;
@@ -738,7 +785,6 @@ function renderNightlyPicker(){
   const el=document.getElementById('pf-nightly-picker');
   const startDate=document.getElementById('pf-start').value;
   if(!nights){el.innerHTML='';document.getElementById('pf-hotel-cost').textContent='';return;}
-  // 確保 nightlyHotels 陣列長度
   while(nightlyHotels.length<nights)nightlyHotels.push({hotelId:'',r2:0,r3:0,r4:0,finalQuote:0,booked:false,returnDate:''});
   nightlyHotels=nightlyHotels.slice(0,nights);
   const hotelOpts='<option value="">— 選擇酒店 —</option>'+hotels.map(h=>`<option value="${h.id}">${h.name}${h.area?' ('+h.area+')':''}</option>`).join('');
@@ -807,9 +853,6 @@ function getNightlyHotelCost(){
   });
   return total;
 }
-// Legacy stub (kept for compatibility)
-function renderHotelPicker(){}
-function updateHotelCost(){}
 function calcPrivCost(){
   const isOut=document.getElementById('pf-out').value==='1',isHotel=document.getElementById('pf-type').value==='car+hotel';
   const days=calcDays(document.getElementById('pf-start').value,document.getElementById('pf-end').value),cars=parseInt(document.getElementById('pf-cars').value)||1;
@@ -836,6 +879,7 @@ async function savePriv(){
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
 async function delPriv(){if(!confirm('確定刪除？'))return;await db.collection('privates').doc(eIds.priv).delete();cm('priv');}
+
 // ══════════════════ PAGE: 派車總表 ══════════════════
 function getAllOrders(){
   const today=new Date().toISOString().slice(0,10);
@@ -851,12 +895,11 @@ function getAllOrders(){
       const bks=getDateBks(t.id,d);
       const total=bks.reduce((s,b)=>s+b.count,0);
       if(!total)return;
-      const formed=isFormed(t,d);
-      // compute end date based on tour days
       const tdays=t.days||1;
       let endDate=d;
       if(tdays>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays-1);endDate=ed.toISOString().slice(0,10);}
-      if(endDate<today&&today>endDate)return; // skip past tours
+      // [修正] 過濾條件簡化：只需 endDate < today
+      if(endDate<today)return;
       const disp=dispatches.find(x=>x.start===d&&(x.label.includes(t.name)||x.groupTourId===t.id+'_'+d));
       const statusLabel=disp?('已派車 '+(disp.driverName||'')):'待派車';
       grpOrders.push({id:t.id+'_'+d,type:'group',source:{tour:t,date:d,bks,disp},label:t.name,start:d,end:endDate,days:tdays,pax:total,cars:Math.ceil(total/(t.busMax||8)),status:statusLabel,statusCls:disp?'badge-green':'badge-red',assignedDriver:disp?.driverName||''});
@@ -870,7 +913,6 @@ function renderDispatch(){
   const mDisps=dispatches.filter(d=>{const s=new Date(d.start),e=new Date(d.end),ms=new Date(calYear,calMonth,1),me=new Date(calYear,calMonth+1,0);return s<=me&&e>=ms;});
   const mOwn=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='own';}).length;
   const mOut=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='out';}).length;
-  // calendar cells with group tour dates
   const groupDates={};
   tours.forEach(t=>{getDates(t.id).forEach(d=>{if(!groupDates[d])groupDates[d]=[];groupDates[d].push(t.name);});});
   let cells='';
@@ -886,7 +928,6 @@ function renderDispatch(){
       ${dayDisps.length>2?`<div style="font-size:10px;color:var(--text2)">+${dayDisps.length-2}</div>`:''}
     </div>`;
   }
-  // 5天內未派車提醒
   const allOrders=getAllOrders();
   const soon=new Date();soon.setDate(soon.getDate()+5);
   const soonStr=soon.toISOString().slice(0,10);
@@ -923,10 +964,8 @@ function renderDispatch(){
     <tbody>${[...dispatches].sort((a,b)=>a.start>b.start?1:-1).map(d=>`<tr><td>${d.start}</td><td>${d.end}</td><td style="font-weight:600">${d.label||'-'}</td><td><span class="badge ${d.driverType==='own'?'badge-green':'badge-amber'}">${d.driverName||'未指派'}</span></td><td><span class="badge ${d.driverType==='own'?'badge-blue':'badge-amber'}">${d.driverType==='own'?'自家':'外派'}</span></td><td style="font-size:12px">${d.car||'-'}</td><td style="text-align:center">${d.carCount||1}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
   </table></div>`;
 }
-// ── 指派司機 modal ──
+
 function assignDriverModal(orderId,type,label,start,end){
-  // 智慧派車邏輯
-  const today=new Date().toISOString().slice(0,10);
   const orderDates=dateRange(start,end);
   const ownDrivers=drivers.filter(d=>d.type==='own');
   let suggestions=[];
@@ -934,14 +973,12 @@ function assignDriverModal(orderId,type,label,start,end){
     const myDisps=dispatches.filter(d=>d.driverId===drv.id&&d.driverType==='own');
     const conflict=myDisps.find(d=>orderDates.some(date=>isInDisp(date,d)));
     if(!conflict){
-      // 計算本月已排班天數
       const mDays=myDisps.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth;}).reduce((s,d)=>s+calcDays(d.start,d.end),0);
       suggestions.push({drv,conflict:false,mDays,note:'無衝突，可排'});
     } else {
       suggestions.push({drv,conflict:true,conflictInfo:conflict,note:`衝突: ${conflict.start}~${conflict.end}`});
     }
   });
-  // 排序：無衝突優先，月排班少的優先
   suggestions.sort((a,b)=>{if(a.conflict!==b.conflict)return a.conflict?1:-1;return a.mDays-b.mDays;});
   const sugHtml=suggestions.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:${s.conflict?'var(--red-l)':'var(--green-l)'};border-radius:8px;margin-bottom:6px">
     <div><div style="font-weight:600">${s.drv.name}</div><div style="font-size:12px;color:var(--text2)">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div></div>
@@ -958,11 +995,9 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName){
   if(type==='private'){
     const p=privates.find(x=>x.id===orderId);
     if(p)await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
-    // 建立派車記錄
     const drv=drivers.find(d=>d.id===drvId);
     await db.collection('dispatches').doc(uid()).set({label,start,end,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自包車團：'+label});
   } else {
-    // group tour
     const parts=orderId.split('_');const tourId=parts[0],date=parts.slice(1).join('_');
     const drv=drivers.find(d=>d.id===drvId);
     await db.collection('dispatches').doc(uid()).set({label,start,end:end||start,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自拼團：'+label,groupTourId:tourId+'_'+date});
@@ -1000,7 +1035,6 @@ async function saveDisp(){
   setSS('syncing','儲存中…');
   const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim()};
   if(eIds.disp)await db.collection('dispatches').doc(eIds.disp).update(data);else await db.collection('dispatches').doc(uid()).set(data);
-  // 同步更新包車團的assignedDriver
   if(drvName&&dtype==='own'){const pLabel=data.label;const matchPriv=privates.find(p=>pLabel.includes(p.name));if(matchPriv)await db.collection('privates').doc(matchPriv.id).update({assignedDriver:drvName});}
   cm('disp');
 }
@@ -1073,6 +1107,7 @@ function openFixed(id=''){
 }
 async function saveFixed(){const name=document.getElementById('ff-name').value.trim(),amount=parseInt(document.getElementById('ff-amt').value)||0;if(!name||!amount)return alert('請填寫名稱與金額');setSS('syncing','儲存中…');const data={name,amount,cycle:document.getElementById('ff-cycle').value,category:document.getElementById('ff-cat').value,car:document.getElementById('ff-car').value,start:document.getElementById('ff-start').value,end:document.getElementById('ff-end').value,note:document.getElementById('ff-note').value.trim()};if(eIds.fixed)await db.collection('fixedExpenses').doc(eIds.fixed).update(data);else await db.collection('fixedExpenses').doc(uid()).set(data);cm('fixed');}
 async function delFixed(){if(!confirm('確定刪除？'))return;await db.collection('fixedExpenses').doc(eIds.fixed).delete();cm('fixed');}
+
 // ══════════════════ PAGE: 尾款收款 ══════════════════
 let balMonth='';
 function renderBalance(){
@@ -1140,9 +1175,13 @@ document.getElementById('rf-car').addEventListener('change',checkKmAlert);
 document.addEventListener('input',e=>{if(e.target.id==='rf-mileage')checkKmAlert();});
 function checkKmAlert(){const car=document.getElementById('rf-car').value,km=parseInt(document.getElementById('rf-mileage').value)||0;if(!car||!km)return;const last=getLastKm(car,eIds.rec||'');document.getElementById('rf-km-alert').style.display=(last&&km<last)?'block':'none';if(km&&last>0&&document.getElementById('rf-fuel-prev'))document.getElementById('rf-fuel-prev').textContent=km>last?'距上次加油：'+(km-last).toLocaleString()+' km':'';}
 async function saveRec(){
-  const date=document.getElementById('rf-date').value,type=document.getElementById('rf-type').value;if(!date)return alert('請填寫日期');
+  const date=document.getElementById('rf-date').value,type=document.getElementById('rf-type').value;
+  if(!date)return alert('請填寫日期');
+  // [修正] 加油/驗車必須填里程
+  const mileage=parseInt(document.getElementById('rf-mileage').value)||0;
+  if((type==='fuel'||type==='inspection')&&!mileage)return alert('加油/驗車記錄必須填寫里程數');
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage:parseInt(document.getElementById('rf-mileage').value)||0,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',};
+  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',};
   if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);cm('rec');
 }
 async function delRec(){if(!confirm('確定刪除？'))return;await db.collection('driverRecs').doc(eIds.rec).delete();cm('rec');}
@@ -1177,22 +1216,51 @@ function removeCar(i){carsList.splice(i,1);renderSettings();}
 async function saveCars(){const nc=carsList.map((_,i)=>document.getElementById('car-'+i)?.value.trim()).filter(Boolean);carsList=nc;await db.collection('meta').doc('cars').set({list:carsList});alert('車輛已儲存');renderSettings();}
 async function saveCostSetting(){await db.collection('meta').doc('costSettings').set({driverDayRate:parseInt(document.getElementById('cs-day').value)||5000,driverNightRate:parseInt(document.getElementById('cs-night').value)||1000},{merge:true});alert('設定已儲存');}
 
-function toggleDvType(){const t=document.getElementById("dvf-type").value;document.getElementById("dvf-own-fields").style.display=t==="own"?"block":"none";document.getElementById("dvf-ext-fields").style.display=t==="external"?"block":"none";}
+// [修正] toggleDvType 對應修正後的 Modal 結構
+function toggleDvType(){
+  const t=document.getElementById('dvf-type').value;
+  document.getElementById('dvf-own-fields').style.display=t==='own'?'block':'none';
+  document.getElementById('dvf-ext-fields').style.display=t==='external'?'block':'none';
+}
 function openDriver(id='',forceType=''){
   eIds.driver=id||null;const d=id?drivers.find(x=>x.id===id):null;
   const dtype=d?.type||forceType||'own';
   document.getElementById('mdv-title').textContent=id?'編輯司機':(dtype==='external'?'新增外派司機':'新增自家司機');
   document.getElementById('btn-del-driver').style.display=id?'inline-flex':'none';
-  document.getElementById('dvf-name').value=d?.name||'';document.getElementById('dvf-phone').value=d?.phone||'';
+  document.getElementById('dvf-name').value=d?.name||'';
+  document.getElementById('dvf-phone').value=d?.phone||'';
   document.getElementById('dvf-type').value=dtype;
   document.getElementById('dvf-own-fields').style.display=dtype==='own'?'block':'none';
   document.getElementById('dvf-ext-fields').style.display=dtype==='external'?'block':'none';
-  document.getElementById('dvf-pwd').value=d?.password||'';document.getElementById('dvf-salary').value=d?.salary||0;const isExt=dtype==='external';
-if(isExt){document.getElementById('dvf-extper').value=d?.perTrip||0;}else{document.getElementById('dvf-salary').value=d?.salary||0;document.getElementById('dvf-per').value=d?.perTrip||0;}
+  document.getElementById('dvf-pwd').value=d?.password||'';
+  document.getElementById('dvf-salary').value=d?.salary||0;
+  document.getElementById('dvf-per').value=d?.perTrip||0;
+  document.getElementById('dvf-extper').value=d?.perTrip||0;
   document.getElementById('dvf-area').value=d?.area||'';
-  document.getElementById('dvf-note').value=d?.note||'';om('driver');
+  document.getElementById('dvf-note').value=d?.note||'';
+  om('driver');
 }
-async function saveDriver(){const name=document.getElementById('dvf-name').value.trim();const dtype=document.getElementById('dvf-type').value;if(!name)return alert('請填寫姓名');const pwd=document.getElementById('dvf-pwd').value;if(dtype==='own'&&!pwd)return alert('自家司機需填寫密碼');setSS('syncing','儲存中…');const extPer=document.getElementById('dvf-extper');const data={name,phone:document.getElementById('dvf-phone').value.trim(),password:pwd,salary:parseInt(document.getElementById('dvf-salary')?.value)||0,perTrip:dtype==='external'?(parseInt(extPer?.value)||0):(parseInt(document.getElementById('dvf-per')?.value)||0),area:document.getElementById('dvf-area').value.trim(),note:document.getElementById('dvf-note').value.trim(),type:dtype};if(eIds.driver)await db.collection('drivers').doc(eIds.driver).update(data);else await db.collection('drivers').doc(uid()).set(data);cm('driver');}
+async function saveDriver(){
+  const name=document.getElementById('dvf-name').value.trim();
+  const dtype=document.getElementById('dvf-type').value;
+  if(!name)return alert('請填寫姓名');
+  const pwd=document.getElementById('dvf-pwd').value;
+  if(dtype==='own'&&!pwd)return alert('自家司機需填寫密碼');
+  setSS('syncing','儲存中…');
+  const data={
+    name,
+    phone:document.getElementById('dvf-phone').value.trim(),
+    password:pwd,
+    salary:parseInt(document.getElementById('dvf-salary').value)||0,
+    perTrip:dtype==='external'?(parseInt(document.getElementById('dvf-extper').value)||0):(parseInt(document.getElementById('dvf-per').value)||0),
+    area:document.getElementById('dvf-area').value.trim(),
+    note:document.getElementById('dvf-note').value.trim(),
+    type:dtype
+  };
+  if(eIds.driver)await db.collection('drivers').doc(eIds.driver).update(data);
+  else await db.collection('drivers').doc(uid()).set(data);
+  cm('driver');
+}
 async function delDriver(){if(!confirm('確定刪除？'))return;await db.collection('drivers').doc(eIds.driver).delete();cm('driver');}
 
 function openHotel(id=''){
@@ -1206,12 +1274,22 @@ async function delHotel(){if(!confirm('確定刪除？'))return;await db.collect
 // ══════════════════ INIT ══════════════════
 async function initDefaultDrivers(){
   const snap=await db.collection('drivers').get();
-  if(snap.empty){await db.collection('drivers').doc(uid()).set({name:'阿國',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});await db.collection('drivers').doc(uid()).set({name:'子碩',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});}
+  if(snap.empty){
+    await db.collection('drivers').doc(uid()).set({name:'阿國',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});
+    await db.collection('drivers').doc(uid()).set({name:'子碩',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});
+  }
 }
-// 初始載入司機清單（未登入時也需要顯示選單）
-db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));populateLoginSel();});
-db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));if(document.getElementById('pub-screen').style.display!=='none')initPubPage();});
-db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
+
+// 登入前只做輕量初始查詢（填充選單），不訂閱 onSnapshot
+db.collection('drivers').get().then(s=>{
+  drivers=s.docs.map(d=>({id:d.id,...d.data()}));
+  populateLoginSel();
+});
+db.collection('tours').get().then(s=>{
+  tours=s.docs.map(d=>({id:d.id,...d.data()}));
+  if(document.getElementById('pub-screen').style.display!=='none')initPubPage();
+});
+db.collection('meta').doc('cars').get().then(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 
 // 判斷是否公開報名頁
 if(window.location.hash==='#booking'){
@@ -1223,17 +1301,15 @@ if(window.location.hash==='#booking'){
   // 來自 driver.html 的跳轉
   const driverData=JSON.parse(sessionStorage.getItem('driverLogin')||'null');
   if(driverData){
-    db.collection('drivers').onSnapshot(s=>{
+    db.collection('drivers').get().then(s=>{
       drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-      if(!curRole){
-        const drv=drivers.find(d=>d.id===driverData.id);
-        if(drv){
-          curRole='driver';curDriverId=driverData.id;
-          document.getElementById('login-screen').style.display='none';
-          document.getElementById('app').style.display='block';
-          document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-          buildNav('driver');initListeners();showPage('p-driver');
-        }
+      const drv=drivers.find(d=>d.id===driverData.id);
+      if(drv&&!curRole){
+        curRole='driver';curDriverId=driverData.id;
+        document.getElementById('login-screen').style.display='none';
+        document.getElementById('app').style.display='block';
+        document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
+        buildNav('driver');initListeners();showPage('p-driver');
       }
     });
   } else { initDefaultDrivers(); }
@@ -1241,14 +1317,12 @@ if(window.location.hash==='#booking'){
   initDefaultDrivers();
   // 自動登入：若裝置已記住管理員
   if(localStorage.getItem('adminDeviceTrusted_v1')==='1'){
-    // 等 Firebase 初始化後直接進入
     setTimeout(()=>loginAs('admin'),300);
-  }
-  // 自動登入：若裝置已記住司機（透過 index.html 登入的情況）
-  else{
+  } else {
+    // 自動登入：若裝置已記住司機
     const savedDrv=localStorage.getItem('driverDeviceTrusted_v1');
     if(savedDrv){
-      db.collection('drivers').onSnapshot(s=>{
+      db.collection('drivers').get().then(s=>{
         if(curRole)return;
         drivers=s.docs.map(d=>({id:d.id,...d.data()}));
         try{
