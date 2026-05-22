@@ -367,7 +367,13 @@ function buildBuses(bks,max){const rows=[];bks.forEach(b=>{for(let i=0;i<b.count
 function isFormed(t,d){const buses=buildBuses(getDateBks(t.id,d),t.busMax||8);return buses.length>0&&buses.every(b=>b.length>=(t.min||4));}
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
-
+function getPrivStatus(p){
+   const today=new Date().toISOString().slice(0,10);
+   if(p.end<today) return {label:'已完成',cls:'badge-green',done:true};
+   if(!p.assignedDriver) return {label:'待派車',cls:'badge-red',done:false};
+   if(p.start<=today&&today<=p.end) return {label:'出團中',cls:'badge-amber',done:false};
+   return {label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};
+}
 // ══════════════════ LISTENERS ══════════════════
 function initListeners(){
   setSS('syncing','連線中');
