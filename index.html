@@ -976,13 +976,18 @@ function assignDriverModal(orderId,type,label,start,end){
       const mDays=myDisps.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth;}).reduce((s,d)=>s+calcDays(d.start,d.end),0);
       suggestions.push({drv,conflict:false,mDays,note:'無衝突，可排'});
     } else {
-      suggestions.push({drv,conflict:true,conflictInfo:conflict,note:`衝突: ${conflict.start}~${conflict.end}`});
+      // [修正] 有衝突的司機記錄所有衝突訂單，供顯示用
+      const allConflicts=myDisps.filter(d=>orderDates.some(date=>isInDisp(date,d)));
+      suggestions.push({drv,conflict:true,conflictInfo:conflict,allConflicts,note:`已有排班：${allConflicts.map(c=>c.start+(c.start!==c.end?'~'+c.end:'')+'「'+c.label+'」').join('、')}`});
     }
   });
   suggestions.sort((a,b)=>{if(a.conflict!==b.conflict)return a.conflict?1:-1;return a.mDays-b.mDays;});
   const sugHtml=suggestions.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:${s.conflict?'var(--red-l)':'var(--green-l)'};border-radius:8px;margin-bottom:6px">
-    <div><div style="font-weight:600">${s.drv.name}</div><div style="font-size:12px;color:var(--text2)">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div></div>
-    <button class="btn btn-sm ${s.conflict?'btn-warn':'btn-success'}" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${s.drv.id}','${s.drv.name}')"><i class="ti ti-check"></i> 指派${s.conflict?' (強制)':''}</button>
+    <div style="flex:1;min-width:0"><div style="font-weight:600">${s.drv.name}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div></div>
+    ${s.conflict
+      ? `<span style="font-size:11px;color:var(--red-d);padding:4px 8px;background:var(--red-l);border:1px solid #F09595;border-radius:6px;flex-shrink:0"><i class="ti ti-ban"></i> 不可指派</span>`
+      : `<button class="btn btn-sm btn-success" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${s.drv.id}','${s.drv.name}')"><i class="ti ti-check"></i> 指派</button>`
+    }
   </div>`).join('');
   const extDrivers=drivers.filter(d=>d.type==='external');
   const extHtml=extDrivers.length?`<div style="margin-top:10px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">外派司機</div>${extDrivers.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--amber-l);border-radius:8px;margin-bottom:6px"><div><div style="font-weight:600">${d.name}</div><div style="font-size:12px;color:var(--text2)">${d.phone||''}${d.note?' ｜ '+d.note:''}</div></div><button class="btn btn-sm btn-warn" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${d.id}','${d.name}')"><i class="ti ti-check"></i> 指派</button></div>`).join('')}</div>`:'';
@@ -991,6 +996,16 @@ function assignDriverModal(orderId,type,label,start,end){
   om('assign');
 }
 async function quickAssign(orderId,type,label,start,end,drvId,drvName){
+  // [修正] 執行前再做衝突檢查，自家司機同一天不可有兩張訂單
+  const drv=drivers.find(d=>d.id===drvId);
+  if(drv?.type==='own'){
+    const orderDates=dateRange(start,end);
+    const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own').find(d=>orderDates.some(date=>isInDisp(date,d)));
+    if(conflict){
+      alert('\u274c \u7121\u6cd5\u6307\u6d3e\uff01'+drvName+' \u5728 '+conflict.start+(conflict.start!==conflict.end?'\uff5e'+conflict.end:'')+' \u5df2\u6709\u6392\u73ed\u300c'+conflict.label+'\u300d\uff0c\u540c\u4e00\u5929\u4e0d\u80fd\u5b89\u6392\u5169\u5f35\u8a02\u55ae\u3002');
+      return;
+    }
+  }
   setSS('syncing','派車中…');
   if(type==='private'){
     const p=privates.find(x=>x.id===orderId);
@@ -1032,6 +1047,15 @@ async function saveDisp(){
   if(!start||!end)return alert('請填寫日期');
   const dtype=document.getElementById('df-dtype').value,drvId=dtype==='own'?document.getElementById('df-driver').value:'';
   const drvName=dtype==='own'?(drivers.find(d=>d.id===drvId)?.name||'未指派'):(document.getElementById('df-outname').value.trim());
+  // [修正] 自家司機儲存前做衝突檢查，有衝突直接阻止，不允許覆蓋
+  if(dtype==='own'&&drvId){
+    const orderDates=dateRange(start,end);
+    const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own'&&d.id!==eIds.disp).find(d=>orderDates.some(date=>isInDisp(date,d)));
+    if(conflict){
+      alert('\u274c \u7121\u6cd5\u5132\u5b58\uff01'+drvName+' \u5728 '+conflict.start+(conflict.start!==conflict.end?'\uff5e'+conflict.end:'')+' \u5df2\u6709\u6392\u73ed\u300c'+conflict.label+'\u300d\uff0c\u540c\u4e00\u5929\u4e0d\u80fd\u5b89\u6392\u5169\u5f35\u8a02\u55ae\u3002\n\n\u8acb\u6539\u6d3e\u5176\u4ed6\u53f8\u6a5f\u6216\u4f7f\u7528\u5916\u6d3e\u53f8\u6a5f\u3002');
+      return;
+    }
+  }
   setSS('syncing','儲存中…');
   const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim()};
   if(eIds.disp)await db.collection('dispatches').doc(eIds.disp).update(data);else await db.collection('dispatches').doc(uid()).set(data);
