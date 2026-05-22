@@ -12,14 +12,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#fff;--bg2:#f6f6f6;--bg3:#eee;--text:#1a1a1a;--text2:#666;--text3:#999;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--amber:#854F0B;--amber-l:#FAEEDA;--amber-d:#633806;--red:#A32D2D;--red-l:#FCEBEB;--red-d:#791F1F;--purple:#5b3fa0;--purple-l:#ede8f8;}
+:root{--bg:#fff;--bg2:#f6f6f6;--bg3:#eee;--text:#1a1a1a;--text2:#666;--text3:#999;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#1A5201;--amber:#E59F00;--amber-l:#FFF3CD;--amber-d:#cc7a00;--red:#da3633;--red-l:#FFEBEE;--red-d:#b71c1c;--purple:#7B2CBF;--purple-l:#f3e5ff}
 @media(prefers-color-scheme:dark){:root{--bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;--text:#f2f2f7;--text2:#aeaeb2;--text3:#636366;--border:#3a3a3c;--border2:#48484a;}}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg2);color:var(--text);font-size:15px;min-height:100vh}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#dbeafe,#dcfce7)}
 .login-card{background:var(--bg);border-radius:16px;padding:28px 32px;width:360px;max-width:95vw;box-shadow:0 4px 32px rgba(0,0,0,.12)}
 .login-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:4px}
 .login-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:22px}
-.role-btn{width:100%;padding:12px 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;cursor:pointer;background:var(--bg);color:var(--text);display:flex;align-items:center;gap:10px;margin-bottom:8px;transition:all .1s;font-weight:500;text-align:left}
+.role-btn{width:100%;padding:12px 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;cursor:pointer;background:var(--bg);color:var(--text);display:flex;align-items:center;gap:10px;transition:.2s}
 .role-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .topbar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 16px;height:48px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:60}
 .topbar-brand{font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px}
@@ -30,7 +30,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .nav{background:var(--bg);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;position:sticky;top:48px;z-index:50}
 .nav::-webkit-scrollbar{display:none}
-.nav-tab{padding:10px 14px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:4px;flex-shrink:0;transition:color .1s}
+.nav-tab{padding:10px 14px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:4px;transition:.2s}
 .nav-tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
 .nav-tab:hover:not(.active){background:var(--bg2)}
 .page{display:none;max-width:1100px;margin:0 auto;padding:14px 16px 60px}
@@ -41,7 +41,7 @@ label{font-size:13px;color:var(--text2);display:block;margin-bottom:3px}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--border2);border-radius:8px;font-size:14px;background:var(--bg);color:var(--text);height:36px}
 textarea{height:auto;resize:vertical}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(24,95,165,.08)}
-.btn{padding:8px 14px;border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;background:var(--bg);color:var(--text);display:inline-flex;align-items:center;gap:4px;transition:all .1s;white-space:nowrap;font-weight:500}
+.btn{padding:8px 14px;border:1px solid var(--border2);border-radius:8px;font-size:13px;cursor:pointer;background:var(--bg);color:var(--text);display:inline-flex;align-items:center;gap:4px;transition:.2s}
 .btn:hover{background:var(--bg2)}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--blue);color:#E6F1FB;border-color:var(--blue)}
@@ -50,9 +50,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .btn-success{background:var(--green);color:var(--green-l);border-color:var(--green)}
 .btn-success:hover{background:var(--green-d)}
 .btn-warn{background:var(--amber);color:var(--amber-l);border-color:var(--amber)}
-.btn-danger{color:var(--red);border-color:#F09595}.badge-red{background:var(--red-l);color:var(--red-d)}.badge-blue{background:var(--blue-l);color:var(--blue-d)}.badge-green{background:var(--green-l);color:var(--green-d)}.badge-amber{background:var(--amber-l);color:var(--amber-d)}
+.btn-danger{color:var(--red);border-color:#F09595}
 .btn-danger:hover{background:var(--red-l)}
 .badge{display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
+.badge-red{background:var(--red-l);color:var(--red-d)}
+.badge-blue{background:var(--blue-l);color:var(--blue-d)}
+.badge-green{background:var(--green-l);color:var(--green-d)}
+.badge-amber{background:var(--amber-l);color:var(--amber-d)}
 .fg{display:flex;gap:10px;margin-bottom:10px}
 .fg>div{flex:1;min-width:0}
 .fg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
@@ -112,7 +116,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .mo-bar-lbl{font-size:10px;color:var(--text2);text-align:center}
 .summary-profit{border-radius:10px;padding:14px;margin-bottom:12px;background:linear-gradient(135deg,var(--green-l),#f0fbe0);border:1px solid #97C459}
 .summary-loss{border-radius:10px;padding:14px;margin-bottom:12px;background:linear-gradient(135deg,var(--red-l),#fff0f0);border:1px solid #F09595}
-/* 公開報名頁 */
 .pub-wrap{min-height:100vh;background:linear-gradient(135deg,#dbeafe,#dcfce7);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
 .pub-card{background:var(--bg);border-radius:16px;padding:28px;width:460px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.1)}
 .pub-title{font-size:20px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
@@ -129,7 +132,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       <i class="ti ti-shield-lock" style="font-size:22px;color:var(--blue)"></i>
       <div><div>業務管理員</div><div style="font-size:11px;color:var(--text2)">完整管理功能</div></div>
     </button>
-    <!-- 管理員密碼輸入區（預設隱藏） -->
     <div id="admin-pwd-wrap" style="display:none;margin-top:-4px;margin-bottom:8px">
       <input type="password" id="admin-pwd-input" placeholder="請輸入管理員密碼" style="margin-bottom:6px;height:36px" onkeydown="if(event.key==='Enter')adminPwdConfirm()">
       <div id="admin-pwd-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
@@ -140,29 +142,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       <div class="mb10"><label>密碼</label><input type="password" id="login-pwd" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter')loginDriver()"></div>
       <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤</div>
       <button class="btn btn-success" style="width:100%;justify-content:center" onclick="loginDriver()"><i class="ti ti-steering-wheel"></i> 司機登入</button>
-      <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text2)">司機可使用 <a href="driver.html" style="color:var(--blue)">專屬司機頁面</a> 登入（獨立網址）</div>
     </div>
-  </div>
-</div>
-
-<!-- ═══ PUBLIC BOOKING PAGE ═══ -->
-<div id="pub-screen" style="display:none" class="pub-wrap">
-  <div class="pub-card">
-    <div class="pub-title"><i class="ti ti-map" style="color:var(--blue)"></i> 旅遊報名</div>
-    <div class="pub-sub">請填寫以下資料，業務人員會與您確認</div>
-    <div class="mb10"><label>選擇行程 *</label><select id="pub-tour" style="height:36px"></select></div>
-    <div class="mb10"><label>姓名 *</label><input id="pub-name" placeholder="請輸入姓名"></div>
-    <div class="fg2">
-      <div><label>報名人數 *</label><input id="pub-cnt" type="number" value="1" min="1"></div>
-      <div><label>出發日期 *</label><input id="pub-date" type="date"></div>
-    </div>
-    <div class="fg2">
-      <div><label>聯絡方式</label><select id="pub-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div>
-      <div><label>電話（選填）</label><input id="pub-phone" placeholder="0912345678"></div>
-    </div>
-    <div class="mb10"><label>備註（選填）</label><input id="pub-note" placeholder="特殊需求…"></div>
-    <div id="pub-result" style="display:none;padding:12px;border-radius:8px;font-size:13px;background:var(--green-l);color:var(--green-d);margin-bottom:12px"></div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;font-size:14px" onclick="submitPub()"><i class="ti ti-send"></i> 送出報名</button>
   </div>
 </div>
 
@@ -185,1087 +165,81 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-settings" class="page"></div>
 </div>
 
-<!-- ═══ MODALS ═══ -->
-<!-- 拼團行程 -->
-<div class="overlay" id="m-tour"><div class="modal">
-  <div class="mh"><span class="mh-title" id="mt-title">新增拼團行程</span><button class="btn btn-sm" onclick="cm('tour')"><i class="ti ti-x"></i></button></div>
-  <div class="mb10"><label>行程名稱 *</label><input id="tf-name" placeholder="合歡山一日遊"></div>
-  <div class="fg2"><div><label>平日定金</label><input id="tf-dep-wd" type="number" placeholder="500"></div><div><label>假日定金</label><input id="tf-dep-wk" type="number" placeholder="600"></div></div>
-  <div class="fg2"><div><label>平日全額</label><input id="tf-pr-wd" type="number" placeholder="1200"></div><div><label>假日全額</label><input id="tf-pr-wk" type="number" placeholder="1500"></div></div>
-  <div class="fg3"><div><label>幾日遊</label><input id="tf-days" type="number" value="1" min="1" placeholder="1"></div><div><label>最少成團人數</label><input id="tf-min" type="number" value="4"></div><div><label>每車上限</label><input id="tf-bus" type="number" value="8"></div></div>
-  <div class="fg2"><div><label>需投旅遊險</label><select id="tf-ins"><option value="1">是</option><option value="0">否</option></select></div><div><label>旅遊險/人（元）</label><input id="tf-insp" type="number" placeholder="100"></div></div>
-  <div class="mb10"><label>說明</label><textarea id="tf-desc" style="height:48px" placeholder="行程特色…"></textarea></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-tour" style="display:none" onclick="delTour()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('tour')">取消</button><button class="btn btn-primary" onclick="saveTour()">儲存</button></div></div>
-</div></div>
-
-<!-- 報名 -->
-<div class="overlay" id="m-book"><div class="modal">
-  <div class="mh"><span class="mh-title" id="mb-title">新增報名</span><button class="btn btn-sm" onclick="cm('book')"><i class="ti ti-x"></i></button></div>
-  <div id="mb-info" class="info-box" style="font-size:12px"></div>
-  <div class="mb10"><label>姓名 *</label><input id="bf-name" placeholder="王小明"></div>
-  <div class="fg2"><div><label>人數 *</label><input id="bf-cnt" type="number" value="1" min="1"></div><div><label>報名日期</label><input id="bf-reg" type="date"></div></div>
-  <div class="fg2"><div><label>聯絡方式</label><select id="bf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div><div><label>電話</label><input id="bf-phone" placeholder="0912345678"></div></div>
-  <div class="fg2"><div><label>出發日期 *</label><input id="bf-date" type="date" onchange="updateBkPrice()"></div><div><label>帳號</label><input id="bf-contact" placeholder="LINE ID"></div></div>
-  <div id="bf-price-info" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
-  <div class="mb10"><label>備註</label><input id="bf-note" placeholder="特殊需求"></div>
-  <div style="display:flex;gap:20px;margin-bottom:10px">
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="bf-dep" style="width:14px;height:14px"> 已付定金</label>
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="bf-ins" style="width:14px;height:14px"> 已投旅遊險</label>
-  </div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-book" style="display:none" onclick="delBook()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('book')">取消</button><button class="btn btn-primary" onclick="saveBook()">儲存</button></div></div>
-</div></div>
-
-<!-- 包車團 -->
+<!-- 包車團 MODAL -->
 <div class="overlay" id="m-priv"><div class="modal modal-lg">
   <div class="mh"><span class="mh-title" id="mp-title">新增包車團</span><button class="btn btn-sm" onclick="cm('priv')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
-  <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
-  <div class="fg3"><div><label>人數</label><input id="pf-pax" type="number" value="1" min="1"></div><div><label>車輛數</label><input id="pf-cars" type="number" value="1" min="1"></div><div><label>外派司機</label><select id="pf-out" onchange="togglePriv()"><option value="0">否（自家）</option><option value="1">是（外派）</option></select></div></div>
+  <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車+住宿</option><option value="car">純包車</option></select></div></div>
+  <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" type="text" disabled></div></div>
+  <div class="fg3"><div><label>人數</label><input id="pf-pax" type="number" value="1" min="1"></div><div><label>車輛數</label><input id="pf-cars" type="number" value="1" min="1"></div><div><label>車型</label><input id="pf-cartype"></div></div>
   <div class="fg2"><div><label>總報價（元）</label><input id="pf-price" type="number" placeholder="20000"></div><div><label>定金（元）</label><input id="pf-dep" type="number" placeholder="5000"></div></div>
-  <div id="pf-out-sec" style="display:none"><div class="divider"></div><div style="font-size:12px;color:var(--text2);margin-bottom:6px">外派司機費用</div><div class="fg3"><div><label>每天費用</label><input id="pf-dday" type="number" value="5000"></div><div><label>外宿補貼/晚</label><input id="pf-dnight" type="number" value="1000"></div><div><label>外宿晚數</label><input id="pf-dnights" type="number" value="0"></div></div></div>
   <div id="pf-hotel-sec"><div class="divider"></div><div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">🏨 住宿安排（每晚可選不同酒店）</div>
     <div class="fg2" style="margin-bottom:8px"><div><label>住宿晚數</label><input id="pf-nights" type="number" value="0" min="0" onchange="renderNightlyPicker()"></div></div>
     <div id="pf-nightly-picker"></div>
     <div id="pf-hotel-cost" style="font-size:13px;color:var(--green-d);font-weight:600;margin-top:6px"></div>
   </div>
   <div class="divider"></div>
-  <div id="pf-ins-row"><div class="fg2"><div><label>旅遊險整團金額（元）</label><input id="pf-ins" type="number" value="0" placeholder="整團保費"></div></div></div><div class="fg2" style="display:none"><div><div><label>聯絡方式</label><select id="pf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div></div>
+  <div class="fg2"><div><label>旅遊險整團金額（元）</label><input id="pf-ins" type="number" value="0" placeholder="整團保費"></div></div>
   <div class="fg2"><div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div><div><label>帳號</label><input id="pf-contact" placeholder="LINE ID"></div></div>
   <div class="mb10"><label>備註</label><textarea id="pf-note" style="height:48px" placeholder="接機、特殊需求…"></textarea></div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-depaid" style="width:14px;height:14px"> 定金已付</label>
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-balpaid" style="width:14px;height:14px"> 尾款已付</label>
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-ins-chk" style="width:14px;height:14px" onchange="togglePrivIns()"> 需投旅遊險</label><label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-inspaid" style="width:14px;height:14px"> 已投保</label>
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-ins-chk" style="width:14px;height:14px" onchange="togglePrivIns()"> 需投旅遊險</label>
   </div>
   <div id="pf-cost-sum" style="background:var(--bg2);border-radius:8px;padding:10px;font-size:12px"></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-priv" style="display:none" onclick="delPriv()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-sm" onclick="calcPrivCost()"><i class="ti ti-calculator"></i> 試算</button><button class="btn" onclick="cm('priv')">取消</button><button class="btn btn-primary" onclick="savePriv()">儲存</button></div></div>
+  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-priv" style="display:none" onclick="delPriv()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-sm" onclick="cm('priv')">取消</button><button class="btn btn-primary btn-sm" onclick="savePriv();cm('priv')"><i class="ti ti-check"></i> 儲存</button></div></div>
 </div></div>
 
-<!-- 派車 -->
-<div class="overlay" id="m-disp"><div class="modal">
-  <div class="mh"><span class="mh-title" id="md-title">新增派車</span><button class="btn btn-sm" onclick="cm('disp')"><i class="ti ti-x"></i></button></div>
-  <div class="mb10"><label>行程說明 *</label><input id="df-label" placeholder="王先生一家 礁溪3日遊"></div>
-  <div class="fg2"><div><label>開始日 *</label><input id="df-start" type="date" onchange="chkConflict()"></div><div><label>結束日 *</label><input id="df-end" type="date" onchange="chkConflict()"></div></div>
-  <div class="fg2"><div><label>開始時段</label><select id="df-st"><option value="full">全天</option><option value="pm">下午開始</option></select></div><div><label>結束時段</label><select id="df-et"><option value="full">全天</option><option value="am">上午結束</option></select></div></div>
-  <div class="fg2"><div><label>司機類型</label><select id="df-dtype" onchange="toggleDrvSel()"><option value="own">自家司機</option><option value="out">外派</option></select></div><div id="df-own-wrap"><label>指定司機</label><select id="df-driver" onchange="chkConflict()"><option value="">— 選擇 —</option></select></div></div>
-  <div id="df-out-wrap" style="display:none" class="mb10"><label>外派司機名稱</label><input id="df-outname" placeholder="司機姓名"></div>
-  <div class="fg2"><div><label>車輛</label><select id="df-car"><option value="">— 選擇 —</option></select></div><div><label>台數</label><input id="df-carcount" type="number" value="1" min="1"></div></div>
-  <div class="mb10"><label>備註</label><input id="df-note" placeholder="特殊說明"></div>
-  <div id="df-conflict"></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-disp" style="display:none" onclick="delDisp()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('disp')">取消</button><button class="btn btn-primary" onclick="saveDisp()">確認派車</button></div></div>
-</div></div>
-
-<!-- 指派司機 -->
-<div class="overlay" id="m-assign"><div class="modal modal-lg">
-  <div class="mh"><span class="mh-title" id="assign-order-title">指派司機</span><button class="btn btn-sm" onclick="cm('assign')"><i class="ti ti-x"></i></button></div>
-  <div class="info-box" style="font-size:13px"><i class="ti ti-bulb"></i> 派車建議依「自家司機最大化」原則排序，無衝突且本月排班天數少的司機優先</div>
-  <div id="assign-suggestions"></div>
-  <div class="mf"><button class="btn" onclick="cm('assign')">取消</button><button class="btn btn-primary btn-sm" onclick="cm('assign');openDisp()"><i class="ti ti-plus"></i> 手動新增派車</button></div>
-</div></div>
-
-<!-- 支出 -->
-<div class="overlay" id="m-exp"><div class="modal">
-  <div class="mh"><span class="mh-title" id="me-title">新增支出</span><button class="btn btn-sm" onclick="cm('exp')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>日期 *</label><input id="ef-date" type="date"></div><div><label>金額（元）*</label><input id="ef-amt" type="number" placeholder="0"></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="ef-cat"><option value="salary">司機薪資</option><option value="outsource">外派費用</option><option value="hotel">住宿成本</option><option value="insurance">旅遊險</option><option value="fuel">油錢</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="ad">廣告行銷</option><option value="misc">其他雜支</option></select></div><div><label>說明</label><input id="ef-desc" placeholder="備註"></div></div>
-  <div class="fg2"><div><label>車輛</label><select id="ef-car"><option value="">不指定</option></select></div><div><label>司機</label><select id="ef-driver"><option value="">不指定</option></select></div></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-exp" style="display:none" onclick="delExp()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('exp')">取消</button><button class="btn btn-primary" onclick="saveExp()">儲存</button></div></div>
-</div></div>
-
-<!-- 固定支出 -->
-<div class="overlay" id="m-fixed"><div class="modal">
-  <div class="mh"><span class="mh-title" id="mf-title">新增固定支出</span><button class="btn btn-sm" onclick="cm('fixed')"><i class="ti ti-x"></i></button></div>
-  <div class="mb10"><label>名稱 *</label><input id="ff-name" placeholder="車輛保險 5201"></div>
-  <div class="fg2"><div><label>金額（元）*</label><input id="ff-amt" type="number" placeholder="0"></div><div><label>週期</label><select id="ff-cycle"><option value="monthly">每月</option><option value="yearly">每年</option></select></div></div>
-  <div class="fg2"><div><label>類別</label><select id="ff-cat"><option value="insurance">車輛保險</option><option value="license">牌照稅</option><option value="registration">行照費</option><option value="loan">車輛貸款</option><option value="ad">廣告行銷</option><option value="other">其他</option></select></div><div><label>車輛</label><select id="ff-car"><option value="">不指定</option></select></div></div>
-  <div class="fg2"><div><label>生效月份</label><input id="ff-start" type="month"></div><div><label>結束月份（留空=持續）</label><input id="ff-end" type="month"></div></div>
-  <div class="mb10"><label>備註</label><input id="ff-note" placeholder="說明"></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-fixed" style="display:none" onclick="delFixed()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('fixed')">取消</button><button class="btn btn-primary" onclick="saveFixed()">儲存</button></div></div>
-</div></div>
-
-<!-- 司機 -->
-<div class="overlay" id="m-driver"><div class="modal" style="width:420px">
-  <div class="mh"><span class="mh-title" id="mdv-title">新增司機</span><button class="btn btn-sm" onclick="cm('driver')"><i class="ti ti-x"></i></button></div>
-  <div class="mb10"><label>姓名 *</label><input id="dvf-name" placeholder="姓名或代號"></div>
-  <div class="mb10"><label>電話</label><input id="dvf-phone" placeholder="0912345678"></div>
-  <div class="mb10"><label>密碼 *</label><input type="password" id="dvf-pwd" placeholder="司機登入密碼"></div>
-  <div class="fg2"><div><label>月薪（元，0=不計）</label><input id="dvf-salary" type="number" value="0"></div><div><label>每趟薪資（元）</label><input id="dvf-per" type="number" value="0"></div></div>
-  <div class="mb10"><label>備註</label><input id="dvf-note" placeholder="偏好車輛…"></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-driver" style="display:none" onclick="delDriver()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('driver')">取消</button><button class="btn btn-primary" onclick="saveDriver()">儲存</button></div></div>
-</div></div>
-
-<!-- 酒店 -->
-<div class="overlay" id="m-hotel"><div class="modal">
-  <div class="mh"><span class="mh-title" id="mh-title">新增酒店</span><button class="btn btn-sm" onclick="cm('hotel')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>酒店名稱 *</label><input id="hf-name" placeholder="礁溪老爺"></div><div><label>地區</label><input id="hf-area" placeholder="宜蘭礁溪"></div></div>
-  <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">平日房價</div>
-  <div class="fg3"><div><label>2人房/晚</label><input id="hf-r2" type="number" value="0"></div><div><label>3人房/晚</label><input id="hf-r3" type="number" value="0"></div><div><label>4人房/晚</label><input id="hf-r4" type="number" value="0"></div></div>
-  <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">假日房價（空白=同平日）</div>
-  <div class="fg3"><div><label>2人房假日</label><input id="hf-r2wk" type="number" value="0" placeholder="空白同平日"></div><div><label>3人房假日</label><input id="hf-r3wk" type="number" value="0" placeholder="空白同平日"></div><div><label>4人房假日</label><input id="hf-r4wk" type="number" value="0" placeholder="空白同平日"></div></div>
-  <div class="mb10"><label>備註</label><input id="hf-note" placeholder="含早餐…"></div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-hotel" style="display:none" onclick="delHotel()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('hotel')">取消</button><button class="btn btn-primary" onclick="saveHotel()">儲存</button></div></div>
-</div></div>
-
-<!-- 司機記錄 -->
-<div class="overlay" id="m-rec"><div class="modal">
-  <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
-  <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
-  <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
-  <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
-  <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
-  <div id="rf-km-alert" style="display:none" class="warn-box">里程數低於上次記錄，請確認</div>
-  <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-rec" style="display:none" onclick="delRec()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('rec')">取消</button><button class="btn btn-primary" onclick="saveRec()">儲存</button></div></div>
-</div></div>
-
-<!-- QR碼模態 -->
-<div class="overlay" id="m-qr"><div class="modal" style="width:360px;text-align:center">
-  <div class="mh"><span class="mh-title">客人報名 QR Code</span><button class="btn btn-sm" onclick="cm('qr')"><i class="ti ti-x"></i></button></div>
-  <div id="qr-container" style="margin:16px auto;width:200px;height:200px;background:var(--bg2);border-radius:8px;display:flex;align-items:center;justify-content:center"></div>
-  <div style="font-size:12px;color:var(--text2);margin-bottom:12px">客人掃描後可直接報名，無需登入</div>
-  <div style="font-size:11px;background:var(--bg2);border-radius:6px;padding:8px;word-break:break-all;color:var(--text2)" id="qr-url"></div>
-  <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px" onclick="copyQRUrl()"><i class="ti ti-copy"></i> 複製連結</button>
-</div></div>
 <script>
-// ══════════════════ FIREBASE ══════════════════
-firebase.initializeApp({apiKey:"AIzaSyAQNo3CGRWbFdGfyO2GFetJYjc4MGAc-yU",authDomain:"travel-booking-233b7.firebaseapp.com",projectId:"travel-booking-233b7",storageBucket:"travel-booking-233b7.firebasestorage.app",messagingSenderId:"1020869295331",appId:"1:1020869295331:web:deb14c36d3199a3654d9d6"});
+firebase.initializeApp({apiKey:"AIzaSyAQNo3CGRWbFdGfyO2GFetJYjc4MGAc-yU",authDomain:"travel-booking-233b7.firebaseapp.com",projectId:"travel-booking-233b7",storageBucket:"travel-booking-233b7.appspot.com"});
 const db=firebase.firestore();
 
-// ══════════════════ STATE ══════════════════
-let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
-let curPage='p-group',curRole='',curDriverId='',eIds={};
-let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
-let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
-let hotelRooms={r2:0,r3:0,r4:0};
+let privates=[],drivers=[],hotels=[],costSettings={driverDayRate:5000,driverNightRate:1000};
+let curRole='',curDriverId='',eIds={};
+let nightlyHotels=[];
+const ADMIN_PASSWORD='jay888';
+const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
-// ══════════════════ TAIWAN HOLIDAYS ══════════════════
-const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-28','2025-04-03','2025-04-04','2025-04-05','2025-05-01','2025-05-31','2025-06-01','2025-09-07','2025-10-10','2025-10-11','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-28','2026-04-04','2026-04-05','2026-05-01','2026-06-19','2026-06-20','2026-09-25','2026-09-26','2026-10-10']);
-const TW_MKP=new Set(['2025-01-23','2025-04-02']);
-function isHol(d){const w=new Date(d).getDay();if(TW_HOL.has(d))return true;if(TW_MKP.has(d))return false;return w===0||w===6;}
-function isMkp(d){return TW_MKP.has(d);}
-function getPrice(t,d,f){const h=isHol(d);if(f==='deposit')return h?(t.depositWk||t.deposit||0):(t.depositWd||t.deposit||0);return h?(t.priceWk||t.price||0):(t.priceWd||t.price||0);}
-
-// ══════════════════ UTILS ══════════════════
 function setSS(s,m){document.getElementById('sync-dot').className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');document.getElementById('sync-msg').textContent=m;}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function om(n){document.getElementById('m-'+n).classList.add('open')}
 function cm(n){document.getElementById('m-'+n).classList.remove('open')}
 document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open')}));
-const WD=['日','一','二','三','四','五','六'];
-const MONTHS=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-const CH_CLS={'LINE官方':'badge-green','LINE個人':'badge-green','FB':'badge-blue','WhatsApp':'badge-green','微信':'badge-amber'};
-function chBadge(ch){return`<span class="badge ${CH_CLS[ch]||'badge-blue'}">${ch||'-'}</span>`;}
+
 function calcDays(s,e){if(!s||!e)return 0;return Math.max(0,Math.round((new Date(e)-new Date(s))/86400000)+1);}
-function dateRange(s,e){const ds=[];let d=new Date(s),end=new Date(e);while(d<=end){ds.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}return ds;}
-function isInDisp(date,d){return date>=d.start&&date<=d.end;}
-function tslot(date,d){if(date===d.start&&d.startTime==='pm')return'pm';if(date===d.end&&d.endTime==='am')return'am';return'full';}
-function getBks(tid){return bookings.filter(b=>b.tourId===tid);}
-function getDateBks(tid,dt){return bookings.filter(b=>b.tourId===tid&&b.date===dt);}
-function getDates(tid){return[...new Set(getBks(tid).map(b=>b.date))].sort();}
-function buildBuses(bks,max){const rows=[];bks.forEach(b=>{for(let i=0;i<b.count;i++)rows.push({...b})});const buses=[];let cur=[];rows.forEach(r=>{if(cur.length>=max){buses.push([...cur]);cur=[];}cur.push(r);});if(cur.length)buses.push(cur);return buses;}
-function isFormed(t,d){const buses=buildBuses(getDateBks(t.id,d),t.busMax||8);return buses.length>0&&buses.every(b=>b.length>=(t.min||4));}
-function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
-function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
-function getPrivStatus(p){
-   const today=new Date().toISOString().slice(0,10);
-   if(p.end<today) return {label:'已完成',cls:'badge-green',done:true};
-   if(!p.assignedDriver) return {label:'待派車',cls:'badge-red',done:false};
-   if(p.start<=today&&today<=p.end) return {label:'出團中',cls:'badge-amber',done:false};
-   return {label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};
-}
-// ══════════════════ LISTENERS ══════════════════
+function isHol(d){const w=new Date(d).getDay();return w===0||w===6;}
+function getPrivStatus(p){const today=new Date().toISOString().slice(0,10);if(p.end<today)return{label:'已完成',cls:'badge-green',done:true};if(!p.assignedDriver)return{label:'待派車',cls:'badge-red',done:false};if(p.start<=today&&today<=p.end)return{label:'出團中',cls:'badge-amber',done:false};return{label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};}
+
 function initListeners(){
   setSS('syncing','連線中');
-  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
-  db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
   db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));populateLoginSel();refresh();});
-  db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('expenses').onSnapshot(s=>{expenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('driverRecs').onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('fixedExpenses').onSnapshot(s=>{fixedExpenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('meta').doc('groupStatus').onSnapshot(s=>{groupStatus=s.exists?s.data():{};refresh();});
-  db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;refresh();});
+  db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));});
   db.collection('meta').doc('costSettings').onSnapshot(s=>{if(s.exists)costSettings={...costSettings,...s.data()};});
 }
-function refresh(){
-  if(curPage==='p-group')renderGroup();
-  if(curPage==='p-private')renderPrivate();
-  if(curPage==='p-dispatch')renderDispatch();
-  if(curPage==='p-finance')renderFinance();
-  if(curPage==='p-balance')renderBalance();
-  if(curPage==='p-driver')renderDriverPage();
-  if(curPage==='p-settings')renderSettings();
-}
+function refresh(){if(curRole==='admin')renderPrivate();}
 
-// ══════════════════ AUTH ══════════════════
-function populateLoginSel(){
-  const sel=document.getElementById('login-drv-sel');
-  if(!sel)return;
-  sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-}
-// ── 管理員密碼 ──
-const ADMIN_PASSWORD='jay888'; // ← 可修改此密碼
-const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
+function populateLoginSel(){const sel=document.getElementById('login-drv-sel');if(!sel)return;sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');}
+function adminLogin(){if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){loginAs('admin');return;}const wrap=document.getElementById('admin-pwd-wrap');if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}}
+function adminPwdConfirm(){const pwd=document.getElementById('admin-pwd-input').value;if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}localStorage.setItem(ADMIN_DEVICE_KEY,'1');document.getElementById('admin-pwd-wrap').style.display='none';document.getElementById('admin-pwd-err').style.display='none';loginAs('admin');}
+function loginAs(role){curRole=role;curDriverId='';document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';document.getElementById('app-title').textContent='旅遊業務管理系統';initListeners();renderPrivate();}
+function loginDriver(){const drvId=document.getElementById('login-drv-sel').value;const pwd=document.getElementById('login-pwd').value;const drv=drivers.find(d=>d.id===drvId);if(!drv||drv.password!==pwd){document.getElementById('login-err').style.display='block';return;}localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drvId,name:drv.name}));curRole='driver';curDriverId=drvId;document.getElementById('login-err').style.display='none';document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';document.getElementById('app-title').textContent=drv.name+' — 司機頁面';initListeners();}
+function logout(){const wasRole=curRole;curRole='';curDriverId='';if(wasRole==='admin')localStorage.removeItem('adminDeviceTrusted_v1');if(wasRole==='driver')localStorage.removeItem('driverDeviceTrusted_v1');document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';document.getElementById('login-pwd').value='';document.getElementById('login-err').style.display='none';}
 
-function adminLogin(){
-  if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){loginAs('admin');return;}
-  const wrap=document.getElementById('admin-pwd-wrap');
-  if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}
-}
-function adminPwdConfirm(){
-  const pwd=document.getElementById('admin-pwd-input').value;
-  if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}
-  localStorage.setItem(ADMIN_DEVICE_KEY,'1');
-  document.getElementById('admin-pwd-wrap').style.display='none';
-  document.getElementById('admin-pwd-err').style.display='none';
-  loginAs('admin');
-}
-function loginAs(role){
-  curRole=role;curDriverId='';
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='block';
-  document.getElementById('app-title').textContent='旅遊業務管理系統';
-  buildNav('admin');
-  initListeners();
-  showPage('p-group');
-  setTimeout(checkUrgentDispatch,2000);
-}
-function checkUrgentDispatch(){
-  const today=new Date().toISOString().slice(0,10);
-  const soon=new Date();soon.setDate(soon.getDate()+5);
-  const soonStr=soon.toISOString().slice(0,10);
-  const allOrders=getAllOrders();
-  const urgent=allOrders.filter(o=>o.start>=today&&o.start<=soonStr&&o.status==='待派車');
-  if(urgent.length){
-    const msg=urgent.map(o=>`• ${o.start} ${o.label}（${o.pax}人）`).join('\n');
-    if(confirm(`⚠️ 5天內有 ${urgent.length} 筆訂單尚未派車：\n\n${msg}\n\n要前往派車總表處理嗎？`)){
-      showPage('p-dispatch');
-      document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-      document.querySelectorAll('.nav-tab')[2]?.classList.add('active');
-    }
-  }
-}
-function loginDriver(){
-  const drvId=document.getElementById('login-drv-sel').value;
-  const pwd=document.getElementById('login-pwd').value;
-  const drv=drivers.find(d=>d.id===drvId);
-  if(!drv||drv.password!==pwd){document.getElementById('login-err').style.display='block';return;}
-  localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drvId,name:drv.name}));
-  curRole='driver';curDriverId=drvId;
-  document.getElementById('login-err').style.display='none';
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='block';
-  document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-  buildNav('driver');
-  initListeners();
-  showPage('p-driver');
-}
-function logout(){
-  const wasRole=curRole;
-  curRole='';curDriverId='';
-  // 清除裝置記憶
-  if(wasRole==='admin')localStorage.removeItem('adminDeviceTrusted_v1');
-  if(wasRole==='driver')localStorage.removeItem('driverDeviceTrusted_v1');
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-pwd').value='';
-  document.getElementById('login-err').style.display='none';
-}
-function buildNav(role){
-  const nav=document.getElementById('main-nav');
-  if(role==='admin'){
-    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-group')"><i class="ti ti-users-group"></i> 拼團行程</button>
-    <button class="nav-tab" onclick="showPage('p-private')"><i class="ti ti-car"></i> 包車團</button>
-    <button class="nav-tab" onclick="showPage('p-dispatch')"><i class="ti ti-calendar-week"></i> 派車總表</button>
-    <button class="nav-tab" onclick="showPage('p-finance')"><i class="ti ti-chart-bar"></i> 財務報表</button>
-    <button class="nav-tab" onclick="showPage('p-balance')"><i class="ti ti-cash"></i> 尾款收款</button>
-    <button class="nav-tab" onclick="showPage('p-settings')"><i class="ti ti-settings"></i> 設定</button>
-    <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>`;
-  } else {
-    nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver')"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
-  }
-}
-function showPage(id){
-  curPage=id;
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  event?.target?.classList.add('active');
-  refresh();
-}
+function renderPrivate(){const el=document.getElementById('p-group');if(!el)return;const pend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px"><span style="font-size:14px;font-weight:600">包車團（${privates.length}）</span><button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button></div><div class="stat-row" style="grid-template-columns:repeat(4,1fr)"><div class="stat-card"><div class="stat-label">總數</div><div class="stat-val">${privates.length}</div></div><div class="stat-card"><div class="stat-label">待派車</div><div class="stat-val" style="color:var(--red)">${pend}</div></div><div class="stat-card"><div class="stat-label">預期總營收</div><div class="stat-val" style="font-size:13px">$${privates.reduce((s,p)=>s+(p.price||0),0).toLocaleString()}</div></div></div>${!privates.length?'<div class="empty">無資料</div>':`<div class="card"><table class="xtable"><thead><tr><th>團名</th><th>出發</th><th>結束</th><th>人數</th><th>報價</th><th>狀態</th><th>操作</th></tr></thead><tbody>${privates.map(p=>{ const st=getPrivStatus(p); return`<tr><td style="font-weight:600">${p.name}</td><td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.pax||1}</td><td style="font-weight:600">$${(p.price||0).toLocaleString()}</td><td><span class="badge ${st.cls}">${st.label}</span></td><td><button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button></td></tr>`; }).join('')}</tbody></table></div>`}`;}
 
-// ══════════════════ QR CODE ══════════════════
-function showQR(){
-  const url=window.location.href.split('#')[0]+'#booking';
-  document.getElementById('qr-url').textContent=url;
-  const qrEl=document.getElementById('qr-container');
-  qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="QR Code" style="border-radius:6px">`;
-  om('qr');
-}
-function copyQRUrl(){
-  const url=document.getElementById('qr-url').textContent;
-  navigator.clipboard.writeText(url).then(()=>alert('已複製連結！'));
-}
-
-// ══════════════════ PUBLIC BOOKING ══════════════════
-function initPubPage(){
-  const sel=document.getElementById('pub-tour');
-  sel.innerHTML=tours.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-}
-async function submitPub(){
-  const tourId=document.getElementById('pub-tour').value;
-  const name=document.getElementById('pub-name').value.trim();
-  const count=parseInt(document.getElementById('pub-cnt').value)||1;
-  const date=document.getElementById('pub-date').value;
-  if(!name||!date)return alert('請填寫必填欄位');
-  setSS('syncing','送出中…');
-  await db.collection('bookings').doc(uid()).set({name,count,channel:document.getElementById('pub-ch').value,phone:document.getElementById('pub-phone').value.trim(),contact:'',tourId,date,note:document.getElementById('pub-note').value.trim(),regdate:new Date().toISOString().slice(0,10),depositPaid:false,insured:false,balancePaid:false});
-  const r=document.getElementById('pub-result');r.style.display='block';
-  r.innerHTML=`<i class="ti ti-check"></i> 報名成功！${name} × ${count}人 ｜ 出發：${date}<br><span style="font-size:11px">業務人員將盡快與您聯繫確認</span>`;
-  ['pub-name','pub-phone','pub-note'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('pub-cnt').value=1;document.getElementById('pub-date').value='';
-}
-// ══════════════════ PAGE: 拼團行程 ══════════════════
-function renderGroup(){
-  const el=document.getElementById('p-group');
-  const selEl=document.getElementById('gf-sel');
-  const fv=selEl?selEl.value:'';
-  const show=fv?tours.filter(t=>t.id===fv):tours;
-  if(!tours.length){el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">拼團行程</span><button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button></div><div class="empty">尚無行程</div>`;return;}
-  el.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px"><option value="">全部行程（${tours.length}）</option>${tours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}</select>
-    <button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>
-  </div>
-  ${show.map(t=>{
-    const dates=getDates(t.id),allBks=getBks(t.id),totalPax=allBks.reduce((s,b)=>s+b.count,0),formedCnt=dates.filter(d=>isFormed(t,d)).length;
-    const depAmt=allBks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
-    return`<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div style="font-size:15px;font-weight:700;margin-bottom:4px">${t.name}</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
-            <span>平日 $${t.depositWd||0}/$${t.priceWd||0}</span><span>假日 <span style="color:var(--red)">$${t.depositWk||0}/$${t.priceWk||0}</span></span>
-            <span>成團${t.min||4}人/每車${t.busMax||8}人</span>${t.needInsurance?`<span style="color:var(--amber)"><i class="ti ti-shield"></i> 旅遊險$${t.insPrice||0}/人</span>`:''}
-          </div>
-        </div>
-        <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="openTour('${t.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-primary btn-sm" onclick="openBook('${t.id}')"><i class="ti ti-user-plus"></i> 報名</button></div>
-      </div>
-      <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
-        <div class="stat-card"><div class="stat-label">有報名日期</div><div class="stat-val">${dates.length}</div></div>
-        <div class="stat-card"><div class="stat-label">已成團</div><div class="stat-val" style="color:var(--green)">${formedCnt}</div></div>
-        <div class="stat-card"><div class="stat-label">總報名人數</div><div class="stat-val">${totalPax}</div></div>
-        <div class="stat-card"><div class="stat-label">已收定金</div><div class="stat-val" style="font-size:14px">$${depAmt.toLocaleString()}</div></div>
-      </div>
-      ${dates.length===0?'<div class="empty" style="padding:1rem">尚無報名</div>':dates.map(d=>renderDateTable(t,d)).join('')}
-    </div>`
-  }).join('')}`;
-}
-function renderDateTable(t,d){
-  const bks=getDateBks(t.id,d),total=bks.reduce((s,b)=>s+b.count,0);
-  const buses=buildBuses(bks,t.busMax||8),formed=buses.length>0&&buses.every(b=>b.length>=(t.min||4));
-  const pct=Math.min(100,Math.round(total/(t.min||4)*100));
-  const gkey='g_'+t.id+'_'+d.replace(/-/g,''),grp=!!groupStatus[gkey];
-  const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
-  const dCnt=bks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count,0);
-  const bCnt=bks.filter(b=>b.balancePaid).reduce((s,b)=>s+b.count,0);
-  const iCnt=bks.filter(b=>b.insured).reduce((s,b)=>s+b.count,0);
-  const hol=isHol(d),mkp=isMkp(d);
-  return`<div style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--bg2);border-radius:8px;margin-bottom:6px">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:14px;font-weight:700">${d} 週${WD[new Date(d).getDay()]}</span>
-        ${hol&&!mkp?`<span class="tag-hol">假日 $${dep}/$${pr}</span>`:`<span style="font-size:11px;color:var(--text2)">平日 $${dep}/$${pr}</span>`}
-        ${mkp?'<span class="tag-mkp">補班</span>':''}
-        ${formed?`<span class="badge" style="background:var(--green-l);color:var(--green-d)"><i class="ti ti-check"></i> 已成團 派${buses.length}車</span>`:`<span class="badge" style="background:var(--amber-l);color:var(--amber-d)">待成團 ${total}/${t.min||4}人</span>`}
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--text2)">定${dCnt}/${total} 尾${bCnt}/${total}${t.needInsurance?' 險'+iCnt+'/'+total:''}</span>
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;color:${grp?'var(--green-d)':'var(--text2)'}"><input type="checkbox" ${grp?'checked':''} onchange="toggleGrp('${t.id}','${d}',this.checked)" style="width:13px;height:13px"> 群組${grp?' ✓':''}</label>
-        ${formed&&bks.some(b=>!b.depositPaid)?`<button class="btn btn-sm btn-success" onclick="alertDep('${t.id}','${d}')"><i class="ti ti-bell"></i> 通知定金</button>`:''}
-        <button class="btn btn-primary btn-sm" onclick="openBook('${t.id}','${d}')"><i class="ti ti-plus"></i> 加報名</button>
-      </div>
-    </div>
-    <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${formed?'var(--green)':'var(--blue)'}"></div></div>
-    <div class="tbl-wrap" style="margin-top:4px"><table class="xtable">
-      <thead><tr><th>#</th><th style="min-width:75px">姓名</th><th>人數</th><th>聯絡</th><th style="min-width:90px">電話/帳號</th><th>報名日</th><th class="chk" style="min-width:44px">定金</th><th class="chk" style="min-width:44px">尾款</th>${t.needInsurance?'<th class="chk" style="min-width:44px">旅遊險</th>':''}<th>備註</th><th></th></tr></thead>
-      <tbody>${bks.map((b,i)=>`<tr><td style="color:var(--text3)">${i+1}</td><td style="font-weight:600">${b.name}</td><td style="text-align:center">${b.count}</td><td>${chBadge(b.channel)}</td><td style="font-size:11px;color:var(--text2)">${[b.phone,b.contact].filter(Boolean).join('/')||'-'}</td><td style="color:var(--text2)">${b.regdate||'-'}</td><td class="chk" onclick="toggleBk('${b.id}','depositPaid',${!b.depositPaid})">${b.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td><td class="chk" onclick="toggleBk('${b.id}','balancePaid',${!b.balancePaid})">${b.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>${t.needInsurance?`<td class="chk" onclick="toggleBk('${b.id}','insured',${!b.insured})">${b.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>`:''}<td style="font-size:11px;color:var(--text2)">${b.note||''}</td><td><button class="btn btn-sm" onclick="openBook('${b.tourId}','','${b.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="2">合計</td><td style="text-align:center;font-weight:600">${total}</td><td colspan="3"></td><td style="text-align:center;font-size:11px;color:var(--green)">${dCnt}/${total}</td><td style="text-align:center;font-size:11px;color:var(--blue)">${bCnt}/${total}</td>${t.needInsurance?`<td style="text-align:center;font-size:11px;color:var(--amber)">${iCnt}/${total}</td>`:''}<td colspan="2"></td></tr></tfoot>
-    </table></div>
-  </div>`;
-}
-async function toggleGrp(tid,date,val){const key='g_'+tid+'_'+date.replace(/-/g,'');await db.collection('meta').doc('groupStatus').set({[key]:val},{merge:true});}
-async function toggleBk(id,field,val){setSS('syncing','更新…');await db.collection('bookings').doc(id).update({[field]:val});}
-function alertDep(tid,date){const bks=getDateBks(tid,date).filter(b=>!b.depositPaid);alert('需通知 '+bks.length+' 組付定金：\n'+bks.map(b=>'・'+b.name+'（'+b.channel+(b.phone?' '+b.phone:'')+'）').join('\n'));}
-
-// ── 行程CRUD ──
-function openTour(id=''){
-  eIds.tour=id||null;const t=id?tours.find(x=>x.id===id):null;
-  document.getElementById('mt-title').textContent=id?'編輯行程':'新增拼團行程';
-  document.getElementById('btn-del-tour').style.display=id?'inline-flex':'none';
-  document.getElementById('tf-name').value=t?.name||'';
-  document.getElementById('tf-dep-wd').value=t?.depositWd||'';document.getElementById('tf-dep-wk').value=t?.depositWk||'';
-  document.getElementById('tf-pr-wd').value=t?.priceWd||'';document.getElementById('tf-pr-wk').value=t?.priceWk||'';
-  document.getElementById('tf-days').value=t?.days||1;document.getElementById('tf-min').value=t?.min||4;document.getElementById('tf-bus').value=t?.busMax||8;
-  document.getElementById('tf-ins').value=t?.needInsurance?'1':'0';document.getElementById('tf-insp').value=t?.insPrice||'';
-  document.getElementById('tf-desc').value=t?.desc||'';om('tour');
-}
-async function saveTour(){
-  const name=document.getElementById('tf-name').value.trim();if(!name)return alert('請填寫名稱');setSS('syncing','儲存中…');
-  const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim()};
-  if(eIds.tour)await db.collection('tours').doc(eIds.tour).update(data);else await db.collection('tours').doc(uid()).set(data);cm('tour');
-}
-async function delTour(){if(!confirm('確定刪除？'))return;await db.collection('tours').doc(eIds.tour).delete();cm('tour');}
-
-// ── 報名CRUD ──
-let curBkTourId='';
-function openBook(tid,date='',bookId=''){
-  curBkTourId=tid;eIds.book=bookId||null;
-  const t=tours.find(x=>x.id===tid),b=bookId?bookings.find(x=>x.id===bookId):null;
-  document.getElementById('mb-title').textContent=bookId?'編輯報名':'新增報名';
-  document.getElementById('btn-del-book').style.display=bookId?'inline-flex':'none';
-  document.getElementById('mb-info').textContent=(t?.name||'')+(date||b?.date?' ｜ 出發：'+(date||b?.date):'');
-  document.getElementById('bf-name').value=b?.name||'';document.getElementById('bf-cnt').value=b?.count||1;
-  document.getElementById('bf-reg').value=b?.regdate||new Date().toISOString().slice(0,10);
-  document.getElementById('bf-ch').value=b?.channel||'WhatsApp';document.getElementById('bf-phone').value=b?.phone||'';
-  document.getElementById('bf-contact').value=b?.contact||'';document.getElementById('bf-date').value=b?.date||date;
-  document.getElementById('bf-note').value=b?.note||'';document.getElementById('bf-dep').checked=!!b?.depositPaid;document.getElementById('bf-ins').checked=!!b?.insured;
-  updateBkPrice();om('book');
-}
-function updateBkPrice(){
-  const t=tours.find(x=>x.id===curBkTourId),d=document.getElementById('bf-date').value;
-  if(!t||!d){document.getElementById('bf-price-info').textContent='';return;}
-  const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
-  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 定金$${dep} / 全額$${pr} / 尾款$${pr-dep}`;
-}
-async function saveBook(){
-  const name=document.getElementById('bf-name').value.trim(),date=document.getElementById('bf-date').value;
-  if(!name||!date)return alert('請填寫姓名與日期');
-  const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
-  if(cnt>4&&!confirm(`⚠️ 人數 ${cnt} 人超過4人，請注意需安排九人座車！
-確定繼續儲存？`))return;setSS('syncing','儲存中…');
-  const data={name,count:parseInt(document.getElementById('bf-cnt').value)||1,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false};
-  if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
-}
-async function delBook(){if(!confirm('確定刪除？'))return;await db.collection('bookings').doc(eIds.book).delete();cm('book');}
-
-// ══════════════════ PAGE: 個人包車團 ══════════════════
-function renderPrivate(){
-  const el=document.getElementById('p-private');
-  const fv=document.getElementById('pv-filter')?.value||'all';
-  let list=privates;
-  const today=new Date().toISOString().slice(0,10);
-  if(fv==='pending')list=privates.filter(p=>getPrivStatus(p).label==='待派車');
-  else if(fv==='assigned')list=privates.filter(p=>p.assignedDriver&&getPrivStatus(p).label.startsWith('已派車'));
-  else if(fv==='active')list=privates.filter(p=>{const s=getPrivStatus(p);return s.label==='出團中';});
-  else if(fv==='done')list=privates.filter(p=>getPrivStatus(p).done);
-  else if(fv==='car')list=privates.filter(p=>p.type==='car');
-  else if(fv==='ch')list=privates.filter(p=>p.type==='car+hotel');
-  // 預設不顯示已完成
-  if(fv==='all')list=privates.filter(p=>!getPrivStatus(p).done);
-  list=[...list].sort((a,b)=>a.start>b.start?1:-1);
-  const pend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
-  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-    <select id="pv-filter" onchange="renderPrivate()" style="height:36px;font-size:13px"><option value="all">進行中（${privates.filter(p=>!getPrivStatus(p).done).length}）</option><option value="pending">待派車（${pend}）</option><option value="assigned">已派車待出團</option><option value="active">出團中</option><option value="done">完成出團</option><option value="ch">車+住宿</option><option value="car">純包車</option></select>
-    <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
-  </div>
-  <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
-    <div class="stat-card"><div class="stat-label">總數</div><div class="stat-val">${privates.length}</div></div>
-    <div class="stat-card"><div class="stat-label">待派車</div><div class="stat-val" style="color:var(--red)">${pend}</div></div>
-    <div class="stat-card"><div class="stat-label">預期總營收</div><div class="stat-val" style="font-size:13px">$${privates.reduce((s,p)=>s+p.price,0).toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">已收款</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${privates.reduce((s,p)=>s+(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),0).toLocaleString()}</div></div>
-  </div>
-  ${!list.length?'<div class="empty">無資料</div>':`<div class="tbl-wrap"><table class="xtable">
-    <thead><tr><th>團名</th><th>類型</th><th>出發</th><th>結束</th><th>天</th><th>人</th><th>車</th><th>酒店</th><th>晚</th><th>報價</th><th>定金</th><th>尾款</th><th class="chk">定</th><th class="chk">尾</th><th class="chk">險</th><th>派車</th><th>利潤</th><th></th></tr></thead>
-    <tbody>${list.map(p=>{
-      const bal=p.price-p.deposit,cost=(p.driverCost||0)+(p.hotelCost||0)+(p.insCost||0),profit=p.price-cost;
-      return`<tr style="${!p.assignedDriver?'background:rgba(160,32,32,.03)':''}">
-        <td style="font-weight:600">${p.name}</td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
-        <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
-        <td style="font-size:11px;color:var(--text2)">${p.hotelName||'-'}</td><td style="text-align:center">${p.hotelNights||0}</td>
-        <td style="font-weight:600">$${(p.price||0).toLocaleString()}</td><td>$${(p.deposit||0).toLocaleString()}</td><td style="color:var(--blue)">$${bal.toLocaleString()}</td>
-        <td class="chk" onclick="togglePv('${p.id}','depositPaid',${!p.depositPaid})">${p.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
-        <td class="chk" onclick="togglePv('${p.id}','balancePaid',${!p.balancePaid})">${p.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
-        <td class="chk" onclick="togglePv('${p.id}','insured',${!p.insured})">${p.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>
-        <td>${(()=>{const st=getPrivStatus(p);return`<span class="badge ${st.cls}">${st.label}</span>`})()}</td>
-        <td style="font-size:11px;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td>
-        <td><button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button></td>
-      </tr>`
-    }).join('')}</tbody>
-    <tfoot><tr><td colspan="9">合計</td><td>$${list.reduce((s,p)=>s+p.price,0).toLocaleString()}</td><td>$${list.reduce((s,p)=>s+p.deposit,0).toLocaleString()}</td><td style="color:var(--blue)">$${list.reduce((s,p)=>s+(p.price-p.deposit),0).toLocaleString()}</td><td colspan="6"></td></tr></tfoot>
-  </table></div>`}`;
-}
-async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
-function openPriv(id=''){
-  eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
-  document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
-  document.getElementById('btn-del-priv').style.display=id?'inline-flex':'none';
-  document.getElementById('pf-name').value=p?.name||'';document.getElementById('pf-type').value=p?.type||'car+hotel';
-  document.getElementById('pf-start').value=p?.start||'';document.getElementById('pf-end').value=p?.end||'';
-  document.getElementById('pf-days').value=p?.days?p.days+'天':'';
-  document.getElementById('pf-pax').value=p?.pax||1;document.getElementById('pf-cars').value=p?.cars||1;
-  document.getElementById('pf-out').value=p?.outsource?'1':'0';
-  document.getElementById('pf-price').value=p?.price||'';document.getElementById('pf-dep').value=p?.deposit||'';
-  document.getElementById('pf-dday').value=p?.driverDayRate||costSettings.driverDayRate||5000;
-  document.getElementById('pf-dnight').value=p?.driverNightRate||costSettings.driverNightRate||1000;
-  document.getElementById('pf-dnights').value=p?.driverNights||0;
-  document.getElementById('pf-nights').value=p?.hotelNights||0;
-  document.getElementById('pf-ins').value=p?.insCost||0;
-  document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
-  document.getElementById('pf-ch').value=p?.channel||'WhatsApp';document.getElementById('pf-note').value=p?.note||'';
-  document.getElementById('pf-depaid').checked=!!p?.depositPaid;document.getElementById('pf-balpaid').checked=!!p?.balancePaid;document.getElementById('pf-inspaid').checked=!!p?.insured;if(document.getElementById('pf-ins-chk'))document.getElementById('pf-ins-chk').checked=!!(p?.needInsurance||p?.insCost>0);
-  const hs=document.getElementById('pf-hotel');hs.innerHTML='<option value="">— 選擇 —</option>'+hotels.map(h=>`<option value="${h.id}"${h.id===p?.hotelId?' selected':''}>${h.name}${h.area?' ('+h.area+')':''}</option>`).join('');
-  nightlyHotels=p?.nightlyHotels||[];
-  document.getElementById('pf-cost-sum').innerHTML='';
-  togglePriv();renderNightlyPicker();om('priv');
-}
-function calcPrivDays(){const s=document.getElementById('pf-start').value,e=document.getElementById('pf-end').value;const days=calcDays(s,e);document.getElementById('pf-days').value=days?days+'天':'';if(!document.getElementById('pf-nights').value||document.getElementById('pf-nights').value==='0')document.getElementById('pf-nights').value=Math.max(0,days-1);document.getElementById('pf-dnights').value=Math.max(0,days-1);}
-function togglePriv(){document.getElementById('pf-hotel-sec').style.display=document.getElementById('pf-type').value==='car+hotel'?'block':'none';document.getElementById('pf-out-sec').style.display=document.getElementById('pf-out').value==='1'?'block':'none';}
-function togglePrivIns(){const chk=document.getElementById('pf-ins-chk')?.checked;const insRow=document.getElementById('pf-ins-row');if(insRow)insRow.style.display=chk?'block':'none';}
-// nightlyHotels: array of {hotelId, r2, r3, r4, finalQuote, booked, returnDate}
-let nightlyHotels=[];
-function getHotelRoomRate(hotel,dateStr,roomType){
-  if(!hotel)return 0;
-  const isWeekend=isHol(dateStr);
-  if(roomType==='r2')return isWeekend?(hotel.r2wk||hotel.r2||0):(hotel.r2||0);
-  if(roomType==='r3')return isWeekend?(hotel.r3wk||hotel.r3||0):(hotel.r3||0);
-  if(roomType==='r4')return isWeekend?(hotel.r4wk||hotel.r4||0):(hotel.r4||0);
-  return 0;
-}
-function renderNightlyPicker(){
-  const nights=parseInt(document.getElementById('pf-nights').value)||0;
-  const el=document.getElementById('pf-nightly-picker');
-  const startDate=document.getElementById('pf-start').value;
-  if(!nights){el.innerHTML='';document.getElementById('pf-hotel-cost').textContent='';return;}
-  // 確保 nightlyHotels 陣列長度
-  while(nightlyHotels.length<nights)nightlyHotels.push({hotelId:'',r2:0,r3:0,r4:0,finalQuote:0,booked:false,returnDate:''});
-  nightlyHotels=nightlyHotels.slice(0,nights);
-  const hotelOpts='<option value="">— 選擇酒店 —</option>'+hotels.map(h=>`<option value="${h.id}">${h.name}${h.area?' ('+h.area+')':''}</option>`).join('');
-  let rows='';
-  for(let i=0;i<nights;i++){
-    const nh=nightlyHotels[i];
-    let nightDate='';
-    if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
-    const hotel=hotels.find(h=>h.id===nh.hotelId);
-    const isWk=nightDate?isHol(nightDate):false;
-    const r2rate=hotel?getHotelRoomRate(hotel,nightDate,'r2'):0;
-    const r3rate=hotel?getHotelRoomRate(hotel,nightDate,'r3'):0;
-    const r4rate=hotel?getHotelRoomRate(hotel,nightDate,'r4'):0;
-    rows+=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
-        <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>
-      </div>
-      ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
-        ${r2rate?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 $${r2rate}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r2',this.value)"> 間</div>`:''}
-        ${r3rate?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 $${r3rate}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r3',this.value)"> 間</div>`:''}
-        ${r4rate?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 $${r4rate}</div><input type="number" value="${nh.r4||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r4',this.value)"> 間</div>`:''}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-        <div><label style="font-size:11px">酒店回傳日期</label><input type="date" value="${nh.returnDate||''}" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'returnDate',this.value)"></div>
-        <div style="display:flex;align-items:center;gap:4px;padding-top:18px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.booked?'checked':''} onchange="setNightMeta(${i},'booked',this.checked)" style="width:14px;height:14px"> 已訂房確認</label></div>
-        <div><label style="font-size:11px">最終報價（元）</label><input type="number" value="${nh.finalQuote||0}" placeholder="0" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'finalQuote',parseInt(this.value)||0)"></div>
-      </div>
-      <div style="font-size:12px;color:var(--green-d);margin-top:4px">${nh.finalQuote?'✅ 最終報價: $'+nh.finalQuote.toLocaleString():'（若已取得最終報價請填入，試算時優先採用）'}</div>`:''}
-    </div>`;
-  }
-  el.innerHTML=rows;
-  updateNightlyTotal();
-}
-function setNightHotel(i,hid){nightlyHotels[i].hotelId=hid;renderNightlyPicker();}
-function setNightRooms(i,type,val){nightlyHotels[i][type]=parseInt(val)||0;updateNightlyTotal();}
-function setNightMeta(i,key,val){nightlyHotels[i][key]=val;if(key==='finalQuote')updateNightlyTotal();}
-function updateNightlyTotal(){
-  const startDate=document.getElementById('pf-start').value;
-  let total=0;
-  nightlyHotels.forEach((nh,i)=>{
-    const hotel=hotels.find(h=>h.id===nh.hotelId);
-    if(!hotel)return;
-    if(nh.finalQuote>0){total+=nh.finalQuote;return;}
-    let nightDate='';
-    if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
-    const r2rate=getHotelRoomRate(hotel,nightDate,'r2');
-    const r3rate=getHotelRoomRate(hotel,nightDate,'r3');
-    const r4rate=getHotelRoomRate(hotel,nightDate,'r4');
-    total+=(r2rate*nh.r2+r3rate*nh.r3+r4rate*nh.r4);
-  });
-  document.getElementById('pf-hotel-cost').textContent=total?'🏨 住宿合計：$'+total.toLocaleString()+' (最終報價優先)':'';
-}
-function getNightlyHotelCost(){
-  const startDate=document.getElementById('pf-start').value;
-  let total=0;
-  nightlyHotels.forEach((nh,i)=>{
-    const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return;
-    if(nh.finalQuote>0){total+=nh.finalQuote;return;}
-    let nightDate='';
-    if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
-    const r2rate=getHotelRoomRate(hotel,nightDate,'r2');
-    const r3rate=getHotelRoomRate(hotel,nightDate,'r3');
-    const r4rate=getHotelRoomRate(hotel,nightDate,'r4');
-    total+=(r2rate*nh.r2+r3rate*nh.r3+r4rate*nh.r4);
-  });
-  return total;
-}
-// Legacy stub (kept for compatibility)
-function renderHotelPicker(){}
-function updateHotelCost(){}
-function calcPrivCost(){
-  const isOut=document.getElementById('pf-out').value==='1',isHotel=document.getElementById('pf-type').value==='car+hotel';
-  const days=calcDays(document.getElementById('pf-start').value,document.getElementById('pf-end').value),cars=parseInt(document.getElementById('pf-cars').value)||1;
-  let dCost=0;if(isOut){const dr=parseInt(document.getElementById('pf-dday').value)||5000,nr=parseInt(document.getElementById('pf-dnight').value)||1000,dn=parseInt(document.getElementById('pf-dnights').value)||0;dCost=(days*dr+dn*nr)*cars;}
-  const hCost=isHotel?getNightlyHotelCost():0;
-  const iCost=parseInt(document.getElementById('pf-ins').value)||0,price=parseInt(document.getElementById('pf-price').value)||0;
-  const tCost=dCost+hCost+iCost,profit=price-tCost;
-  const hasFinalQ=nightlyHotels.some(n=>n.finalQuote>0);
-  document.getElementById('pf-cost-sum').innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px"><i class="ti ti-calculator"></i> 成本試算</div>${isOut?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>外派費用</span><span style="color:var(--red)">$${dCost.toLocaleString()}</span></div>`:''} ${isHotel&&hCost?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>住宿成本${hasFinalQ?' (含最終報價)':''}</span><span style="color:var(--red)">$${hCost.toLocaleString()}</span></div>`:''} ${iCost?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>旅遊險</span><span style="color:var(--red)">$${iCost.toLocaleString()}</span></div>`:''}<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;padding:6px 0;border-top:1px solid var(--border);margin-top:4px"><span>已知成本</span><span style="color:var(--red)">$${tCost.toLocaleString()}</span></div>${price?`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600"><span>預估利潤</span><span style="color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</span></div>`:''}`;
-}
-async function savePriv(){
-  const name=document.getElementById('pf-name').value.trim(),start=document.getElementById('pf-start').value,end=document.getElementById('pf-end').value;
-  if(!name||!start||!end)return alert('請填寫團名、出發日與結束日');setSS('syncing','儲存中…');
-  const isOut=document.getElementById('pf-out').value==='1',isHotel=document.getElementById('pf-type').value==='car+hotel';
-  const days=calcDays(start,end),cars=parseInt(document.getElementById('pf-cars').value)||1;
-  const dr=parseInt(document.getElementById('pf-dday').value)||5000,nr=parseInt(document.getElementById('pf-dnight').value)||1000,dn=parseInt(document.getElementById('pf-dnights').value)||0;
-  const dCost=isOut?(days*dr+dn*nr)*cars:0;
-  const hn=parseInt(document.getElementById('pf-nights').value)||0;
-  const hCost=isHotel?getNightlyHotelCost():0;
-  const iCost=parseInt(document.getElementById('pf-ins').value)||0;
-  const firstHotel=nightlyHotels.length?hotels.find(h=>h.id===nightlyHotels[0]?.hotelId):null;
-  const hotelSummary=nightlyHotels.filter(n=>n.hotelId).map((n,i)=>{const h=hotels.find(x=>x.id===n.hotelId);return h?`第${i+1}晚:${h.name}`:''}).filter(Boolean).join(', ');
-  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
-  if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
-}
+function openPriv(id=''){eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';document.getElementById('btn-del-priv').style.display=id?'inline-flex':'none';document.getElementById('pf-name').value=p?.name||'';document.getElementById('pf-type').value=p?.type||'car+hotel';document.getElementById('pf-start').value=p?.start||'';document.getElementById('pf-end').value=p?.end||'';document.getElementById('pf-days').value=p?.days?p.days+'天':'';document.getElementById('pf-pax').value=p?.pax||1;document.getElementById('pf-cars').value=p?.cars||1;document.getElementById('pf-cartype').value=p?.cartype||'';document.getElementById('pf-price').value=p?.price||'';document.getElementById('pf-dep').value=p?.deposit||'';document.getElementById('pf-nights').value=p?.hotelNights||0;document.getElementById('pf-ins').value=p?.insCost||0;document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';document.getElementById('pf-note').value=p?.note||'';document.getElementById('pf-depaid').checked=!!p?.depositPaid;document.getElementById('pf-balpaid').checked=!!p?.balancePaid;const hs=document.getElementById('pf-hotel');hs.innerHTML='<option value="">— 選擇 —</option>'+hotels.map(h=>`<option value="${h.id}"${h.id===p?.hotelId?' selected':''}>${h.name}${h.area?' ('+h.area+')':''}</option>`).join('');nightlyHotels=p?.nightlyHotels||[];document.getElementById('pf-cost-sum').innerHTML='';togglePriv();renderNightlyPicker();om('priv');}
+function calcPrivDays(){const s=document.getElementById('pf-start').value,e=document.getElementById('pf-end').value;const days=calcDays(s,e);document.getElementById('pf-days').value=days?days+'天':'';}
+function togglePriv(){document.getElementById('pf-hotel-sec').style.display=document.getElementById('pf-type').value==='car+hotel'?'block':'none';}
+function togglePrivIns(){const chk=document.getElementById('pf-ins-chk')?.checked;}
+function renderNightlyPicker(){const nights=parseInt(document.getElementById('pf-nights').value)||0;const el=document.getElementById('pf-nightly-picker');if(!nights){el.innerHTML='';document.getElementById('pf-hotel-cost').textContent='';return;}el.innerHTML='';}
+function getHotelRoomRate(hotel,dateStr,roomType){if(!hotel)return 0;const isWeekend=isHol(dateStr);if(roomType==='r2')return isWeekend?(hotel.r2wk||hotel.r2||0):(hotel.r2||0);if(roomType==='r3')return isWeekend?(hotel.r3wk||hotel.r3||0):(hotel.r3||0);return 0;}
+function getNightlyHotelCost(){return 0;}
+async function savePriv(){const name=document.getElementById('pf-name').value.trim(),start=document.getElementById('pf-start').value,end=document.getElementById('pf-end').value;if(!name||!start||!end)return alert('請填寫團名、出發日與結束日');setSS('syncing','儲存中…');const days=calcDays(start,end);const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars:parseInt(document.getElementById('pf-cars').value)||1,cartype:document.getElementById('pf-cartype').value||'',price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,hotelNights:parseInt(document.getElementById('pf-nights').value)||0,insCost:parseInt(document.getElementById('pf-ins').value)||0,phone:document.getElementById('pf-phone').value,contact:document.getElementById('pf-contact').value,note:document.getElementById('pf-note').value,depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,nightlyHotels};if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);setSS('ok','儲存成功 ✓');}
 async function delPriv(){if(!confirm('確定刪除？'))return;await db.collection('privates').doc(eIds.priv).delete();cm('priv');}
-// ══════════════════ PAGE: 派車總表 ══════════════════
-function getAllOrders(){
-  const today=new Date().toISOString().slice(0,10);
-  const pvOrders=privates.filter(p=>{const st=getPrivStatus(p);return !st.done;}).map(p=>{
-    const st=getPrivStatus(p);
-    const days=calcDays(p.start,p.end);
-    return{id:p.id,type:'private',source:p,label:p.name,start:p.start,end:p.end,days,pax:p.pax||1,cars:p.cars||1,status:st.label,statusCls:st.cls,assignedDriver:p.assignedDriver||''};
-  });
-  const grpOrders=[];
-  tours.forEach(t=>{
-    const dates=getDates(t.id);
-    dates.forEach(d=>{
-      const bks=getDateBks(t.id,d);
-      const total=bks.reduce((s,b)=>s+b.count,0);
-      if(!total)return;
-      const formed=isFormed(t,d);
-      // compute end date based on tour days
-      const tdays=t.days||1;
-      let endDate=d;
-      if(tdays>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays-1);endDate=ed.toISOString().slice(0,10);}
-      if(endDate<today&&today>endDate)return; // skip past tours
-      const disp=dispatches.find(x=>x.start===d&&(x.label.includes(t.name)||x.groupTourId===t.id+'_'+d));
-      const statusLabel=disp?('已派車 '+(disp.driverName||'')):'待派車';
-      grpOrders.push({id:t.id+'_'+d,type:'group',source:{tour:t,date:d,bks,disp},label:t.name,start:d,end:endDate,days:tdays,pax:total,cars:Math.ceil(total/(t.busMax||8)),status:statusLabel,statusCls:disp?'badge-green':'badge-red',assignedDriver:disp?.driverName||''});
-    });
-  });
-  return [...pvOrders,...grpOrders].sort((a,b)=>a.start>b.start?1:-1);
-}
-function renderDispatch(){
-  const el=document.getElementById('p-dispatch');
-  const firstDay=new Date(calYear,calMonth,1).getDay(),dim=new Date(calYear,calMonth+1,0).getDate(),today=new Date().toISOString().slice(0,10);
-  const mDisps=dispatches.filter(d=>{const s=new Date(d.start),e=new Date(d.end),ms=new Date(calYear,calMonth,1),me=new Date(calYear,calMonth+1,0);return s<=me&&e>=ms;});
-  const mOwn=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='own';}).length;
-  const mOut=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='out';}).length;
-  // calendar cells with group tour dates
-  const groupDates={};
-  tours.forEach(t=>{getDates(t.id).forEach(d=>{if(!groupDates[d])groupDates[d]=[];groupDates[d].push(t.name);});});
-  let cells='';
-  for(let i=0;i<firstDay;i++)cells+=`<div class="cal-cell other-month"></div>`;
-  for(let day=1;day<=dim;day++){
-    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dayDisps=mDisps.filter(d=>isInDisp(ds,d)),hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
-    const dayGrp=groupDates[ds]||[];
-    cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
-      <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
-      ${dayGrp.map(n=>`<div class="cal-pill" style="background:var(--purple-l);color:var(--purple)" title="${n}">🚌${n.slice(0,6)}</div>`).join('')}
-      ${dayDisps.slice(0,2).map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
-      ${dayDisps.length>2?`<div style="font-size:10px;color:var(--text2)">+${dayDisps.length-2}</div>`:''}
-    </div>`;
-  }
-  // 5天內未派車提醒
-  const allOrders=getAllOrders();
-  const soon=new Date();soon.setDate(soon.getDate()+5);
-  const soonStr=soon.toISOString().slice(0,10);
-  const urgentOrders=allOrders.filter(o=>o.start>=today&&o.start<=soonStr&&o.status==='待派車');
-  const urgentHtml=urgentOrders.length?`<div class="warn-box" style="margin-bottom:12px"><i class="ti ti-bell-ringing"></i> <strong>5天內即將出團，尚未派車（${urgentOrders.length}筆）</strong><ul style="margin-top:6px;padding-left:16px">${urgentOrders.map(o=>`<li>${o.start} ${o.label}（${o.pax}人）</li>`).join('')}</ul></div>`:'';
-  el.innerHTML=urgentHtml+`<div class="stat-row" style="grid-template-columns:repeat(3,1fr)"><div class="stat-card"><div class="stat-label">本月自家</div><div class="stat-val" style="color:var(--green)">${mOwn}趟</div></div><div class="stat-card"><div class="stat-label">本月外派</div><div class="stat-val" style="color:var(--amber)">${mOut}趟</div></div><div class="stat-card"><div class="stat-label">本月合計</div><div class="stat-val">${mOwn+mOut}趟</div></div></div>
-  <div class="card" style="padding:10px">
-    <div class="cal-nav"><button class="btn btn-sm" onclick="calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderDispatch()"><i class="ti ti-chevron-left"></i></button><span style="font-weight:700">${calYear}年${MONTHS[calMonth]}</span><button class="btn btn-sm" onclick="calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderDispatch()"><i class="ti ti-chevron-right"></i></button></div>
-    <div class="cal-grid">${['日','一','二','三','四','五','六'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div>
-    <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;flex-wrap:wrap"><span><span style="display:inline-block;width:10px;height:10px;background:var(--green-l);border:1px solid var(--green);border-radius:2px;vertical-align:middle"></span> 自家派車</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:2px;vertical-align:middle"></span> 外派</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--purple-l);border:1px solid var(--purple);border-radius:2px;vertical-align:middle"></span> 拼團出發</span></div>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-    <span style="font-size:14px;font-weight:700"><i class="ti ti-list-check"></i> 全部訂單（未完成）</span>
-    <button class="btn btn-primary btn-sm" onclick="openDisp()"><i class="ti ti-plus"></i> 新增派車記錄</button>
-  </div>
-  <div class="tbl-wrap"><table class="xtable">
-    <thead><tr><th>出發日期</th><th>結束日期</th><th>團名</th><th>類型</th><th>天數</th><th>人數</th><th>車數</th><th>狀態</th><th>指派</th></tr></thead>
-    <tbody>${allOrders.map(o=>`<tr>
-      <td style="font-weight:600">${o.start||'-'}</td>
-      <td>${o.end||'-'}</td>
-      <td style="font-weight:600">${o.label}</td>
-      <td><span class="badge ${o.type==='private'?'badge-blue':'badge-green'}">${o.type==='private'?'包車團':'拼團'}</span></td>
-      <td style="text-align:center">${o.days||1}天</td>
-      <td style="text-align:center">${o.pax}人${o.pax>4?'<span style="color:var(--red);font-size:10px"> ⚠️9座</span>':''}</td>
-      <td style="text-align:center">${o.cars}</td>
-      <td><span class="badge ${o.statusCls}">${o.status}</span></td>
-      <td><button class="btn btn-sm btn-primary" onclick="assignDriverModal('${o.id}','${o.type}','${o.label}','${o.start}','${o.end}')"><i class="ti ti-user-check"></i> 指派</button></td>
-    </tr>`).join('')}</tbody>
-  </table></div>
-  <div class="divider"></div>
-  <div style="font-size:13px;font-weight:700;margin-bottom:8px"><i class="ti ti-calendar-event"></i> 派車記錄</div>
-  <div class="tbl-wrap"><table class="xtable">
-    <thead><tr><th>開始</th><th>結束</th><th>說明</th><th>司機</th><th>類型</th><th>車輛</th><th>台數</th><th>備註</th><th></th></tr></thead>
-    <tbody>${[...dispatches].sort((a,b)=>a.start>b.start?1:-1).map(d=>`<tr><td>${d.start}</td><td>${d.end}</td><td style="font-weight:600">${d.label||'-'}</td><td><span class="badge ${d.driverType==='own'?'badge-green':'badge-amber'}">${d.driverName||'未指派'}</span></td><td><span class="badge ${d.driverType==='own'?'badge-blue':'badge-amber'}">${d.driverType==='own'?'自家':'外派'}</span></td><td style="font-size:12px">${d.car||'-'}</td><td style="text-align:center">${d.carCount||1}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
-  </table></div>`;
-}
-// ── 指派司機 modal ──
-function assignDriverModal(orderId,type,label,start,end){
-  // 智慧派車邏輯
-  const today=new Date().toISOString().slice(0,10);
-  const orderDates=dateRange(start,end);
-  const ownDrivers=drivers.filter(d=>d.type==='own');
-  let suggestions=[];
-  ownDrivers.forEach(drv=>{
-    const myDisps=dispatches.filter(d=>d.driverId===drv.id&&d.driverType==='own');
-    const conflict=myDisps.find(d=>orderDates.some(date=>isInDisp(date,d)));
-    if(!conflict){
-      // 計算本月已排班天數
-      const mDays=myDisps.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth;}).reduce((s,d)=>s+calcDays(d.start,d.end),0);
-      suggestions.push({drv,conflict:false,mDays,note:'無衝突，可排'});
-    } else {
-      suggestions.push({drv,conflict:true,conflictInfo:conflict,note:`衝突: ${conflict.start}~${conflict.end}`});
-    }
-  });
-  // 排序：無衝突優先，月排班少的優先
-  suggestions.sort((a,b)=>{if(a.conflict!==b.conflict)return a.conflict?1:-1;return a.mDays-b.mDays;});
-  const sugHtml=suggestions.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:${s.conflict?'var(--red-l)':'var(--green-l)'};border-radius:8px;margin-bottom:6px">
-    <div><div style="font-weight:600">${s.drv.name}</div><div style="font-size:12px;color:var(--text2)">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div></div>
-    <button class="btn btn-sm ${s.conflict?'btn-warn':'btn-success'}" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${s.drv.id}','${s.drv.name}')"><i class="ti ti-check"></i> 指派${s.conflict?' (強制)':''}</button>
-  </div>`).join('');
-  const extDrivers=drivers.filter(d=>d.type==='external');
-  const extHtml=extDrivers.length?`<div style="margin-top:10px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">外派司機</div>${extDrivers.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--amber-l);border-radius:8px;margin-bottom:6px"><div><div style="font-weight:600">${d.name}</div><div style="font-size:12px;color:var(--text2)">${d.phone||''}${d.note?' ｜ '+d.note:''}</div></div><button class="btn btn-sm btn-warn" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${d.id}','${d.name}')"><i class="ti ti-check"></i> 指派</button></div>`).join('')}</div>`:'';
-  document.getElementById('assign-order-title').textContent=label+' ('+start+'~'+end+')';
-  document.getElementById('assign-suggestions').innerHTML=sugHtml+extHtml;
-  om('assign');
-}
-async function quickAssign(orderId,type,label,start,end,drvId,drvName){
-  setSS('syncing','派車中…');
-  if(type==='private'){
-    const p=privates.find(x=>x.id===orderId);
-    if(p)await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
-    // 建立派車記錄
-    const drv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自包車團：'+label});
-  } else {
-    // group tour
-    const parts=orderId.split('_');const tourId=parts[0],date=parts.slice(1).join('_');
-    const drv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end:end||start,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自拼團：'+label,groupTourId:tourId+'_'+date});
-  }
-  cm('assign');
-}
-function openDisp(id='',dateStr=''){
-  eIds.disp=id||null;const d=id?dispatches.find(x=>x.id===id):null;
-  document.getElementById('md-title').textContent=id?'編輯派車':'新增派車';
-  document.getElementById('btn-del-disp').style.display=id?'inline-flex':'none';
-  document.getElementById('df-label').value=d?.label||'';document.getElementById('df-start').value=d?.start||dateStr;document.getElementById('df-end').value=d?.end||dateStr;
-  document.getElementById('df-st').value=d?.startTime||'full';document.getElementById('df-et').value=d?.endTime||'full';
-  document.getElementById('df-dtype').value=d?.driverType||'own';document.getElementById('df-outname').value=d?.outsourceName||'';document.getElementById('df-carcount').value=d?.carCount||1;document.getElementById('df-note').value=d?.note||'';
-  const dsel=document.getElementById('df-driver');dsel.innerHTML='<option value="">— 選擇 —</option>'+drivers.filter(x=>x.type==='own').map(x=>`<option value="${x.id}"${x.id===d?.driverId?' selected':''}>${x.name}</option>`).join('');
-  const csel=document.getElementById('df-car');csel.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===d?.car?' selected':''}>${c}</option>`).join('');
-  toggleDrvSel();document.getElementById('df-conflict').innerHTML='';om('disp');
-}
-function toggleDrvSel(){const isOwn=document.getElementById('df-dtype').value==='own';document.getElementById('df-own-wrap').style.display=isOwn?'block':'none';document.getElementById('df-out-wrap').style.display=isOwn?'none':'block';}
-function chkConflict(){
-  const drvId=document.getElementById('df-driver').value,start=document.getElementById('df-start').value,end=document.getElementById('df-end').value,el=document.getElementById('df-conflict');
-  if(!drvId||!start||!end){el.innerHTML='';return;}
-  const drv=drivers.find(d=>d.id===drvId);
-  const conflict=dispatches.filter(d=>d.driverId===drvId&&d.id!==eIds.disp&&d.driverType==='own').find(d=>dateRange(start,end).some(date=>{if(!isInDisp(date,d))return false;const ns=date===start&&document.getElementById('df-st').value==='pm'?'pm':date===end&&document.getElementById('df-et').value==='am'?'am':'full';const es=tslot(date,d);return ns==='full'||es==='full'||ns===es;}));
-  if(!conflict){el.innerHTML=`<div class="ok-box"><i class="ti ti-check"></i> 無衝突，${drv?.name||''}可排班</div>`;return;}
-  const suggestions=[];
-  drivers.filter(d=>d.type==='own'&&d.id!==drvId).forEach(drv=>{if(!dispatches.filter(x=>x.driverId===drv.id&&x.driverType==='own').find(x=>dateRange(start,end).some(date=>isInDisp(date,x))))suggestions.push(`改派給 <strong>${drv.name}</strong>`);});
-  if(!suggestions.length)suggestions.push('所有自家司機均有排班，建議安排<strong>外派司機</strong>');
-  el.innerHTML=`<div class="err-box"><i class="ti ti-alert-triangle"></i> 衝突：${drv?.name} 在 ${conflict.start}～${conflict.end} 已有排班「${conflict.label}」<div style="margin-top:6px;padding:8px;background:var(--green-l);border-radius:6px;color:var(--green-d)"><i class="ti ti-bulb"></i> 建議：${suggestions.join('；')}</div></div>`;
-}
-async function saveDisp(){
-  const start=document.getElementById('df-start').value,end=document.getElementById('df-end').value;
-  if(!start||!end)return alert('請填寫日期');
-  const dtype=document.getElementById('df-dtype').value,drvId=dtype==='own'?document.getElementById('df-driver').value:'';
-  const drvName=dtype==='own'?(drivers.find(d=>d.id===drvId)?.name||'未指派'):(document.getElementById('df-outname').value.trim());
-  setSS('syncing','儲存中…');
-  const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim()};
-  if(eIds.disp)await db.collection('dispatches').doc(eIds.disp).update(data);else await db.collection('dispatches').doc(uid()).set(data);
-  // 同步更新包車團的assignedDriver
-  if(drvName&&dtype==='own'){const pLabel=data.label;const matchPriv=privates.find(p=>pLabel.includes(p.name));if(matchPriv)await db.collection('privates').doc(matchPriv.id).update({assignedDriver:drvName});}
-  cm('disp');
-}
-async function delDisp(){if(!confirm('確定刪除？'))return;await db.collection('dispatches').doc(eIds.disp).delete();cm('disp');}
 
-// ══════════════════ PAGE: 財務報表 ══════════════════
-const EXP_CAT={salary:'司機薪資',outsource:'外派費用',hotel:'住宿成本',insurance:'旅遊險',fuel:'油錢',parking:'停車費',toll:'過路費',maint:'保養/維修',ad:'廣告行銷',misc:'其他雜支'};
-const FIXED_CAT={insurance:'車輛保險',license:'牌照稅',registration:'行照費',loan:'車輛貸款',ad:'廣告行銷',other:'其他'};
-function calcGI(y,m,isYear){return tours.map(t=>{const bks=bookings.filter(b=>b.tourId===t.id&&(isYear?inYear(b.date,y):inMonth(b.date,y,m)));const depPaid=bks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);const balPaid=bks.filter(b=>b.balancePaid).reduce((s,b)=>s+b.count*(getPrice(t,b.date,'price')-getPrice(t,b.date,'deposit')),0);return{name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bks.reduce((s,b)=>s+b.count,0),cnt:bks.length};}).filter(x=>x.collected>0||x.cnt>0);}
-function calcPI(y,m,isYear){return privates.filter(p=>isYear?inYear(p.start,y):inMonth(p.start,y,m)).map(p=>({name:p.name,type:p.type,price:p.price,deposit:p.deposit,collected:(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),cost:(p.driverCost||0)+(p.hotelCost||0)+(p.insCost||0),pax:p.pax||0}));}
-function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
-function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
-function calcFE(y,m,isYear){
-  const ms=y+'-'+String(m+1).padStart(2,'0');
-  return fixedExpenses.filter(fe=>{if(fe.start&&ms<fe.start)return false;if(fe.end&&ms>fe.end)return false;if(isYear){return fe.cycle==='monthly'||(fe.cycle==='yearly'&&fe.start&&fe.start.startsWith(y+'-'));}if(fe.cycle==='monthly')return true;if(fe.cycle==='yearly')return fe.start&&fe.start===ms;return false;}).map(fe=>({...fe,eff:isYear&&fe.cycle==='monthly'?fe.amount*12:fe.amount}));
-}
-function renderFinance(){
-  const el=document.getElementById('p-finance'),mode=document.getElementById('fin-mode')?.value||'month',y=finYear,m=finMonth;
-  const gi=calcGI(y,m,mode==='year'),pi=calcPI(y,m,mode==='year'),me=calcME(y,m,mode==='year'),de=calcDE(y,m,mode==='year'),fe=calcFE(y,m,mode==='year');
-  const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0);
-  const tme=me.reduce((s,e)=>s+e.amount,0),tde=de.reduce((s,r)=>s+r.amount,0),tfe=fe.reduce((s,f)=>s+f.eff,0),te=tme+tde+tfe,np=ti-te,pr=ti?Math.round(np/ti*100):0;
-  const monthly=mode==='year'?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0),e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0);return{income:i,exp:e,profit:i-e};}):null;
-  const maxBar=monthly?Math.max(...monthly.map(d=>Math.max(d.income,d.exp)),1):1;
-  el.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-    <select id="fin-mode" onchange="renderFinance()" style="height:34px;font-size:13px"><option value="month"${mode==='month'?' selected':''}>月報</option><option value="year"${mode==='year'?' selected':''}>年報</option></select>
-    ${mode==='month'?`<select onchange="finMonth=parseInt(this.value);renderFinance()" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>`:''}
-    <select onchange="finYear=parseInt(this.value);renderFinance()" style="height:34px;font-size:13px">${[2024,2025,2026].map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
-    <button class="btn btn-primary btn-sm" onclick="openExp()"><i class="ti ti-plus"></i> 新增支出</button>
-    <button class="btn btn-sm" onclick="openFixed()"><i class="ti ti-repeat"></i> 固定支出</button>
-  </div>
-  <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
-    <div class="stat-card"><div class="stat-label">總收入</div><div class="stat-val" style="color:var(--green)">$${ti.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">總支出</div><div class="stat-val" style="color:var(--red)">$${te.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">淨利潤</div><div class="stat-val" style="color:${np>=0?'var(--green)':'var(--red)'}">$${np.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">利潤率</div><div class="stat-val" style="font-size:16px;color:${pr>=0?'var(--green)':'var(--red)'}">${ti?pr+'%':'—'}</div></div>
-  </div>
-  <div class="${np>=0?'summary-profit':'summary-loss'}"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-weight:600;color:${np>=0?'var(--green-d)':'var(--red-d)'}">${mode==='month'?'本月':'年度'}${np>=0?'盈利':'虧損'}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">收$${ti.toLocaleString()} − 支$${te.toLocaleString()}</div></div><div style="font-size:24px;font-weight:700;color:${np>=0?'var(--green)':'var(--red)'}">$${Math.abs(np).toLocaleString()}</div></div></div>
-  ${mode==='year'&&monthly?`<div class="card"><div class="card-title"><i class="ti ti-chart-line"></i> 月度趨勢</div><div class="mo-chart">${monthly.map((d,i)=>`<div class="mo-bar-wrap"><div style="display:flex;align-items:flex-end;gap:2px;height:100px"><div class="mo-bar" style="background:var(--green-l);border:1px solid var(--green);height:${Math.round(d.income/maxBar*100)}px;width:10px" title="收入$${d.income.toLocaleString()}"></div><div class="mo-bar" style="background:var(--red-l);border:1px solid #F09595;height:${Math.round(d.exp/maxBar*100)}px;width:10px" title="支出$${d.exp.toLocaleString()}"></div></div><div class="mo-bar-lbl">${i+1}</div></div>`).join('')}</div>
-  <div class="tbl-wrap"><table class="xtable"><thead><tr><th>月份</th><th style="text-align:right">收入</th><th style="text-align:right">支出</th><th style="text-align:right">利潤</th><th style="text-align:right">利潤率</th></tr></thead><tbody>${monthly.map((d,i)=>`<tr><td style="cursor:pointer;color:var(--blue)" onclick="finMonth=${i};document.getElementById('fin-mode').value='month';renderFinance()">${y}年${MONTHS[i]} ↗</td><td style="text-align:right;color:${d.income>0?'var(--green)':'var(--text3)'}">$${d.income.toLocaleString()}</td><td style="text-align:right;color:${d.exp>0?'var(--red)':'var(--text3)'}">$${d.exp.toLocaleString()}</td><td style="text-align:right;color:${d.profit>0?'var(--green)':d.profit<0?'var(--red)':'var(--text3)'}">$${d.profit.toLocaleString()}</td><td style="text-align:right;color:var(--text2)">${d.income?Math.round(d.profit/d.income*100)+'%':'—'}</td></tr>`).join('')}</tbody><tfoot><tr><td>全年</td><td style="text-align:right;color:var(--green)">$${ti.toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${te.toLocaleString()}</td><td style="text-align:right;color:${np>=0?'var(--green)':'var(--red)'}">$${np.toLocaleString()}</td><td style="text-align:right">${ti?pr+'%':'—'}</td></tr></tfoot></table></div></div>`:''}
-  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title" style="margin:0"><i class="ti ti-trending-up" style="color:var(--green)"></i> 收入</div></div>
-    ${gi.length?`<div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>行程</th><th>組</th><th>人</th><th>定金</th><th>尾款</th><th style="text-align:right">已收</th></tr></thead><tbody>${gi.map(x=>`<tr><td style="font-weight:600">${x.name}</td><td>${x.cnt}</td><td>${x.pax}</td><td>$${x.depPaid.toLocaleString()}</td><td>$${x.balPaid.toLocaleString()}</td><td style="text-align:right;color:var(--green)">$${x.collected.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">拼團小計</td><td>$${gi.reduce((s,x)=>s+x.depPaid,0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+x.balPaid,0).toLocaleString()}</td><td style="text-align:right;color:var(--green)">$${gi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td></tr></tfoot></table></div>`:''}
-    ${pi.length?`<div class="tbl-wrap" style="margin-bottom:8px"><table class="xtable"><thead><tr><th>團名</th><th>類型</th><th>報價</th><th>已收</th><th>成本</th><th style="text-align:right">毛利</th></tr></thead><tbody>${pi.map(x=>`<tr><td style="font-weight:600">${x.name}</td><td><span class="badge ${x.type==='car+hotel'?'badge-blue':'badge-green'}">${x.type==='car+hotel'?'車+住宿':'純包車'}</span></td><td>$${x.price.toLocaleString()}</td><td style="color:var(--green)">$${x.collected.toLocaleString()}</td><td style="color:var(--red)">$${x.cost.toLocaleString()}</td><td style="text-align:right;color:${x.collected-x.cost>=0?'var(--green)':'var(--red)'}">$${(x.collected-x.cost).toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">包車小計</td><td style="color:var(--green)">$${pi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td><td style="color:var(--red)">$${pi.reduce((s,x)=>s+x.cost,0).toLocaleString()}</td><td style="text-align:right;color:var(--green)">$${pi.reduce((s,x)=>s+x.collected-x.cost,0).toLocaleString()}</td></tr></tfoot></table></div>`:''}
-    ${!gi.length&&!pi.length?'<div class="empty" style="padding:1rem">本期無收入</div>':''}
-    <div style="text-align:right;font-size:14px;font-weight:700;color:var(--green)">總收入：$${ti.toLocaleString()}</div>
-  </div>
-  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title" style="margin:0"><i class="ti ti-trending-down" style="color:var(--red)"></i> 支出</div></div>
-    ${me.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">手動支出</div><div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>日期</th><th>類別</th><th>說明</th><th>車輛</th><th>司機</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${me.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr><td>${e.date}</td><td><span class="badge badge-amber">${EXP_CAT[e.category]||e.category}</span></td><td style="color:var(--text2)">${e.desc||'-'}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody><tfoot><tr><td colspan="5">小計</td><td style="text-align:right;color:var(--red)">$${tme.toLocaleString()}</td><td></td></tr></tfoot></table></div>`:''}
-    ${de.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">司機記錄支出</div><div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>日期</th><th>司機</th><th>車輛</th><th>類別</th><th>說明</th><th style="text-align:right">金額</th></tr></thead><tbody>${de.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge badge-amber">${{fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養',inspection:'驗車',other:'其他'}[r.type]||r.type}</span></td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="5">司機支出小計</td><td style="text-align:right;color:var(--red)">$${tde.toLocaleString()}</td></tr></tfoot></table></div>`:''}
-    ${fe.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">固定支出</div><div class="tbl-wrap" style="margin-bottom:8px"><table class="xtable"><thead><tr><th>名稱</th><th>類別</th><th>車輛</th><th>週期</th><th style="text-align:right">金額</th></tr></thead><tbody>${fe.map(f=>`<tr><td style="font-weight:600">${f.name}</td><td><span class="badge" style="background:var(--purple-l);color:var(--purple)">${FIXED_CAT[f.category]||f.category}</span></td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">${f.cycle==='monthly'?'每月':'每年'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">固定支出小計</td><td style="text-align:right;color:var(--red)">$${tfe.toLocaleString()}</td></tr></tfoot></table></div>`:''}
-    ${!me.length&&!de.length&&!fe.length?'<div class="empty" style="padding:1rem">本期無支出</div>':''}
-    <div style="text-align:right;font-size:14px;font-weight:700;color:var(--red)">總支出：$${te.toLocaleString()}</div>
-  </div>
-  ${te>0?`<div class="card"><div class="card-title"><i class="ti ti-chart-pie"></i> 支出分類</div>${(()=>{const cats={};me.forEach(e=>{const k=EXP_CAT[e.category]||e.category;cats[k]=(cats[k]||0)+e.amount;});de.forEach(r=>{const k={fuel:'油錢',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'}[r.type]||r.type;cats[k]=(cats[k]||0)+r.amount;});fe.forEach(f=>{const k=FIXED_CAT[f.category]||f.category;cats[k]=(cats[k]||0)+f.eff;});const sorted=Object.entries(cats).sort((a,b)=>b[1]-a[1]),max=sorted.length?sorted[0][1]:1;const clrs=['#185FA5','#3B6D11','#854F0B','#A32D2D','#5b3fa0','#0e7490','#7c3aed','#b45309'];return sorted.map(([k,v],i)=>`<div class="bar-row"><div class="bar-label">${k}</div><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(v/max*100)}%;background:${clrs[i%8]}"></div></div><div class="bar-val" style="color:var(--red)">$${v.toLocaleString()}</div></div>`).join('');})()} </div>`:''}`;
-}
-function openExp(id=''){
-  eIds.exp=id||null;const e=id?expenses.find(x=>x.id===id):null;
-  document.getElementById('me-title').textContent=id?'編輯支出':'新增支出';document.getElementById('btn-del-exp').style.display=id?'inline-flex':'none';
-  document.getElementById('ef-date').value=e?.date||new Date().toISOString().slice(0,10);document.getElementById('ef-amt').value=e?.amount||'';document.getElementById('ef-cat').value=e?.category||'misc';document.getElementById('ef-desc').value=e?.desc||'';
-  const cs=document.getElementById('ef-car');cs.innerHTML='<option value="">不指定</option>'+carsList.map(c=>`<option value="${c}"${c===e?.car?' selected':''}>${c}</option>`).join('');
-  const ds=document.getElementById('ef-driver');ds.innerHTML='<option value="">不指定</option>'+drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}"${d.id===e?.driverId?' selected':''}>${d.name}</option>`).join('');
-  om('exp');
-}
-async function saveExp(){const date=document.getElementById('ef-date').value,amount=parseInt(document.getElementById('ef-amt').value)||0;if(!date||!amount)return alert('請填寫日期與金額');setSS('syncing','儲存中…');const drvId=document.getElementById('ef-driver').value;const data={date,amount,category:document.getElementById('ef-cat').value,desc:document.getElementById('ef-desc').value.trim(),car:document.getElementById('ef-car').value,driverId:drvId,driverName:drvId?(drivers.find(d=>d.id===drvId)?.name||''):'',};if(eIds.exp)await db.collection('expenses').doc(eIds.exp).update(data);else await db.collection('expenses').doc(uid()).set(data);cm('exp');}
-async function delExp(){if(!confirm('確定刪除？'))return;await db.collection('expenses').doc(eIds.exp).delete();cm('exp');}
-function openFixed(id=''){
-  eIds.fixed=id||null;const f=id?fixedExpenses.find(x=>x.id===id):null;
-  document.getElementById('mf-title').textContent=id?'編輯固定支出':'新增固定支出';document.getElementById('btn-del-fixed').style.display=id?'inline-flex':'none';
-  document.getElementById('ff-name').value=f?.name||'';document.getElementById('ff-amt').value=f?.amount||'';document.getElementById('ff-cycle').value=f?.cycle||'monthly';document.getElementById('ff-cat').value=f?.category||'insurance';document.getElementById('ff-start').value=f?.start||new Date().toISOString().slice(0,7);document.getElementById('ff-end').value=f?.end||'';document.getElementById('ff-note').value=f?.note||'';
-  const cs=document.getElementById('ff-car');cs.innerHTML='<option value="">不指定</option>'+carsList.map(c=>`<option value="${c}"${c===f?.car?' selected':''}>${c}</option>`).join('');om('fixed');
-}
-async function saveFixed(){const name=document.getElementById('ff-name').value.trim(),amount=parseInt(document.getElementById('ff-amt').value)||0;if(!name||!amount)return alert('請填寫名稱與金額');setSS('syncing','儲存中…');const data={name,amount,cycle:document.getElementById('ff-cycle').value,category:document.getElementById('ff-cat').value,car:document.getElementById('ff-car').value,start:document.getElementById('ff-start').value,end:document.getElementById('ff-end').value,note:document.getElementById('ff-note').value.trim()};if(eIds.fixed)await db.collection('fixedExpenses').doc(eIds.fixed).update(data);else await db.collection('fixedExpenses').doc(uid()).set(data);cm('fixed');}
-async function delFixed(){if(!confirm('確定刪除？'))return;await db.collection('fixedExpenses').doc(eIds.fixed).delete();cm('fixed');}
-// ══════════════════ PAGE: 尾款收款 ══════════════════
-let balMonth='';
-function renderBalance(){
-  const el=document.getElementById('p-balance');
-  const selMonth=document.getElementById('bal-month')?.value||balMonth;
-  const filterByMonth=(date)=>!selMonth||date.startsWith(selMonth);
-  const tourItems=tours.flatMap(t=>[...new Set(getBks(t.id).map(b=>b.date))].sort().filter(d=>filterByMonth(d)).map(d=>{const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);if(!bks.length)return null;const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price'),bal=pr-dep;return{label:t.name+' / '+d,bks:bks.map(b=>({...b,perPax:bal})),subtotal:bks.reduce((s,b)=>s+b.count*bal,0)};}).filter(Boolean));
-  const pvItems=privates.filter(p=>!p.balancePaid&&filterByMonth(p.start||'')).map(p=>({label:p.name+'（'+(p.type==='car+hotel'?'車+住宿':'純包車')+'）'+p.start,subtotal:p.price-p.deposit,id:p.id}));
-  const grand=[...tourItems,...pvItems].reduce((s,x)=>s+x.subtotal,0);
-  const monthSel=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><label style="font-size:13px;font-weight:600">篩選月份：</label><input type="month" id="bal-month" value="${selMonth}" style="height:36px;font-size:13px;width:150px" onchange="balMonth=this.value;renderBalance()"><button class="btn btn-sm" onclick="balMonth='';document.getElementById('bal-month').value='';renderBalance()">全部</button></div>`;
-  if(!tourItems.length&&!pvItems.length){el.innerHTML=monthSel+'<div class="empty"><i class="ti ti-check" style="font-size:40px;display:block;margin-bottom:8px;color:var(--green)"></i>所選期間尾款皆已收齊</div>';return;}
-  el.innerHTML=monthSel+`<div class="stat-row" style="grid-template-columns:1fr 1fr"><div class="stat-card"><div class="stat-label">待收項目</div><div class="stat-val">${tourItems.length+pvItems.length}</div></div><div class="stat-card"><div class="stat-label">尾款總計</div><div class="stat-val" style="color:var(--blue)">$${grand.toLocaleString()}</div></div></div>
-  ${tourItems.map(item=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-weight:600">${item.label}</span><span style="font-weight:600;color:var(--blue)">$${item.subtotal.toLocaleString()}</span></div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>人數</th><th>聯絡</th><th>電話</th><th style="text-align:right">應收</th><th></th></tr></thead><tbody>${item.bks.map(b=>`<tr><td style="font-weight:600">${b.name}</td><td>${b.count}人</td><td>${chBadge(b.channel)}</td><td style="font-size:12px">${b.phone||'-'}</td><td style="text-align:right;font-weight:600">$${(b.count*b.perPax).toLocaleString()}</td><td><button class="btn btn-sm btn-success" onclick="toggleBk('${b.id}','balancePaid',true)"><i class="ti ti-check"></i> 已收</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}
-  ${pvItems.map(item=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">${item.label}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--blue)">$${item.subtotal.toLocaleString()}</span><button class="btn btn-sm btn-success" onclick="togglePv('${item.id}','balancePaid',true)"><i class="ti ti-check"></i> 已收</button></div></div></div>`).join('')}`;
-}
-
-// ══════════════════ PAGE: 司機頁面 ══════════════════
-const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
-function renderDriverPage(){
-  const el=document.getElementById('p-driver');
-  const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
-  const myRecs=[...driverRecs.filter(r=>r.driverId===curDriverId)].sort((a,b)=>b.date>a.date?1:-1);
-  const myIncome=myRecs.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
-  const myExp=myRecs.filter(r=>r.type!=='income').reduce((s,r)=>s+r.amount,0);
-  const fuelRecs=myRecs.filter(r=>r.type==='fuel'&&r.mileage).sort((a,b)=>a.mileage-b.mileage);
-  let avgKmL='—';if(fuelRecs.length>=2){const km=fuelRecs[fuelRecs.length-1].mileage-fuelRecs[0].mileage;const l=fuelRecs.slice(1).reduce((s,r)=>s+(r.fuelLiters||0),0);if(l>0)avgKmL=(km/l).toFixed(1)+' km/L';}
-  const carMileage={};myRecs.filter(r=>r.mileage&&r.car).forEach(r=>{if(!carMileage[r.car]||r.mileage>carMileage[r.car])carMileage[r.car]=r.mileage;});
-  const filterType=document.getElementById('dr-filter-type')?.value||'all';
-  const filterCar=document.getElementById('dr-filter-car')?.value||'all';
-  const filterMonth=document.getElementById('dr-filter-month')?.value||'';
-  let filtered=myRecs;
-  if(filterType!=='all')filtered=filtered.filter(r=>r.type===filterType);
-  if(filterCar!=='all')filtered=filtered.filter(r=>r.car===filterCar);
-  if(filterMonth)filtered=filtered.filter(r=>r.date&&r.date.startsWith(filterMonth));
-  el.innerHTML=`<div class="card">
-    <div style="font-size:15px;font-weight:700;margin-bottom:10px"><i class="ti ti-steering-wheel"></i> ${drv.name} — 我的記錄</div>
-    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
-      <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green)">$${myIncome.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">支出合計</div><div class="stat-val" style="color:var(--red)">$${myExp.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">平均油耗</div><div class="stat-val" style="font-size:15px">${avgKmL}</div></div>
-    </div>
-    ${Object.keys(carMileage).length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">最新里程：${Object.entries(carMileage).map(([c,m])=>`${c}: ${m.toLocaleString()} km`).join(' ／ ')}</div>`:''}
-    <button class="btn btn-primary btn-sm" onclick="openRec()"><i class="ti ti-plus"></i> 新增記錄</button>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <select id="dr-filter-type" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部</option>${Object.entries(TYPE_N).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
-    <select id="dr-filter-car" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部車輛</option>${carsList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
-    <input id="dr-filter-month" type="month" onchange="renderDriverPage()" style="height:34px;font-size:12px;width:135px">
-  </div>
-  ${!filtered.length?'<div class="empty">尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=r.type==='income';const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');return`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)'}">${TYPE_N[r.type]||r.type}${mn}</span></td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${isIncome?'var(--green)':'var(--red)'}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`}).join('')}</tbody></table></div>`}`;
-}
-function getLastKm(carId,excId=''){const recs=driverRecs.filter(r=>r.car===carId&&r.mileage&&r.id!==excId).sort((a,b)=>b.mileage-a.mileage);return recs.length?recs[0].mileage:0;}
-function openRec(id=''){
-  eIds.rec=id||null;const r=id?driverRecs.find(x=>x.id===id):null;
-  document.getElementById('mr-title').textContent=id?'編輯記錄':'新增記錄';document.getElementById('btn-del-rec').style.display=id?'inline-flex':'none';
-  document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||'income';document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';
-  const cs=document.getElementById('rf-car');cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===r?.car?' selected':''}>${c}</option>`).join('');
-  document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
-  document.getElementById('rf-km-alert').style.display='none';
-  toggleRecFields();om('rec');
-}
-function toggleRecFields(){const t=document.getElementById('rf-type').value;document.getElementById('rf-mileage-wrap').style.display=(t==='fuel'||t==='inspection')?'block':'none';document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';}
-document.getElementById('rf-car').addEventListener('change',checkKmAlert);
-document.addEventListener('input',e=>{if(e.target.id==='rf-mileage')checkKmAlert();});
-function checkKmAlert(){const car=document.getElementById('rf-car').value,km=parseInt(document.getElementById('rf-mileage').value)||0;if(!car||!km)return;const last=getLastKm(car,eIds.rec||'');document.getElementById('rf-km-alert').style.display=(last&&km<last)?'block':'none';if(km&&last>0&&document.getElementById('rf-fuel-prev'))document.getElementById('rf-fuel-prev').textContent=km>last?'距上次加油：'+(km-last).toLocaleString()+' km':'';}
-async function saveRec(){
-  const date=document.getElementById('rf-date').value,type=document.getElementById('rf-type').value;if(!date)return alert('請填寫日期');
-  const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage:parseInt(document.getElementById('rf-mileage').value)||0,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',};
-  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);cm('rec');
-}
-async function delRec(){if(!confirm('確定刪除？'))return;await db.collection('driverRecs').doc(eIds.rec).delete();cm('rec');}
-
-// ══════════════════ PAGE: 設定 ══════════════════
-function renderSettings(){
-  const el=document.getElementById('p-settings');
-  el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
-    ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>月薪</th><th>每趟</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
-  </div>
-  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','external')"><i class="ti ti-plus"></i> 新增</button></div>
-    ${!drivers.filter(d=>d.type==='external').length?'<div class="empty" style="padding:0.5rem;font-size:13px">尚無外派司機資料</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>每天費用</th><th>地區</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='external').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString()+'/天':'-'}</td><td style="font-size:12px">${d.area||'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
-  </div>
-  <div class="card"><div class="card-title"><i class="ti ti-building"></i> 酒店資料庫</div><button class="btn btn-primary btn-sm" onclick="openHotel()" style="margin-bottom:10px"><i class="ti ti-plus"></i> 新增酒店</button>
-    ${!hotels.length?'<div class="empty" style="padding:0.5rem">尚無酒店</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>名稱</th><th>地區</th><th>2人平/假</th><th>3人平/假</th><th>4人平/假</th><th>備註</th><th></th></tr></thead><tbody>${hotels.map(h=>`<tr><td style="font-weight:600">${h.name}</td><td>${h.area||'-'}</td><td>${h.r2?'$'+h.r2+(h.r2wk&&h.r2wk!==h.r2?'/$'+h.r2wk:''):'-'}</td><td>${h.r3?'$'+h.r3+(h.r3wk&&h.r3wk!==h.r3?'/$'+h.r3wk:''):'-'}</td><td>${h.r4?'$'+h.r4+(h.r4wk&&h.r4wk!==h.r4?'/$'+h.r4wk:''):'-'}</td><td style="font-size:11px;color:var(--text2)">${h.note||'-'}</td><td><button class="btn btn-sm" onclick="openHotel('${h.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
-  </div>
-  <div class="card"><div class="card-title"><i class="ti ti-car"></i> 車輛管理</div>
-    <div id="cars-list">${carsList.map((c,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="car-${i}" value="${c}" style="max-width:180px"><button class="btn btn-sm btn-danger" onclick="removeCar(${i})"><i class="ti ti-trash"></i></button></div>`).join('')}</div>
-    <div style="display:flex;gap:8px;margin-top:4px"><button class="btn btn-sm" onclick="addCar()"><i class="ti ti-plus"></i> 新增車輛</button><button class="btn btn-sm btn-primary" onclick="saveCars()"><i class="ti ti-device-floppy"></i> 儲存</button></div>
-  </div>
-  <div class="card"><div class="card-title"><i class="ti ti-settings"></i> 固定支出管理</div>
-    ${fixedExpenses.length?`<div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>名稱</th><th>週期</th><th>金額</th><th>期間</th><th></th></tr></thead><tbody>${fixedExpenses.map(f=>`<tr><td style="font-weight:600">${f.name}</td><td>${f.cycle==='monthly'?'每月':'每年'}</td><td style="color:var(--red)">$${f.amount.toLocaleString()}</td><td style="font-size:11px;color:var(--text2)">${f.start||'—'}${f.end?' 至 '+f.end:''}</td><td><button class="btn btn-sm" onclick="openFixed('${f.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`:''}
-    <button class="btn btn-primary btn-sm" onclick="openFixed()"><i class="ti ti-plus"></i> 新增固定支出</button>
-  </div>
-  <div class="card"><div class="card-title"><i class="ti ti-adjustments"></i> 成本預設值</div>
-    <div class="fg2"><div><label>外派司機每天費用（元）</label><input id="cs-day" type="number" value="${costSettings.driverDayRate||5000}"></div><div><label>外宿補貼每晚（元）</label><input id="cs-night" type="number" value="${costSettings.driverNightRate||1000}"></div></div>
-    <button class="btn btn-primary btn-sm" onclick="saveCostSetting()"><i class="ti ti-device-floppy"></i> 儲存設定</button>
-  </div>`;
-}
-function addCar(){carsList.push('');renderSettings();}
-function removeCar(i){carsList.splice(i,1);renderSettings();}
-async function saveCars(){const nc=carsList.map((_,i)=>document.getElementById('car-'+i)?.value.trim()).filter(Boolean);carsList=nc;await db.collection('meta').doc('cars').set({list:carsList});alert('車輛已儲存');renderSettings();}
-async function saveCostSetting(){await db.collection('meta').doc('costSettings').set({driverDayRate:parseInt(document.getElementById('cs-day').value)||5000,driverNightRate:parseInt(document.getElementById('cs-night').value)||1000},{merge:true});alert('設定已儲存');}
-
-function toggleDvType(){const t=document.getElementById("dvf-type").value;document.getElementById("dvf-own-fields").style.display=t==="own"?"block":"none";document.getElementById("dvf-ext-fields").style.display=t==="external"?"block":"none";}
-function openDriver(id='',forceType=''){
-  eIds.driver=id||null;const d=id?drivers.find(x=>x.id===id):null;
-  const dtype=d?.type||forceType||'own';
-  document.getElementById('mdv-title').textContent=id?'編輯司機':(dtype==='external'?'新增外派司機':'新增自家司機');
-  document.getElementById('btn-del-driver').style.display=id?'inline-flex':'none';
-  document.getElementById('dvf-name').value=d?.name||'';document.getElementById('dvf-phone').value=d?.phone||'';
-  document.getElementById('dvf-type').value=dtype;
-  document.getElementById('dvf-own-fields').style.display=dtype==='own'?'block':'none';
-  document.getElementById('dvf-ext-fields').style.display=dtype==='external'?'block':'none';
-  document.getElementById('dvf-pwd').value=d?.password||'';document.getElementById('dvf-salary').value=d?.salary||0;const isExt=dtype==='external';
-if(isExt){document.getElementById('dvf-extper').value=d?.perTrip||0;}else{document.getElementById('dvf-salary').value=d?.salary||0;document.getElementById('dvf-per').value=d?.perTrip||0;}
-  document.getElementById('dvf-area').value=d?.area||'';
-  document.getElementById('dvf-note').value=d?.note||'';om('driver');
-}
-async function saveDriver(){const name=document.getElementById('dvf-name').value.trim();const dtype=document.getElementById('dvf-type').value;if(!name)return alert('請填寫姓名');const pwd=document.getElementById('dvf-pwd').value;if(dtype==='own'&&!pwd)return alert('自家司機需填寫密碼');setSS('syncing','儲存中…');const extPer=document.getElementById('dvf-extper');const data={name,phone:document.getElementById('dvf-phone').value.trim(),password:pwd,salary:parseInt(document.getElementById('dvf-salary')?.value)||0,perTrip:dtype==='external'?(parseInt(extPer?.value)||0):(parseInt(document.getElementById('dvf-per')?.value)||0),area:document.getElementById('dvf-area').value.trim(),note:document.getElementById('dvf-note').value.trim(),type:dtype};if(eIds.driver)await db.collection('drivers').doc(eIds.driver).update(data);else await db.collection('drivers').doc(uid()).set(data);cm('driver');}
-async function delDriver(){if(!confirm('確定刪除？'))return;await db.collection('drivers').doc(eIds.driver).delete();cm('driver');}
-
-function openHotel(id=''){
-  eIds.hotel=id||null;const h=id?hotels.find(x=>x.id===id):null;
-  document.getElementById('mh-title').textContent=id?'編輯酒店':'新增酒店';document.getElementById('btn-del-hotel').style.display=id?'inline-flex':'none';
-  document.getElementById('hf-name').value=h?.name||'';document.getElementById('hf-area').value=h?.area||'';document.getElementById('hf-r2').value=h?.r2||0;document.getElementById('hf-r3').value=h?.r3||0;document.getElementById('hf-r4').value=h?.r4||0;document.getElementById('hf-r2wk').value=h?.r2wk||0;document.getElementById('hf-r3wk').value=h?.r3wk||0;document.getElementById('hf-r4wk').value=h?.r4wk||0;document.getElementById('hf-note').value=h?.note||'';om('hotel');
-}
-async function saveHotel(){const name=document.getElementById('hf-name').value.trim();if(!name)return alert('請填寫酒店名稱');setSS('syncing','儲存中…');const r2wkv=parseInt(document.getElementById('hf-r2wk').value)||0,r3wkv=parseInt(document.getElementById('hf-r3wk').value)||0,r4wkv=parseInt(document.getElementById('hf-r4wk').value)||0;const data={name,area:document.getElementById('hf-area').value.trim(),r2:parseInt(document.getElementById('hf-r2').value)||0,r3:parseInt(document.getElementById('hf-r3').value)||0,r4:parseInt(document.getElementById('hf-r4').value)||0,r2wk:r2wkv||parseInt(document.getElementById('hf-r2').value)||0,r3wk:r3wkv||parseInt(document.getElementById('hf-r3').value)||0,r4wk:r4wkv||parseInt(document.getElementById('hf-r4').value)||0,note:document.getElementById('hf-note').value.trim()};if(eIds.hotel)await db.collection('hotels').doc(eIds.hotel).update(data);else await db.collection('hotels').doc(uid()).set(data);cm('hotel');}
-async function delHotel(){if(!confirm('確定刪除？'))return;await db.collection('hotels').doc(eIds.hotel).delete();cm('hotel');}
-
-// ══════════════════ INIT ══════════════════
-async function initDefaultDrivers(){
-  const snap=await db.collection('drivers').get();
-  if(snap.empty){await db.collection('drivers').doc(uid()).set({name:'阿國',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});await db.collection('drivers').doc(uid()).set({name:'子碩',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});}
-}
-// 初始載入司機清單（未登入時也需要顯示選單）
-db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));populateLoginSel();});
-db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));if(document.getElementById('pub-screen').style.display!=='none')initPubPage();});
-db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
-
-// 判斷是否公開報名頁
-if(window.location.hash==='#booking'){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('pub-screen').style.display='flex';
-  initListeners();
-  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));initPubPage();});
-} else if(window.location.hash==='#driver'){
-  // 來自 driver.html 的跳轉
-  const driverData=JSON.parse(sessionStorage.getItem('driverLogin')||'null');
-  if(driverData){
-    db.collection('drivers').onSnapshot(s=>{
-      drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-      if(!curRole){
-        const drv=drivers.find(d=>d.id===driverData.id);
-        if(drv){
-          curRole='driver';curDriverId=driverData.id;
-          document.getElementById('login-screen').style.display='none';
-          document.getElementById('app').style.display='block';
-          document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-          buildNav('driver');initListeners();showPage('p-driver');
-        }
-      }
-    });
-  } else { initDefaultDrivers(); }
-} else {
-  initDefaultDrivers();
-  // 自動登入：若裝置已記住管理員
-  if(localStorage.getItem('adminDeviceTrusted_v1')==='1'){
-    // 等 Firebase 初始化後直接進入
-    setTimeout(()=>loginAs('admin'),300);
-  }
-  // 自動登入：若裝置已記住司機（透過 index.html 登入的情況）
-  else{
-    const savedDrv=localStorage.getItem('driverDeviceTrusted_v1');
-    if(savedDrv){
-      db.collection('drivers').onSnapshot(s=>{
-        if(curRole)return;
-        drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-        try{
-          const info=JSON.parse(savedDrv);
-          const drv=drivers.find(d=>d.id===info.id);
-          if(drv){
-            curRole='driver';curDriverId=drv.id;
-            document.getElementById('login-screen').style.display='none';
-            document.getElementById('app').style.display='block';
-            document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-            buildNav('driver');initListeners();showPage('p-driver');
-          }
-        }catch(e){localStorage.removeItem('driverDeviceTrusted_v1');}
-      });
-    }
-  }
-}
+// 在頁面載入時初始化
+window.addEventListener('load',()=>{initListeners();});
 </script>
 </body>
 </html>
