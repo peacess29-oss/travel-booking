@@ -125,10 +125,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="login-card">
     <div class="login-title">🚌 旅遊業務管理</div>
     <div class="login-sub">請選擇身份登入</div>
-    <button class="role-btn" onclick="loginAs('admin')">
+    <button class="role-btn" onclick="adminLogin()">
       <i class="ti ti-shield-lock" style="font-size:22px;color:var(--blue)"></i>
       <div><div>業務管理員</div><div style="font-size:11px;color:var(--text2)">完整管理功能</div></div>
     </button>
+    <!-- 管理員密碼輸入區（預設隱藏） -->
+    <div id="admin-pwd-wrap" style="display:none;margin-top:-4px;margin-bottom:8px">
+      <input type="password" id="admin-pwd-input" placeholder="請輸入管理員密碼" style="margin-bottom:6px;height:36px" onkeydown="if(event.key==='Enter')adminPwdConfirm()">
+      <div id="admin-pwd-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="adminPwdConfirm()"><i class="ti ti-login"></i> 確認登入</button>
+    </div>
     <div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px">
       <div class="mb10"><label>司機登入</label><select id="login-drv-sel" style="height:36px"></select></div>
       <div class="mb10"><label>密碼</label><input type="password" id="login-pwd" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter')loginDriver()"></div>
@@ -394,6 +400,23 @@ function populateLoginSel(){
   if(!sel)return;
   sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
+// ── 管理員密碼 ──
+const ADMIN_PASSWORD='admin888'; // ← 可修改此密碼
+const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
+
+function adminLogin(){
+  if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){loginAs('admin');return;}
+  const wrap=document.getElementById('admin-pwd-wrap');
+  if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}
+}
+function adminPwdConfirm(){
+  const pwd=document.getElementById('admin-pwd-input').value;
+  if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}
+  localStorage.setItem(ADMIN_DEVICE_KEY,'1');
+  document.getElementById('admin-pwd-wrap').style.display='none';
+  document.getElementById('admin-pwd-err').style.display='none';
+  loginAs('admin');
+}
 function loginAs(role){
   curRole=role;curDriverId='';
   document.getElementById('login-screen').style.display='none';
@@ -424,6 +447,7 @@ function loginDriver(){
   const pwd=document.getElementById('login-pwd').value;
   const drv=drivers.find(d=>d.id===drvId);
   if(!drv||drv.password!==pwd){document.getElementById('login-err').style.display='block';return;}
+  localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drvId,name:drv.name}));
   curRole='driver';curDriverId=drvId;
   document.getElementById('login-err').style.display='none';
   document.getElementById('login-screen').style.display='none';
@@ -434,7 +458,11 @@ function loginDriver(){
   showPage('p-driver');
 }
 function logout(){
+  const wasRole=curRole;
   curRole='';curDriverId='';
+  // 清除裝置記憶
+  if(wasRole==='admin')localStorage.removeItem('adminDeviceTrusted_v1');
+  if(wasRole==='driver')localStorage.removeItem('driverDeviceTrusted_v1');
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').style.display='none';
   document.getElementById('login-pwd').value='';
@@ -1205,6 +1233,32 @@ if(window.location.hash==='#booking'){
   } else { initDefaultDrivers(); }
 } else {
   initDefaultDrivers();
+  // 自動登入：若裝置已記住管理員
+  if(localStorage.getItem('adminDeviceTrusted_v1')==='1'){
+    // 等 Firebase 初始化後直接進入
+    setTimeout(()=>loginAs('admin'),300);
+  }
+  // 自動登入：若裝置已記住司機（透過 index.html 登入的情況）
+  else{
+    const savedDrv=localStorage.getItem('driverDeviceTrusted_v1');
+    if(savedDrv){
+      db.collection('drivers').onSnapshot(s=>{
+        if(curRole)return;
+        drivers=s.docs.map(d=>({id:d.id,...d.data()}));
+        try{
+          const info=JSON.parse(savedDrv);
+          const drv=drivers.find(d=>d.id===info.id);
+          if(drv){
+            curRole='driver';curDriverId=drv.id;
+            document.getElementById('login-screen').style.display='none';
+            document.getElementById('app').style.display='block';
+            document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
+            buildNav('driver');initListeners();showPage('p-driver');
+          }
+        }catch(e){localStorage.removeItem('driverDeviceTrusted_v1');}
+      });
+    }
+  }
 }
 </script>
 </body>
