@@ -943,7 +943,7 @@ function renderPrivate(){
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat-card"><div class="stat-label">總數</div><div class="stat-val">${privates.length}</div></div>
-    <div class="stat-card"><div class="stat-label">待派車</div><div class="stat-val" style="color:var(--red)">${pend}</div></div>
+    <div class="stat-card"><div class="stat-label">待派車</div><div class="stat-val" style="color:var(--red)">${cntPend}</div></div>
     <div class="stat-card"><div class="stat-label">預期總營收</div><div class="stat-val" style="font-size:13px">$${privates.reduce((s,p)=>s+p.price,0).toLocaleString()}</div></div>
     <div class="stat-card"><div class="stat-label">已收款</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${privates.reduce((s,p)=>s+(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),0).toLocaleString()}</div></div>
   </div>
