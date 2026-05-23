@@ -258,8 +258,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <!-- 指派司機 -->
 <div class="overlay" id="m-assign"><div class="modal modal-lg">
   <div class="mh"><span class="mh-title" id="assign-order-title">指派司機</span><button class="btn btn-sm" onclick="cm('assign')"><i class="ti ti-x"></i></button></div>
-  <div class="info-box" style="font-size:13px"><i class="ti ti-bulb"></i> 派車建議依「自家司機最大化」原則排序，無衝突且本月排班天數少的司機優先</div>
+  <!-- 訂單資訊摘要 -->
+  <div id="assign-order-meta" style="font-size:12px;color:var(--text2);margin-bottom:8px;padding:8px 10px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)"></div>
+  <!-- 智慧建議區塊 -->
+  <div id="assign-smart-tip" style="display:none;margin-bottom:10px"></div>
+  <div class="info-box" style="font-size:12px"><i class="ti ti-bulb"></i> 派車建議依「自家司機最大化」原則排序，無衝突且本月排班天數少的司機優先</div>
   <div id="assign-suggestions"></div>
+  <!-- 更換司機區塊（已指派訂單才顯示） -->
+  <div id="assign-change-drv-sec" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text2)"><i class="ti ti-arrows-exchange"></i> 更換司機</div>
+    <div id="assign-change-drv-list"></div>
+  </div>
   <div class="mf"><button class="btn" onclick="cm('assign')">取消</button><button class="btn btn-primary btn-sm" onclick="cm('assign');openDisp()"><i class="ti ti-plus"></i> 手動新增派車</button></div>
 </div></div>
 
@@ -396,8 +405,13 @@ function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
 function getPrivStatus(p){
    const today=new Date().toISOString().slice(0,10);
    if(p.end<today) return {label:'已完成',cls:'badge-green',done:true};
-   if(!p.assignedDriver) return {label:'待派車',cls:'badge-red',done:false};
-   if(p.start<=today&&today<=p.end) return {label:'出團中',cls:'badge-amber',done:false};
+   if(!p.assignedDriver){
+     // 日期區段包含今天 → 進行中（未派車但已開始）
+     if(p.start<=today&&today<=p.end) return {label:'進行中',cls:'badge-amber',done:false};
+     return {label:'待派車',cls:'badge-red',done:false};
+   }
+   // 日期區段包含今天 → 進行中
+   if(p.start<=today&&today<=p.end) return {label:'進行中',cls:'badge-amber',done:false};
    return {label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};
 }
 
@@ -901,8 +915,17 @@ function getAllOrders(){
       // [修正] 過濾條件簡化：只需 endDate < today
       if(endDate<today)return;
       const disp=dispatches.find(x=>x.start===d&&(x.label.includes(t.name)||x.groupTourId===t.id+'_'+d));
-      const statusLabel=disp?('已派車 '+(disp.driverName||'')):'待派車';
-      grpOrders.push({id:t.id+'_'+d,type:'group',source:{tour:t,date:d,bks,disp},label:t.name,start:d,end:endDate,days:tdays,pax:total,cars:Math.ceil(total/(t.busMax||8)),status:statusLabel,statusCls:disp?'badge-green':'badge-red',assignedDriver:disp?.driverName||''});
+      // 日期區段包含今天 → 進行中
+      const isActive=d<=today&&today<=endDate;
+      let statusLabel,statusCls;
+      if(disp){
+        statusLabel=isActive?'進行中':'已派車 '+(disp.driverName||'');
+        statusCls=isActive?'badge-amber':'badge-green';
+      } else {
+        statusLabel=isActive?'進行中':'待派車';
+        statusCls=isActive?'badge-amber':'badge-red';
+      }
+      grpOrders.push({id:t.id+'_'+d,type:'group',source:{tour:t,date:d,bks,disp},label:t.name,start:d,end:endDate,days:tdays,pax:total,cars:Math.ceil(total/(t.busMax||8)),status:statusLabel,statusCls,assignedDriver:disp?.driverName||''});
     });
   });
   return [...pvOrders,...grpOrders].sort((a,b)=>a.start>b.start?1:-1);
@@ -965,57 +988,152 @@ function renderDispatch(){
   </table></div>`;
 }
 
+// ── 智慧派車：判斷某司機接下此訂單是否比拆單更值得 ──
+// 若司機已有的衝突訂單天數 < 新訂單天數，建議將新訂單給此司機、舊訂單外派
+function calcSmartSuggest(drv,orderDates,start,end){
+  const myDisps=dispatches.filter(d=>d.driverId===drv.id&&d.driverType==='own');
+  const conflictDisps=myDisps.filter(d=>orderDates.some(date=>isInDisp(date,d)));
+  if(!conflictDisps.length) return null; // 無衝突，不需智慧建議
+  const conflictDays=conflictDisps.reduce((s,d)=>s+calcDays(d.start,d.end),0);
+  const newDays=orderDates.length;
+  // 新訂單天數 > 衝突訂單天數 → 值得建議把新訂單給此司機、舊訂單外派
+  if(newDays>conflictDays){
+    return {drv,conflictDisps,conflictDays,newDays,worthSwap:true};
+  }
+  return {drv,conflictDisps,conflictDays,newDays,worthSwap:false};
+}
+
 function assignDriverModal(orderId,type,label,start,end){
   const orderDates=dateRange(start,end);
+  const today=new Date().toISOString().slice(0,10);
   const ownDrivers=drivers.filter(d=>d.type==='own');
+
+  // 找出目前此訂單已指派的派車記錄（用於更換司機功能）
+  let currentDispatch=null;
+  if(type==='private'){
+    const p=privates.find(x=>x.id===orderId);
+    if(p?.assignedDriver) currentDispatch=dispatches.find(d=>d.start===start&&d.driverId&&drivers.find(drv=>drv.name===p.assignedDriver&&drv.id===d.driverId));
+  } else {
+    currentDispatch=dispatches.find(x=>x.start===start&&(x.label.includes(label)||x.groupTourId===orderId));
+  }
+  const currentDriverId=currentDispatch?.driverId||'';
+
   let suggestions=[];
+  let smartSuggest=null;
   ownDrivers.forEach(drv=>{
-    const myDisps=dispatches.filter(d=>d.driverId===drv.id&&d.driverType==='own');
-    const conflict=myDisps.find(d=>orderDates.some(date=>isInDisp(date,d)));
-    if(!conflict){
+    const myDisps=dispatches.filter(d=>d.driverId===drv.id&&d.driverType==='own'&&d.id!==currentDispatch?.id);
+    const allConflicts=myDisps.filter(d=>orderDates.some(date=>isInDisp(date,d)));
+    if(!allConflicts.length){
       const mDays=myDisps.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth;}).reduce((s,d)=>s+calcDays(d.start,d.end),0);
       suggestions.push({drv,conflict:false,mDays,note:'無衝突，可排'});
     } else {
-      // [修正] 有衝突的司機記錄所有衝突訂單，供顯示用
-      const allConflicts=myDisps.filter(d=>orderDates.some(date=>isInDisp(date,d)));
-      suggestions.push({drv,conflict:true,conflictInfo:conflict,allConflicts,note:`已有排班：${allConflicts.map(c=>c.start+(c.start!==c.end?'~'+c.end:'')+'「'+c.label+'」').join('、')}`});
+      // 智慧建議：新訂單天數 > 衝突天數 → 值得換手
+      const smart=calcSmartSuggest(drv,orderDates,start,end);
+      const conflictStr=allConflicts.map(c=>c.start+(c.start!==c.end?'~'+c.end:'')+'「'+(c.label||'')+'」').join('、');
+      suggestions.push({drv,conflict:true,allConflicts,note:`已有排班：${conflictStr}`,smart});
+      if(smart?.worthSwap&&!smartSuggest) smartSuggest={drv,smart,conflictStr,allConflicts};
     }
   });
   suggestions.sort((a,b)=>{if(a.conflict!==b.conflict)return a.conflict?1:-1;return a.mDays-b.mDays;});
-  const sugHtml=suggestions.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:${s.conflict?'var(--red-l)':'var(--green-l)'};border-radius:8px;margin-bottom:6px">
-    <div style="flex:1;min-width:0"><div style="font-weight:600">${s.drv.name}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div></div>
-    ${s.conflict
-      ? `<span style="font-size:11px;color:var(--red-d);padding:4px 8px;background:var(--red-l);border:1px solid #F09595;border-radius:6px;flex-shrink:0"><i class="ti ti-ban"></i> 不可指派</span>`
-      : `<button class="btn btn-sm btn-success" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${s.drv.id}','${s.drv.name}')"><i class="ti ti-check"></i> 指派</button>`
-    }
-  </div>`).join('');
+
+  // 訂單摘要
+  const days=calcDays(start,end);
+  document.getElementById('assign-order-meta').innerHTML=
+    `<i class="ti ti-calendar-event"></i> <strong>${label}</strong> &nbsp;|&nbsp; ${start}${start!==end?' ~ '+end:''} &nbsp;|&nbsp; ${days}天 &nbsp;|&nbsp; 出發 ${start}`;
+
+  // 智慧建議區塊
+  const tipEl=document.getElementById('assign-smart-tip');
+  if(smartSuggest){
+    const {drv,allConflicts,conflictStr}=smartSuggest;
+    const conflictIds=allConflicts.map(d=>'\''+(d.id||'')+'\'').join(',');
+    tipEl.style.display='block';
+    tipEl.innerHTML=`<div class="warn-box" style="font-size:13px">
+      <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-bulb"></i> 智慧建議：將此訂單安排給 ${drv.name}</div>
+      <div style="font-size:12px;margin-bottom:8px">新訂單 <strong>${days}天</strong> > 現有衝突排班 <strong>${smartSuggest.smart.conflictDays}天</strong>（${conflictStr}）<br>建議將新訂單指派給 <strong>${drv.name}</strong>，原衝突排班改為外派。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-warn" style="font-size:12px" onclick="applySmartSuggest('${orderId}','${type}','${label}','${start}','${end}','${drv.id}','${drv.name}',[${conflictIds}])">
+          <i class="ti ti-arrows-exchange"></i> 套用建議（指派 ${drv.name} + 原排班改外派）
+        </button>
+      </div>
+    </div>`;
+  } else {
+    tipEl.style.display='none';
+  }
+
+  // 司機列表
+  const sugHtml=suggestions.map(s=>{
+    const isCurrentDrv=s.drv.id===currentDriverId;
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:${s.conflict?'var(--red-l)':'var(--green-l)'};border-radius:8px;margin-bottom:6px;${isCurrentDrv?'border:2px solid var(--blue);':''}" >
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${s.drv.name}${isCurrentDrv?' <span style="font-size:11px;color:var(--blue)">(目前指派)</span>':''}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${s.note}${!s.conflict?' ｜ 本月已排'+s.mDays+'天':''}</div>
+      </div>
+      ${s.conflict
+        ? `<span style="font-size:11px;color:var(--red-d);padding:4px 8px;background:var(--red-l);border:1px solid #F09595;border-radius:6px;flex-shrink:0"><i class="ti ti-ban"></i> 不可指派</span>`
+        : isCurrentDrv
+          ? `<span style="font-size:11px;color:var(--blue-d);padding:4px 8px;background:var(--blue-l);border:1px solid var(--blue);border-radius:6px;flex-shrink:0">已指派</span>`
+          : `<button class="btn btn-sm btn-success" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${s.drv.id}','${s.drv.name}','${currentDispatch?.id||''}')"><i class="ti ti-check"></i> ${currentDriverId?'更換為此司機':'指派'}</button>`
+      }
+    </div>`;
+  }).join('');
+
   const extDrivers=drivers.filter(d=>d.type==='external');
-  const extHtml=extDrivers.length?`<div style="margin-top:10px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">外派司機</div>${extDrivers.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--amber-l);border-radius:8px;margin-bottom:6px"><div><div style="font-weight:600">${d.name}</div><div style="font-size:12px;color:var(--text2)">${d.phone||''}${d.note?' ｜ '+d.note:''}</div></div><button class="btn btn-sm btn-warn" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${d.id}','${d.name}')"><i class="ti ti-check"></i> 指派</button></div>`).join('')}</div>`:'';
-  document.getElementById('assign-order-title').textContent=label+' ('+start+'~'+end+')';
+  const extHtml=extDrivers.length?`<div style="margin-top:10px"><div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text2)">外派司機</div>${extDrivers.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--amber-l);border-radius:8px;margin-bottom:6px"><div><div style="font-weight:600">${d.name}</div><div style="font-size:12px;color:var(--text2)">${d.phone||''}${d.note?' ｜ '+d.note:''}</div></div><button class="btn btn-sm btn-warn" onclick="quickAssign('${orderId}','${type}','${label}','${start}','${end}','${d.id}','${d.name}','${currentDispatch?.id||''}')"><i class="ti ti-check"></i> ${currentDriverId?'更換為外派':'指派'}</button></div>`).join('')}</div>`:'';
+
+  document.getElementById('assign-order-title').textContent=label+' ('+start+(start!==end?'~'+end:'')+')';
   document.getElementById('assign-suggestions').innerHTML=sugHtml+extHtml;
+
+  // 更換司機區塊：已指派才顯示
+  const changeSec=document.getElementById('assign-change-drv-sec');
+  if(currentDriverId){
+    changeSec.style.display='block';
+    document.getElementById('assign-change-drv-list').innerHTML=
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:6px">目前指派：<strong>${currentDispatch?.driverName||''}</strong> ｜ 從上方列表選擇新司機即可更換</div>`;
+  } else {
+    changeSec.style.display='none';
+  }
+
   om('assign');
 }
-async function quickAssign(orderId,type,label,start,end,drvId,drvName){
-  // [修正] 執行前再做衝突檢查，自家司機同一天不可有兩張訂單
+
+// 套用智慧建議：指派新司機 + 將衝突舊排班標記為外派
+async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conflictDispIds){
+  if(!confirm(`確定套用建議？\n將「${label}」指派給 ${drvName}，並將衝突的 ${conflictDispIds.length} 筆舊排班改為外派。`)) return;
+  setSS('syncing','處理中…');
+  // 衝突排班改外派
+  for(const did of conflictDispIds){
+    const d=dispatches.find(x=>x.id===did);
+    if(d) await db.collection('dispatches').doc(did).update({driverType:'out',outsourceName:d.driverName+'（自動轉外派）',driverId:'',note:(d.note||'')+' [智慧建議轉外派]' });
+  }
+  // 指派新司機
+  await quickAssign(orderId,type,label,start,end,drvId,drvName,'');
+  cm('assign');
+}
+async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDispId=''){
+  // [修正] 執行前再做衝突檢查（排除舊派車記錄本身），自家司機同一天不可有兩張訂單
   const drv=drivers.find(d=>d.id===drvId);
   if(drv?.type==='own'){
     const orderDates=dateRange(start,end);
-    const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own').find(d=>orderDates.some(date=>isInDisp(date,d)));
+    const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own'&&d.id!==currentDispId).find(d=>orderDates.some(date=>isInDisp(date,d)));
     if(conflict){
-      alert('\u274c \u7121\u6cd5\u6307\u6d3e\uff01'+drvName+' \u5728 '+conflict.start+(conflict.start!==conflict.end?'\uff5e'+conflict.end:'')+' \u5df2\u6709\u6392\u73ed\u300c'+conflict.label+'\u300d\uff0c\u540c\u4e00\u5929\u4e0d\u80fd\u5b89\u6392\u5169\u5f35\u8a02\u55ae\u3002');
+      alert('❌ 無法指派！'+drvName+' 在 '+conflict.start+(conflict.start!==conflict.end?'～'+conflict.end:'')+' 已有排班「'+conflict.label+'」，同一天不能安排兩張訂單。');
       return;
     }
   }
   setSS('syncing','派車中…');
+  // 若有舊派車記錄（更換司機），先刪除舊記錄
+  if(currentDispId){
+    await db.collection('dispatches').doc(currentDispId).delete();
+  }
   if(type==='private'){
     const p=privates.find(x=>x.id===orderId);
     if(p)await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
-    const drv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自包車團：'+label});
+    const newDrv=drivers.find(d=>d.id===drvId);
+    await db.collection('dispatches').doc(uid()).set({label,start,end,startTime:'full',endTime:'full',driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自包車團：'+label});
   } else {
     const parts=orderId.split('_');const tourId=parts[0],date=parts.slice(1).join('_');
-    const drv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end:end||start,startTime:'full',endTime:'full',driverType:drv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自拼團：'+label,groupTourId:tourId+'_'+date});
+    const newDrv=drivers.find(d=>d.id===drvId);
+    await db.collection('dispatches').doc(uid()).set({label,start,end:end||start,startTime:'full',endTime:'full',driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自拼團：'+label,groupTourId:tourId+'_'+date});
   }
   cm('assign');
 }
