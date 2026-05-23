@@ -914,17 +914,31 @@ function renderPrivate(){
   const fv=document.getElementById('pv-filter')?.value||'all';
   let list=privates;
   const today=new Date().toISOString().slice(0,10);
+  // 預先計算各分類數量
+  const cntAll=privates.length;
+  const cntPend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
+  const cntAssigned=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車')).length;
+  const cntActive=privates.filter(p=>getPrivStatus(p).label==='進行中').length;
+  const cntDone=privates.filter(p=>getPrivStatus(p).done).length;
   if(fv==='pending')list=privates.filter(p=>getPrivStatus(p).label==='待派車');
-  else if(fv==='assigned')list=privates.filter(p=>p.assignedDriver&&getPrivStatus(p).label.startsWith('已派車'));
-  else if(fv==='active')list=privates.filter(p=>{const s=getPrivStatus(p);return s.label==='出團中';});
+  else if(fv==='assigned')list=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車'));
+  else if(fv==='active')list=privates.filter(p=>getPrivStatus(p).label==='進行中');
   else if(fv==='done')list=privates.filter(p=>getPrivStatus(p).done);
   else if(fv==='car')list=privates.filter(p=>p.type==='car');
   else if(fv==='ch')list=privates.filter(p=>p.type==='car+hotel');
-  if(fv==='all')list=privates.filter(p=>!getPrivStatus(p).done);
+  // 全部：顯示所有訂單（含已完成）
+  // else fv==='all'：list 保持 privates 全部
   list=[...list].sort((a,b)=>a.start>b.start?1:-1);
-  const pend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-    <select id="pv-filter" onchange="renderPrivate()" style="height:36px;font-size:13px"><option value="all">進行中（${privates.filter(p=>!getPrivStatus(p).done).length}）</option><option value="pending">待派車（${pend}）</option><option value="assigned">已派車待出團</option><option value="active">出團中</option><option value="done">完成出團</option><option value="ch">車+住宿</option><option value="car">純包車</option></select>
+    <select id="pv-filter" onchange="renderPrivate()" style="height:36px;font-size:13px">
+      <option value="all"${fv==='all'?' selected':''}>全部（${cntAll}）</option>
+      <option value="pending"${fv==='pending'?' selected':''}>待派車（${cntPend}）</option>
+      <option value="assigned"${fv==='assigned'?' selected':''}>已派車待出團（${cntAssigned}）</option>
+      <option value="active"${fv==='active'?' selected':''}>出團中（${cntActive}）</option>
+      <option value="done"${fv==='done'?' selected':''}>完成出團（${cntDone}）</option>
+      <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
+      <option value="car"${fv==='car'?' selected':''}>純包車</option>
+    </select>
     <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
