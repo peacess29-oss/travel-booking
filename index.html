@@ -1445,8 +1445,19 @@ async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conf
     }
   }
 
-  // 指派新司機（此時本地 dispatches 已正確移除舊記錄，衝突檢查不會誤判）
-  await quickAssign(orderId,type,label,start,end,drvId,drvName,'');
+  // 指派新司機前，先找出此訂單現有的派車記錄（第二次套用時必須先刪舊記錄）
+  let existingDispId='';
+  if(type==='private'){
+    const existDisp=dispatches.find(d=>d.driverId===drvId&&d.start===start)||
+                    dispatches.find(d=>d.note?.includes('來自包車團')&&d.label?.includes(label)&&d.start===start);
+    existingDispId=existDisp?.id||'';
+  } else {
+    // 拼團：找 groupTourId 精確比對
+    const existDisp=dispatches.find(d=>d.groupTourId===orderId);
+    existingDispId=existDisp?.id||'';
+  }
+  // 傳入 existingDispId，quickAssign 會先刪舊記錄再建新的，防止重複
+  await quickAssign(orderId,type,label,start,end,drvId,drvName,existingDispId);
   cm('assign');
 }
 // 手動輸入外派司機姓名後指派
