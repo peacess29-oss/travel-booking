@@ -954,7 +954,16 @@ function renderPrivate(){
       return`<tr style="${!p.assignedDriver?'background:rgba(160,32,32,.03)':''}">
         <td style="font-weight:600">${p.name}</td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
         <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
-        <td style="font-size:11px;color:${p.nightlyHotels?.some(n=>n.booked)?'var(--blue)':'var(--text2)'}" title="${p.nightlyHotels?.some(n=>n.booked)?'已訂房確認':''}"><strong>${p.nightlyHotels?.some(n=>n.booked)?'✓ ':''}</strong>${p.hotelName||'-'}</td><td style="text-align:center">${p.hotelNights||0}</td>
+        <td style="font-size:11px">${(()=>{
+          if(!p.nightlyHotels?.length) return `<span style="color:var(--text2)">${p.hotelName||'-'}</span>`;
+          return p.nightlyHotels.map((n,i)=>{
+            const h=hotels.find(x=>x.id===n.hotelId);
+            const name=h?h.name:n.hotelId?'?':'-';
+            const color=n.booked?'var(--blue)':'var(--text2)';
+            const mark=n.booked?'✓ ':'';
+            return `<span style="color:${color}" title="${n.booked?'第'+(i+1)+'晚已訂房確認':''}"><strong>${mark}</strong>${name}</span>`;
+          }).join('<br>');
+        })()}</td><td style="text-align:center">${p.hotelNights||0}</td>
         <td style="font-weight:600">$${(p.price||0).toLocaleString()}</td><td>$${(p.deposit||0).toLocaleString()}</td><td style="color:var(--blue)">$${bal.toLocaleString()}</td>
         <td class="chk" onclick="togglePv('${p.id}','depositPaid',${!p.depositPaid})">${p.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
         <td class="chk" onclick="togglePv('${p.id}','balancePaid',${!p.balancePaid})">${p.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
