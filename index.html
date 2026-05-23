@@ -414,51 +414,84 @@ db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.da
 async function setBusAssign(tourId,date,bookId,busIdx){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
   await db.collection('meta').doc('busAssign').set({[key]:busIdx},{merge:true});
-  busAssignMap[key]=busIdx; // 本地立即更新
+  busAssignMap[key]=busIdx;
   refresh();
+}
+// 換車前確認不超載，超載時提示但讓使用者確認是否強制
+async function checkAndSetBusAssign(tourId,date,bookId,targetBusIdx,groupCount,busMax){
+  // 計算目標車移入後的人數
+  const bks=getDateBks(tourId,date);
+  const buses=buildBuses(bks,busMax,tourId,date);
+  const targetBus=buses.find(b=>b.busIdx===targetBusIdx);
+  if(targetBus){
+    const newPax=targetBus.seats+groupCount;
+    if(newPax>busMax){
+      if(!confirm(`⚠️ ${targetBus.label}車移入後將有 ${newPax} 人，超過上限 ${busMax} 人。\n確定要強制移車嗎？`)){
+        refresh(); // 還原下拉選單
+        return;
+      }
+    }
+  }
+  await setBusAssign(tourId,date,bookId,targetBusIdx);
 }
 function getBusIdx(tourId,date,bookId){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
   return busAssignMap[key]??null; // null = 未手動指定
 }
 
-// buildBuses：支援手動分車（busAssign）+ 自動分配溢出
+// buildBuses：以 booking 為最小單位分配（同一組客人不拆車）
+// 手動指定優先，未指定者自動分配（整組塞入第一台放得下的車）
 function buildBuses(bks,max,tourId,date){
   const BUS_LABELS=['A','B','C','D','E','F'];
-  // 展開每個 booking 的人數為獨立座位
-  const rows=[];
+  const manualBuses={};  // busIdx -> booking[]
+  const unassigned=[];   // booking[]（未手動指定）
+
   bks.forEach(b=>{
-    for(let i=0;i<b.count;i++) rows.push({...b,_seatIdx:i});
-  });
-  // 先依手動指定分組
-  const manualBuses={};
-  const unassigned=[];
-  rows.forEach(r=>{
-    const idx=tourId?getBusIdx(tourId,date,r.id):null;
+    const idx=tourId?getBusIdx(tourId,date,b.id):null;
     if(idx!==null&&idx!==undefined){
       if(!manualBuses[idx]) manualBuses[idx]=[];
-      manualBuses[idx].push(r);
+      manualBuses[idx].push(b);
     } else {
-      unassigned.push(r);
+      unassigned.push(b);
     }
   });
-  // 算出已用的最大車號
-  const usedIdxs=Object.keys(manualBuses).map(Number);
-  // 自動填入未指定的座位（依序塞滿各車，從0號車開始）
-  let targetBus=0;
-  unassigned.forEach(r=>{
-    // 找第一個未滿的車
-    while((manualBuses[targetBus]?.length||0)>=max) targetBus++;
-    if(!manualBuses[targetBus]) manualBuses[targetBus]=[];
-    manualBuses[targetBus].push(r);
+
+  // 自動分配未指定的 booking（整組不拆，塞入第一台放得下的車）
+  // 若整組人數超過 max，仍放同一台（邊界情況，顯示超載警告）
+  unassigned.forEach(b=>{
+    let placed=false;
+    // 從 0 號車找起，找第一台「已有人數 + 此 booking 人數 <= max」的車
+    for(let i=0;;i++){
+      const cur=manualBuses[i]||[];
+      const curPax=cur.reduce((s,x)=>s+x.count,0);
+      if(curPax+b.count<=max){
+        if(!manualBuses[i]) manualBuses[i]=[];
+        manualBuses[i].push(b);
+        placed=true;
+        break;
+      }
+      // 已滿，試下一台；若超過合理上限（F車）就強制放到最後一台
+      if(i>=5){ 
+        if(!manualBuses[i]) manualBuses[i]=[];
+        manualBuses[i].push(b);
+        placed=true;
+        break;
+      }
+    }
   });
-  // 轉成陣列，依車號排序
-  const sortedIdxs=[...new Set([...Object.keys(manualBuses).map(Number)])].sort((a,b)=>a-b);
-  return sortedIdxs.map(i=>({busIdx:i,label:BUS_LABELS[i]||String(i+1),seats:manualBuses[i]||[]}));
+
+  const sortedIdxs=[...new Set(Object.keys(manualBuses).map(Number))].sort((a,b)=>a-b);
+  return sortedIdxs.map(i=>({
+    busIdx:i,
+    label:BUS_LABELS[i]||String(i+1),
+    bookings:manualBuses[i]||[],  // booking 層級（保留原始 count）
+    seats:(manualBuses[i]||[]).reduce((s,b)=>s+b.count,0)  // 總人數（用於成團判斷）
+  }));
 }
 function isFormed(t,d){
   const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
-  return buses.length>0&&buses.every(b=>b.seats.length>=(t.min||4));
+  // seats 現在是整數（人數），直接比較
+  return buses.length>0&&buses.every(b=>b.seats>=(t.min||4));
 }
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
@@ -695,21 +728,15 @@ function renderDateTable(t,d){
   // 產生每台車的選項字串
   const busOpts=(curIdx)=>buses.map(b=>`<option value="${b.busIdx}"${b.busIdx===curIdx?' selected':''}>${b.label}車</option>`).join('');
 
-  // 逐車渲染表格
+  // 逐車渲染表格（bus.bookings = booking 層級，不拆人）
   const busTables=buses.map(bus=>{
-    const busFormed=bus.seats.length>=minPax;
-    // bus.seats 是展開後的座位列表，同一 booking id 可能出現多次（count>1）
-    // 還原成 booking 層級顯示（合併同 id 的）
-    const bkRows=[];
-    const seen={};
-    bus.seats.forEach(seat=>{
-      if(!seen[seat.id]){seen[seat.id]=true;bkRows.push(seat);}
-    });
-    return`<div style="margin-bottom:10px;border:1px solid ${busFormed?'var(--green)':'var(--border)'};border-radius:8px;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${busFormed?'var(--green-l)':'var(--amber-l)'}">
+    const busFormed=bus.seats>=minPax;
+    const overloaded=bus.seats>busMax;
+    return`<div style="margin-bottom:10px;border:2px solid ${busFormed?'var(--green)':overloaded?'var(--red)':'var(--border)'};border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${busFormed?'var(--green-l)':overloaded?'var(--red-l)':'var(--amber-l)'}">
         <span style="font-weight:700;font-size:13px">${bus.label}車</span>
-        <span style="font-size:12px;color:${busFormed?'var(--green-d)':'var(--amber-d)'}">
-          ${busFormed?`✓ 已成團（${bus.seats.length}人）`:`待成團（${bus.seats.length}/${minPax}人）`}
+        <span style="font-size:12px;color:${busFormed?'var(--green-d)':overloaded?'var(--red-d)':'var(--amber-d)'}">
+          ${overloaded?`⚠️ 超載（${bus.seats}/${busMax}人）`:busFormed?`✓ 已成團（${bus.seats}人）`:`待成團（${bus.seats}/${minPax}人）`}
         </span>
       </div>
       <table class="xtable" style="border:none">
@@ -719,22 +746,37 @@ function renderDateTable(t,d){
           <th class="chk" style="min-width:44px">定金</th>
           <th class="chk" style="min-width:44px">尾款</th>
           ${t.needInsurance?'<th class="chk" style="min-width:44px">旅遊險</th>':''}
-          ${showBusSel?'<th style="min-width:70px">分車</th>':''}
+          ${showBusSel?'<th style="min-width:70px">調車</th>':''}
           <th>備註</th><th></th>
         </tr></thead>
-        <tbody>${bkRows.map((b,i)=>{
+        <tbody>${bus.bookings.map((b,i)=>{
           const curBusIdx=getBusIdx(t.id,d,b.id)??bus.busIdx;
+          // 計算若換車後目標車的人數是否會超載
+          const switchNote=showBusSel?buses.filter(ob=>ob.busIdx!==bus.busIdx).map(ob=>{
+            const newPax=ob.seats+b.count;
+            return newPax>busMax?`${ob.label}車已滿（${ob.seats}+${b.count}=${newPax}人，上限${busMax}）`:'';
+          }):'';
           return`<tr>
             <td style="color:var(--text3)">${i+1}</td>
             <td style="font-weight:600">${b.name}</td>
-            <td style="text-align:center">${b.count}</td>
+            <td style="text-align:center;font-weight:600">${b.count}人</td>
             <td>${chBadge(b.channel)}</td>
             <td style="font-size:11px;color:var(--text2)">${[b.phone,b.contact].filter(Boolean).join('/')||'-'}</td>
             <td style="color:var(--text2)">${b.regdate||'-'}</td>
             <td class="chk" onclick="toggleBk('${b.id}','depositPaid',${!b.depositPaid})">${b.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
             <td class="chk" onclick="toggleBk('${b.id}','balancePaid',${!b.balancePaid})">${b.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
             ${t.needInsurance?`<td class="chk" onclick="toggleBk('${b.id}','insured',${!b.insured})">${b.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>`:''}
-            ${showBusSel?`<td><select style="height:28px;font-size:12px;padding:2px 4px" onchange="setBusAssign('${t.id}','${d}','${b.id}',parseInt(this.value))">${busOpts(curBusIdx)}</select></td>`:''}
+            ${showBusSel?`<td>
+              <select style="height:28px;font-size:12px;padding:2px 4px" title="${b.count}人整組移車"
+                onchange="checkAndSetBusAssign('${t.id}','${d}','${b.id}',parseInt(this.value),${b.count},${busMax})">
+                ${buses.map(ob=>{
+                  const wouldExceed=ob.busIdx!==bus.busIdx&&(ob.seats+b.count)>busMax;
+                  return`<option value="${ob.busIdx}"${ob.busIdx===curBusIdx?' selected':''}${wouldExceed?' style="color:var(--red)"':''}>
+                    ${ob.label}車${wouldExceed?' ⚠️超載':''}
+                  </option>`;
+                }).join('')}
+              </select>
+            </td>`:''}
             <td style="font-size:11px;color:var(--text2)">${b.note||''}</td>
             <td><button class="btn btn-sm" onclick="openBook('${b.tourId}','','${b.id}')"><i class="ti ti-edit"></i></button></td>
           </tr>`;
@@ -1097,7 +1139,7 @@ function getAllOrders(){
       const isActive=d<=today&&today<=endDate;
       buses.forEach(bus=>{
         const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
-        const busPax=bus.seats.length;
+        const busPax=bus.seats; // bus.seats 已是整數人數
         // 此台車對應的派車記錄（groupTourId 精確比對至車號）
         const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
                    // 相容舊資料：只有一台車時，允許比對舊格式 tourId_date
@@ -1131,20 +1173,25 @@ function renderDispatch(){
   const mDisps=dispatches.filter(d=>{const s=new Date(d.start),e=new Date(d.end),ms=new Date(calYear,calMonth,1),me=new Date(calYear,calMonth+1,0);return s<=me&&e>=ms;});
   const mOwn=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='own';}).length;
   const mOut=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='out';}).length;
-  // 行事曆只顯示「已有至少一台車派車」的拼團出發日
-  const groupDates={};
+  // 行事曆：只顯示「已派車的訂單」，每台車各自一個 pill
+  const groupDates={}; // date -> [{name, busLabel, dispId}]
   tours.forEach(t=>{
     getDates(t.id).forEach(d=>{
-      if(!isFormed(t,d))return; // 未成團不顯示
+      if(!isFormed(t,d))return;
       const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
-      const anyDisp=buses.some(bus=>{
+      buses.forEach(bus=>{
         const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
-        return dispatches.some(x=>x.groupTourId===busOrderId||
-          (buses.length===1&&x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d)));
+        const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
+          (buses.length===1?dispatches.find(x=>x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d)):null);
+        if(!disp)return; // 此台車未派車，不顯示
+        if(!groupDates[d])groupDates[d]=[];
+        groupDates[d].push({
+          name:t.name,
+          busLabel:buses.length>1?bus.label:'',
+          driverName:disp.driverName||'',
+          dispId:disp.id
+        });
       });
-      if(!anyDisp) return;
-      if(!groupDates[d])groupDates[d]=[];
-      groupDates[d].push(t.name);
     });
   });
   let cells='';
@@ -1155,7 +1202,7 @@ function renderDispatch(){
     const dayGrp=groupDates[ds]||[];
     cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
       <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
-      ${dayGrp.map(n=>`<div class="cal-pill" style="background:var(--purple-l);color:var(--purple)" title="${n}">🚌${n.slice(0,6)}</div>`).join('')}
+      ${dayGrp.map(g=>`<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer" onclick="event.stopPropagation();openDisp('${g.dispId}')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}</div>`).join('')}
       ${dayDisps.slice(0,2).map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
       ${dayDisps.length>2?`<div style="font-size:10px;color:var(--text2)">+${dayDisps.length-2}</div>`:''}
     </div>`;
