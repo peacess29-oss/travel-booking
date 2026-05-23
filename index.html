@@ -1106,7 +1106,6 @@ function assignDriverModal(orderId,type,label,start,end){
 
 // 套用智慧建議：指派新司機 + 衝突舊排班刪除並設回待派車（或指定外派司機）
 async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conflictDispIds){
-  // 讀取使用者選擇的外派司機（空=僅設回待派車）
   const extSelEl=document.getElementById('smart-ext-sel');
   const extDrvId=extSelEl?extSelEl.value:'';
   const extDrv=extDrvId?drivers.find(d=>d.id===extDrvId):null;
@@ -1114,42 +1113,46 @@ async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conf
   const extMsg=extDrv?`，衝突排班改指派給外派司機「${extDrv.name}」`:'，衝突排班設回待派車';
   if(!confirm(`確定套用建議？\n將「${label}」指派給 ${drvName}${extMsg}。\n（共 ${conflictCount} 筆衝突排班）`)) return;
   setSS('syncing','處理中…');
-  // 處理衝突排班：刪除舊派車記錄，將對應訂單設回待派車（或外派）
+
   for(const did of conflictDispIds){
     const d=dispatches.find(x=>x.id===did);
     if(!d) continue;
     if(extDrv){
       // 指定外派司機：更新派車記錄為外派
       await db.collection('dispatches').doc(did).update({
-        driverType:'out',
-        driverId:'',
-        driverName:extDrv.name,
-        outsourceName:extDrv.name,
+        driverType:'out',driverId:'',
+        driverName:extDrv.name,outsourceName:extDrv.name,
         note:(d.note||'')+' [智慧建議轉外派：'+extDrv.name+']'
       });
-      // 若對應包車團，更新 assignedDriver
+      // 本地同步：把該記錄改為外派，讓後續衝突檢查不再看到此司機佔用此日期
+      const idx=dispatches.findIndex(x=>x.id===did);
+      if(idx>=0) dispatches[idx]={...dispatches[idx],driverType:'out',driverId:'',driverName:extDrv.name};
+      // 對應包車團更新 assignedDriver
       if(d.note&&d.note.includes('來自包車團')){
         const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
         if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:extDrv.name,dispatchStatus:'assigned'});
       }
     } else {
-      // 不指定外派：刪除派車記錄，對應包車團設回待派車
+      // 不指定外派：刪除派車記錄
       await db.collection('dispatches').doc(did).delete();
+      // ★ 關鍵：立即從本地 dispatches 移除，讓後續衝突檢查看到正確狀態
+      dispatches=dispatches.filter(x=>x.id!==did);
+      // 對應包車團設回待派車
       if(d.note&&d.note.includes('來自包車團')){
         const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
         if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:'',dispatchStatus:'pending'});
       }
-      // 拼團訂單：派車記錄刪除後，狀態自動回到「待派車」（由 getAllOrders 計算）
     }
   }
-  // 指派新司機到此訂單
+
+  // 指派新司機（此時本地 dispatches 已正確移除舊記錄，衝突檢查不會誤判）
   await quickAssign(orderId,type,label,start,end,drvId,drvName,'');
   cm('assign');
 }
 async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDispId=''){
-  // [修正] 執行前再做衝突檢查（排除舊派車記錄本身），自家司機同一天不可有兩張訂單
-  const drv=drivers.find(d=>d.id===drvId);
-  if(drv?.type==='own'){
+  const newDrv=drivers.find(d=>d.id===drvId);
+  // 衝突檢查：排除正在被取代的舊記錄，自家司機同一天不可有兩張訂單
+  if(newDrv?.type==='own'){
     const orderDates=dateRange(start,end);
     const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own'&&d.id!==currentDispId).find(d=>orderDates.some(date=>isInDisp(date,d)));
     if(conflict){
@@ -1158,20 +1161,28 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
     }
   }
   setSS('syncing','派車中…');
-  // 若有舊派車記錄（更換司機），先刪除舊記錄
+  // 更換司機：刪除舊派車記錄並立即同步本地陣列，防止衝突檢查誤判
   if(currentDispId){
     await db.collection('dispatches').doc(currentDispId).delete();
+    dispatches=dispatches.filter(x=>x.id!==currentDispId);
   }
+  // 建立新派車記錄，並立即加入本地陣列，防止同一訂單被重複指派
+  const newDocId=uid();
+  const newData={label,start,end:type==='private'?end:(end||start),startTime:'full',endTime:'full',
+    driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,
+    outsourceName:'',car:'',carCount:1,
+    note:type==='private'?'來自包車團：'+label:'來自拼團：'+label};
   if(type==='private'){
     const p=privates.find(x=>x.id===orderId);
-    if(p)await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
-    const newDrv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end,startTime:'full',endTime:'full',driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自包車團：'+label});
+    if(p) await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
+    await db.collection('dispatches').doc(newDocId).set(newData);
   } else {
     const parts=orderId.split('_');const tourId=parts[0],date=parts.slice(1).join('_');
-    const newDrv=drivers.find(d=>d.id===drvId);
-    await db.collection('dispatches').doc(uid()).set({label,start,end:end||start,startTime:'full',endTime:'full',driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,outsourceName:'',car:'',carCount:1,note:'來自拼團：'+label,groupTourId:tourId+'_'+date});
+    newData.groupTourId=tourId+'_'+date;
+    await db.collection('dispatches').doc(newDocId).set(newData);
   }
+  // ★ 立即把新記錄加入本地 dispatches，防止在 onSnapshot 回來前重複指派
+  dispatches=[...dispatches,{id:newDocId,...newData}];
   cm('assign');
 }
 function openDisp(id='',dateStr=''){
