@@ -984,8 +984,16 @@ function renderDispatch(){
   const mDisps=dispatches.filter(d=>{const s=new Date(d.start),e=new Date(d.end),ms=new Date(calYear,calMonth,1),me=new Date(calYear,calMonth+1,0);return s<=me&&e>=ms;});
   const mOwn=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='own';}).length;
   const mOut=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='out';}).length;
+  // 行事曆只顯示「已派車」的拼團出發日（未派車不顯示）
   const groupDates={};
-  tours.forEach(t=>{getDates(t.id).forEach(d=>{if(!groupDates[d])groupDates[d]=[];groupDates[d].push(t.name);});});
+  tours.forEach(t=>{
+    getDates(t.id).forEach(d=>{
+      const hasDisp=dispatches.some(x=>x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d));
+      if(!hasDisp) return;
+      if(!groupDates[d])groupDates[d]=[];
+      groupDates[d].push(t.name);
+    });
+  });
   let cells='';
   for(let i=0;i<firstDay;i++)cells+=`<div class="cal-cell other-month"></div>`;
   for(let day=1;day<=dim;day++){
