@@ -966,6 +966,8 @@ function getAllOrders(){
       const bks=getDateBks(t.id,d);
       const total=bks.reduce((s,b)=>s+b.count,0);
       if(!total)return;
+      // 未達成團人數 → 不列入訂單，不需派車
+      if(!isFormed(t,d))return;
       const tdays=t.days||1;
       let endDate=d;
       if(tdays>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays-1);endDate=ed.toISOString().slice(0,10);}
