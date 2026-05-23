@@ -796,8 +796,13 @@ async function delTour(){
   const tourDates=[...new Set(bookings.filter(b=>b.tourId===tourId).map(b=>b.date))];
   const t=tours.find(x=>x.id===tourId);
   // 刪除相關派車記錄（比對行程名稱或 groupTourId）
-  const relDisps=dispatches.filter(d=>
-    tourDates.some(date=>d.start===date&&(d.label?.includes(t?.name||'__NONE__')||d.groupTourId?.startsWith(tourId+'_')))
+  const relDisps=dispatches.filter(x=>
+    tourDates.some(date=>
+      x.start===date&&(
+        x.groupTourId?.startsWith(tourId+'_')||
+        x.label?.includes(t?.name||'__NONE__')
+      )
+    )
   );
   for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
   // 刪除所有報名
@@ -849,8 +854,11 @@ async function delBook(){
     const remaining=bookings.filter(b=>b.id!==bk.id&&b.tourId===bk.tourId&&b.date===bk.date);
     if(!remaining.length){
       const t=tours.find(x=>x.id===bk.tourId);
-      const relDisps=dispatches.filter(d=>
-        d.start===bk.date&&(d.label?.includes(t?.name||'__NONE__')||d.groupTourId===bk.tourId+'_'+bk.date)
+      const relDisps=dispatches.filter(x=>
+        x.start===bk.date&&(
+          x.groupTourId?.startsWith(bk.tourId+'_'+bk.date)||
+          x.label?.includes(t?.name||'__NONE__')
+        )
       );
       for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
     }
@@ -1083,20 +1091,36 @@ function getAllOrders(){
       const tdays=t.days||1;
       let endDate=d;
       if(tdays>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays-1);endDate=ed.toISOString().slice(0,10);}
-      // [修正] 過濾條件簡化：只需 endDate < today
       if(endDate<today)return;
-      const disp=dispatches.find(x=>x.start===d&&(x.label.includes(t.name)||x.groupTourId===t.id+'_'+d));
-      // 日期區段包含今天 → 進行中
+      // 每台車各自一筆訂單
+      const buses=buildBuses(bks,t.busMax||8,t.id,d);
       const isActive=d<=today&&today<=endDate;
-      let statusLabel,statusCls;
-      if(disp){
-        statusLabel=isActive?'進行中':'已派車 '+(disp.driverName||'');
-        statusCls=isActive?'badge-amber':'badge-green';
-      } else {
-        statusLabel=isActive?'進行中':'待派車';
-        statusCls=isActive?'badge-amber':'badge-red';
-      }
-      grpOrders.push({id:t.id+'_'+d,type:'group',source:{tour:t,date:d,bks,disp},label:t.name,start:d,end:endDate,days:tdays,pax:total,cars:Math.ceil(total/(t.busMax||8)),status:statusLabel,statusCls,assignedDriver:disp?.driverName||''});
+      buses.forEach(bus=>{
+        const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
+        const busPax=bus.seats.length;
+        // 此台車對應的派車記錄（groupTourId 精確比對至車號）
+        const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
+                   // 相容舊資料：只有一台車時，允許比對舊格式 tourId_date
+                   (buses.length===1?dispatches.find(x=>x.start===d&&(x.label.includes(t.name)||x.groupTourId===t.id+'_'+d)):null);
+        let statusLabel,statusCls;
+        if(disp){
+          statusLabel=isActive?'進行中':'已派車 '+(disp.driverName||'');
+          statusCls=isActive?'badge-amber':'badge-green';
+        } else {
+          statusLabel=isActive?'進行中':'待派車';
+          statusCls=isActive?'badge-amber':'badge-red';
+        }
+        grpOrders.push({
+          id:busOrderId,type:'group',
+          source:{tour:t,date:d,bks,disp,bus},
+          label:t.name+(buses.length>1?' ('+bus.label+'車)':''),
+          busLabel:bus.label,busIdx:bus.busIdx,
+          start:d,end:endDate,days:tdays,
+          pax:busPax,cars:1,
+          status:statusLabel,statusCls,
+          assignedDriver:disp?.driverName||''
+        });
+      });
     });
   });
   return [...pvOrders,...grpOrders].sort((a,b)=>a.start>b.start?1:-1);
@@ -1107,12 +1131,18 @@ function renderDispatch(){
   const mDisps=dispatches.filter(d=>{const s=new Date(d.start),e=new Date(d.end),ms=new Date(calYear,calMonth,1),me=new Date(calYear,calMonth+1,0);return s<=me&&e>=ms;});
   const mOwn=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='own';}).length;
   const mOut=dispatches.filter(d=>{const s=new Date(d.start);return s.getFullYear()===calYear&&s.getMonth()===calMonth&&d.driverType==='out';}).length;
-  // 行事曆只顯示「已派車」的拼團出發日（未派車不顯示）
+  // 行事曆只顯示「已有至少一台車派車」的拼團出發日
   const groupDates={};
   tours.forEach(t=>{
     getDates(t.id).forEach(d=>{
-      const hasDisp=dispatches.some(x=>x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d));
-      if(!hasDisp) return;
+      if(!isFormed(t,d))return; // 未成團不顯示
+      const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
+      const anyDisp=buses.some(bus=>{
+        const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
+        return dispatches.some(x=>x.groupTourId===busOrderId||
+          (buses.length===1&&x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d)));
+      });
+      if(!anyDisp) return;
       if(!groupDates[d])groupDates[d]=[];
       groupDates[d].push(t.name);
     });
@@ -1193,7 +1223,9 @@ function assignDriverModal(orderId,type,label,start,end){
     const p=privates.find(x=>x.id===orderId);
     if(p?.assignedDriver) currentDispatch=dispatches.find(d=>d.start===start&&d.driverId&&drivers.find(drv=>drv.name===p.assignedDriver&&drv.id===d.driverId));
   } else {
-    currentDispatch=dispatches.find(x=>x.start===start&&(x.label.includes(label)||x.groupTourId===orderId));
+    // orderId 已是帶 busIdx 的完整格式，直接比對 groupTourId
+    currentDispatch=dispatches.find(x=>x.groupTourId===orderId)||
+      dispatches.find(x=>x.start===start&&x.label.includes(label));
   }
   const currentDriverId=currentDispatch?.driverId||'';
 
@@ -1356,8 +1388,8 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
     if(p) await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
     await db.collection('dispatches').doc(newDocId).set(newData);
   } else {
-    const parts=orderId.split('_');const tourId=parts[0],date=parts.slice(1).join('_');
-    newData.groupTourId=tourId+'_'+date;
+    // orderId 格式：tourId_date_busN，直接存為 groupTourId 精確識別每台車
+    newData.groupTourId=orderId;
     await db.collection('dispatches').doc(newDocId).set(newData);
   }
   // ★ 立即把新記錄加入本地 dispatches，防止在 onSnapshot 回來前重複指派
