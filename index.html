@@ -489,9 +489,9 @@ function buildBuses(bks,max,tourId,date){
   }));
 }
 function isFormed(t,d){
-  const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
-  // seats 現在是整數（人數），直接比較
-  return buses.length>0&&buses.every(b=>b.seats>=(t.min||4));
+  // 整體成團：總報名人數 >= 最少成團人數（不論幾台車）
+  const total=getDateBks(t.id,d).reduce((s,b)=>s+b.count,0);
+  return total>=(t.min||4);
 }
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
@@ -711,10 +711,12 @@ function renderDateTable(t,d){
   const busMax=t.busMax||8,minPax=t.min||4;
   const buses=buildBuses(bks,busMax,t.id,d);
   const busCount=buses.length;
-  // 成團判斷：每台車都達到最少人數
-  const formed=busCount>0&&buses.every(b=>b.seats.length>=minPax);
-  // 各車獨立成團狀態
-  const allFormed=formed;
+  // 整體成團：總人數 >= 最少成團人數（可以出發）
+  const totalFormed=total>=minPax;
+  // 各車獨立成團：每台車自己的人數 >= minPax
+  const allBusFormed=busCount>0&&buses.every(b=>b.seats>=minPax);
+  // allFormed：整體可出發且每台車都達標
+  const allFormed=totalFormed&&allBusFormed;
   const pct=Math.min(100,Math.round(total/minPax*100));
   const gkey='g_'+t.id+'_'+d.replace(/-/g,''),grp=!!groupStatus[gkey];
   const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
@@ -791,20 +793,20 @@ function renderDateTable(t,d){
         <span style="font-size:14px;font-weight:700">${d} 週${WD[new Date(d).getDay()]}</span>
         ${hol&&!mkp?`<span class="tag-hol">假日 $${dep}/$${pr}</span>`:`<span style="font-size:11px;color:var(--text2)">平日 $${dep}/$${pr}</span>`}
         ${mkp?'<span class="tag-mkp">補班</span>':''}
-        ${allFormed
-          ?`<span class="badge" style="background:var(--green-l);color:var(--green-d)"><i class="ti ti-check"></i> 已成團 派${busCount}車</span>`
+        ${totalFormed
+          ?`<span class="badge" style="background:var(--green-l);color:var(--green-d)"><i class="ti ti-check"></i> 已成團 派${busCount}車${allBusFormed?'':' (部分車待成團)'}</span>`
           :`<span class="badge" style="background:var(--amber-l);color:var(--amber-d)">待成團 ${total}/${minPax}人</span>`}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--text2)">定${dCnt}/${total} 尾${bCnt}/${total}${t.needInsurance?' 險'+iCnt+'/'+total:''}</span>
         <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;color:${grp?'var(--green-d)':'var(--text2)'}"><input type="checkbox" ${grp?'checked':''} onchange="toggleGrp('${t.id}','${d}',this.checked)" style="width:13px;height:13px"> 群組${grp?' ✓':''}</label>
-        ${allFormed&&bks.some(b=>!b.depositPaid)?`<button class="btn btn-sm btn-success" onclick="alertDep('${t.id}','${d}')"><i class="ti ti-bell"></i> 通知定金</button>`:''}
+        ${totalFormed&&bks.some(b=>!b.depositPaid)?`<button class="btn btn-sm btn-success" onclick="alertDep('${t.id}','${d}')"><i class="ti ti-bell"></i> 通知定金</button>`:''}
         <button class="btn btn-primary btn-sm" onclick="openBook('${t.id}','${d}')"><i class="ti ti-plus"></i> 加報名</button>
       </div>
     </div>
-    <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${allFormed?'var(--green)':'var(--blue)'}"></div></div>
+    <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${totalFormed?'var(--green)':'var(--blue)'}"></div></div>
     <div style="margin-top:6px">${busTables}</div>
-    ${!allFormed?`<div style="font-size:12px;color:var(--text2);margin-top:4px;padding:4px 8px;background:var(--bg2);border-radius:6px">
+    ${!totalFormed?`<div style="font-size:12px;color:var(--text2);margin-top:4px;padding:4px 8px;background:var(--bg2);border-radius:6px">
       目前 ${busCount} 台車共 ${total} 人${busCount>1?'，可用下拉選單手動調整各客人分車':''}
     </div>`:''}
   </div>`;
