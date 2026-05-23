@@ -1046,15 +1046,23 @@ function assignDriverModal(orderId,type,label,start,end){
   if(smartSuggest){
     const {drv,allConflicts,conflictStr}=smartSuggest;
     const conflictIds=allConflicts.map(d=>'\''+(d.id||'')+'\'').join(',');
+    // 外派司機選項（包含「不指定外派司機（待派車）」）
+    const extDrvOpts='<option value="">僅設回待派車（不指定外派）</option>'+
+      drivers.filter(d=>d.type==='external').map(d=>`<option value="${d.id}">${d.name}${d.phone?' '+d.phone:''}</option>`).join('');
     tipEl.style.display='block';
     tipEl.innerHTML=`<div class="warn-box" style="font-size:13px">
-      <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-bulb"></i> 智慧建議：將此訂單安排給 ${drv.name}</div>
-      <div style="font-size:12px;margin-bottom:8px">新訂單 <strong>${days}天</strong> > 現有衝突排班 <strong>${smartSuggest.smart.conflictDays}天</strong>（${conflictStr}）<br>建議將新訂單指派給 <strong>${drv.name}</strong>，原衝突排班改為外派。</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-warn" style="font-size:12px" onclick="applySmartSuggest('${orderId}','${type}','${label}','${start}','${end}','${drv.id}','${drv.name}',[${conflictIds}])">
-          <i class="ti ti-arrows-exchange"></i> 套用建議（指派 ${drv.name} + 原排班改外派）
-        </button>
+      <div style="font-weight:600;margin-bottom:8px"><i class="ti ti-bulb"></i> 智慧建議：將此訂單安排給 ${drv.name}</div>
+      <div style="font-size:12px;margin-bottom:10px;line-height:1.7">
+        新訂單 <strong>${days}天</strong> &gt; 現有衝突排班 <strong>${smartSuggest.smart.conflictDays}天</strong>（${conflictStr}）<br>
+        建議將新訂單指派給 <strong>${drv.name}</strong>，衝突舊排班刪除並設回待派車或指定外派司機。
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        <label style="font-size:12px;font-weight:600;white-space:nowrap">衝突排班處理方式：</label>
+        <select id="smart-ext-sel" style="height:32px;font-size:12px;flex:1;min-width:160px">${extDrvOpts}</select>
+      </div>
+      <button class="btn btn-sm btn-warn" style="font-size:12px;width:100%;justify-content:center" onclick="applySmartSuggest('${orderId}','${type}','${label}','${start}','${end}','${drv.id}','${drv.name}',[${conflictIds}])">
+        <i class="ti ti-arrows-exchange"></i> 套用建議（指派 ${drv.name}，衝突排班設回待派車）
+      </button>
     </div>`;
   } else {
     tipEl.style.display='none';
@@ -1096,16 +1104,45 @@ function assignDriverModal(orderId,type,label,start,end){
   om('assign');
 }
 
-// 套用智慧建議：指派新司機 + 將衝突舊排班標記為外派
+// 套用智慧建議：指派新司機 + 衝突舊排班刪除並設回待派車（或指定外派司機）
 async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conflictDispIds){
-  if(!confirm(`確定套用建議？\n將「${label}」指派給 ${drvName}，並將衝突的 ${conflictDispIds.length} 筆舊排班改為外派。`)) return;
+  // 讀取使用者選擇的外派司機（空=僅設回待派車）
+  const extSelEl=document.getElementById('smart-ext-sel');
+  const extDrvId=extSelEl?extSelEl.value:'';
+  const extDrv=extDrvId?drivers.find(d=>d.id===extDrvId):null;
+  const conflictCount=conflictDispIds.length;
+  const extMsg=extDrv?`，衝突排班改指派給外派司機「${extDrv.name}」`:'，衝突排班設回待派車';
+  if(!confirm(`確定套用建議？\n將「${label}」指派給 ${drvName}${extMsg}。\n（共 ${conflictCount} 筆衝突排班）`)) return;
   setSS('syncing','處理中…');
-  // 衝突排班改外派
+  // 處理衝突排班：刪除舊派車記錄，將對應訂單設回待派車（或外派）
   for(const did of conflictDispIds){
     const d=dispatches.find(x=>x.id===did);
-    if(d) await db.collection('dispatches').doc(did).update({driverType:'out',outsourceName:d.driverName+'（自動轉外派）',driverId:'',note:(d.note||'')+' [智慧建議轉外派]' });
+    if(!d) continue;
+    if(extDrv){
+      // 指定外派司機：更新派車記錄為外派
+      await db.collection('dispatches').doc(did).update({
+        driverType:'out',
+        driverId:'',
+        driverName:extDrv.name,
+        outsourceName:extDrv.name,
+        note:(d.note||'')+' [智慧建議轉外派：'+extDrv.name+']'
+      });
+      // 若對應包車團，更新 assignedDriver
+      if(d.note&&d.note.includes('來自包車團')){
+        const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
+        if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:extDrv.name,dispatchStatus:'assigned'});
+      }
+    } else {
+      // 不指定外派：刪除派車記錄，對應包車團設回待派車
+      await db.collection('dispatches').doc(did).delete();
+      if(d.note&&d.note.includes('來自包車團')){
+        const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
+        if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:'',dispatchStatus:'pending'});
+      }
+      // 拼團訂單：派車記錄刪除後，狀態自動回到「待派車」（由 getAllOrders 計算）
+    }
   }
-  // 指派新司機
+  // 指派新司機到此訂單
   await quickAssign(orderId,type,label,start,end,drvId,drvName,'');
   cm('assign');
 }
