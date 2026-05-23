@@ -1227,8 +1227,7 @@ function renderDispatch(){
     cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
       <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
       ${dayGrp.map(g=>{const did=g.dispId;return `<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer" onclick="event.stopPropagation();openDisp('`+did+`')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}</div>`;}).join('')}
-      ${dayDisps.slice(0,2).map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
-      ${dayDisps.length>2?`<div style="font-size:10px;color:var(--text2)">+${dayDisps.length-2}</div>`:''}
+      ${dayDisps.map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
     </div>`;
   }
   const allOrders=getAllOrders();
