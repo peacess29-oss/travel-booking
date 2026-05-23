@@ -248,7 +248,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="fg2"><div><label>開始日 *</label><input id="df-start" type="date" onchange="chkConflict()"></div><div><label>結束日 *</label><input id="df-end" type="date" onchange="chkConflict()"></div></div>
   <div class="fg2"><div><label>開始時段</label><select id="df-st"><option value="full">全天</option><option value="pm">下午開始</option></select></div><div><label>結束時段</label><select id="df-et"><option value="full">全天</option><option value="am">上午結束</option></select></div></div>
   <div class="fg2"><div><label>司機類型</label><select id="df-dtype" onchange="toggleDrvSel()"><option value="own">自家司機</option><option value="out">外派</option></select></div><div id="df-own-wrap"><label>指定司機</label><select id="df-driver" onchange="chkConflict()"><option value="">— 選擇 —</option></select></div></div>
-  <div id="df-out-wrap" style="display:none" class="mb10"><label>外派司機名稱</label><input id="df-outname" placeholder="司機姓名"></div>
+  <div id="df-out-wrap" style="display:none" class="mb10">
+    <label>外派司機</label>
+    <div style="display:flex;gap:6px;margin-bottom:4px">
+      <select id="df-out-sel" style="flex:1;height:36px;font-size:13px" onchange="onExtDrvSel(this.value)">
+        <option value="">— 從外派司機選 —</option>
+      </select>
+    </div>
+    <label style="margin-top:4px">或手動輸入姓名</label>
+    <input id="df-outname" placeholder="手動輸入外派司機姓名（優先於上方選單）">
+  </div>
   <div class="fg2"><div><label>車輛</label><select id="df-car"><option value="">— 選擇 —</option></select></div><div><label>台數</label><input id="df-carcount" type="number" value="1" min="1"></div></div>
   <div class="mb10"><label>備註</label><input id="df-note" placeholder="特殊說明"></div>
   <div id="df-conflict"></div>
@@ -1247,12 +1256,31 @@ function openDisp(id='',dateStr=''){
   document.getElementById('btn-del-disp').style.display=id?'inline-flex':'none';
   document.getElementById('df-label').value=d?.label||'';document.getElementById('df-start').value=d?.start||dateStr;document.getElementById('df-end').value=d?.end||dateStr;
   document.getElementById('df-st').value=d?.startTime||'full';document.getElementById('df-et').value=d?.endTime||'full';
-  document.getElementById('df-dtype').value=d?.driverType||'own';document.getElementById('df-outname').value=d?.outsourceName||'';document.getElementById('df-carcount').value=d?.carCount||1;document.getElementById('df-note').value=d?.note||'';
+  document.getElementById('df-dtype').value=d?.driverType||'own';
+  document.getElementById('df-outname').value=d?.outsourceName||'';
+  document.getElementById('df-carcount').value=d?.carCount||1;
+  document.getElementById('df-note').value=d?.note||'';
   const dsel=document.getElementById('df-driver');dsel.innerHTML='<option value="">— 選擇 —</option>'+drivers.filter(x=>x.type==='own').map(x=>`<option value="${x.id}"${x.id===d?.driverId?' selected':''}>${x.name}</option>`).join('');
   const csel=document.getElementById('df-car');csel.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===d?.car?' selected':''}>${c}</option>`).join('');
   toggleDrvSel();document.getElementById('df-conflict').innerHTML='';om('disp');
 }
-function toggleDrvSel(){const isOwn=document.getElementById('df-dtype').value==='own';document.getElementById('df-own-wrap').style.display=isOwn?'block':'none';document.getElementById('df-out-wrap').style.display=isOwn?'none':'block';}
+function toggleDrvSel(){
+  const isOwn=document.getElementById('df-dtype').value==='own';
+  document.getElementById('df-own-wrap').style.display=isOwn?'block':'none';
+  document.getElementById('df-out-wrap').style.display=isOwn?'none':'block';
+  if(!isOwn){
+    // 刷新外派司機下拉選單
+    const sel=document.getElementById('df-out-sel');
+    if(sel){
+      sel.innerHTML='<option value="">— 從外派司機選 —</option>'+
+        drivers.filter(d=>d.type==='external').map(d=>`<option value="${d.name}">${d.name}${d.phone?' '+d.phone:''}</option>`).join('');
+    }
+  }
+}
+function onExtDrvSel(name){
+  // 從下拉選了司機 → 填入手動輸入框，方便使用者看到目前選擇
+  if(name) document.getElementById('df-outname').value=name;
+}
 function chkConflict(){
   const drvId=document.getElementById('df-driver').value,start=document.getElementById('df-start').value,end=document.getElementById('df-end').value,el=document.getElementById('df-conflict');
   if(!drvId||!start||!end){el.innerHTML='';return;}
@@ -1268,7 +1296,10 @@ async function saveDisp(){
   const start=document.getElementById('df-start').value,end=document.getElementById('df-end').value;
   if(!start||!end)return alert('請填寫日期');
   const dtype=document.getElementById('df-dtype').value,drvId=dtype==='own'?document.getElementById('df-driver').value:'';
-  const drvName=dtype==='own'?(drivers.find(d=>d.id===drvId)?.name||'未指派'):(document.getElementById('df-outname').value.trim());
+  // 外派司機名稱：手動輸入優先，若空白則取下拉選單的值
+  const outManual=document.getElementById('df-outname').value.trim();
+  const outSel=document.getElementById('df-out-sel')?.value||'';
+  const drvName=dtype==='own'?(drivers.find(d=>d.id===drvId)?.name||'未指派'):(outManual||outSel||'外派未指定');
   // [修正] 自家司機儲存前做衝突檢查，有衝突直接阻止，不允許覆蓋
   if(dtype==='own'&&drvId){
     const orderDates=dateRange(start,end);
@@ -1280,11 +1311,31 @@ async function saveDisp(){
   }
   setSS('syncing','儲存中…');
   const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim()};
-  if(eIds.disp)await db.collection('dispatches').doc(eIds.disp).update(data);else await db.collection('dispatches').doc(uid()).set(data);
-  if(drvName&&dtype==='own'){const pLabel=data.label;const matchPriv=privates.find(p=>pLabel.includes(p.name));if(matchPriv)await db.collection('privates').doc(matchPriv.id).update({assignedDriver:drvName});}
+  if(eIds.disp){
+    await db.collection('dispatches').doc(eIds.disp).update(data);
+    // 本地立即同步，讓行事曆和訂單表立刻反映變更
+    const idx=dispatches.findIndex(x=>x.id===eIds.disp);
+    if(idx>=0) dispatches[idx]={...dispatches[idx],...data};
+  } else {
+    const newDocId=uid();
+    await db.collection('dispatches').doc(newDocId).set(data);
+    dispatches=[...dispatches,{id:newDocId,...data}];
+  }
+  if(drvName&&dtype==='own'){
+    const pLabel=data.label;
+    const matchPriv=privates.find(p=>pLabel.includes(p.name));
+    if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:drvName});
+  }
   cm('disp');
+  refresh(); // 立即重新渲染，行事曆、訂單表、派車記錄同步更新
 }
-async function delDisp(){if(!confirm('確定刪除？'))return;await db.collection('dispatches').doc(eIds.disp).delete();cm('disp');}
+async function delDisp(){
+  if(!confirm('確定刪除？'))return;
+  await db.collection('dispatches').doc(eIds.disp).delete();
+  dispatches=dispatches.filter(x=>x.id!==eIds.disp);
+  cm('disp');
+  refresh();
+}
 
 // ══════════════════ PAGE: 財務報表 ══════════════════
 const EXP_CAT={salary:'司機薪資',outsource:'外派費用',hotel:'住宿成本',insurance:'旅遊險',fuel:'油錢',parking:'停車費',toll:'過路費',maint:'保養/維修',ad:'廣告行銷',misc:'其他雜支'};
