@@ -1198,7 +1198,8 @@ function renderDispatch(){
   for(let i=0;i<firstDay;i++)cells+=`<div class="cal-cell other-month"></div>`;
   for(let day=1;day<=dim;day++){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dayDisps=mDisps.filter(d=>isInDisp(ds,d)),hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
+    // 排除拼團派車記錄（有 groupTourId），拼團由 dayGrp 紫色 pill 顯示
+    const dayDisps=mDisps.filter(d=>isInDisp(ds,d)&&!d.groupTourId),hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
     const dayGrp=groupDates[ds]||[];
     cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
       <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
