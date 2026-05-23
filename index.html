@@ -667,7 +667,25 @@ async function saveTour(){
   const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim()};
   if(eIds.tour)await db.collection('tours').doc(eIds.tour).update(data);else await db.collection('tours').doc(uid()).set(data);cm('tour');
 }
-async function delTour(){if(!confirm('確定刪除？'))return;await db.collection('tours').doc(eIds.tour).delete();cm('tour');}
+async function delTour(){
+  if(!confirm('確定刪除此行程？\n該行程所有報名記錄及相關派車記錄也將一併刪除。'))return;
+  setSS('syncing','刪除中…');
+  const tourId=eIds.tour;
+  // 找出此行程的所有出發日期
+  const tourDates=[...new Set(bookings.filter(b=>b.tourId===tourId).map(b=>b.date))];
+  const t=tours.find(x=>x.id===tourId);
+  // 刪除相關派車記錄（比對行程名稱或 groupTourId）
+  const relDisps=dispatches.filter(d=>
+    tourDates.some(date=>d.start===date&&(d.label?.includes(t?.name||'__NONE__')||d.groupTourId?.startsWith(tourId+'_')))
+  );
+  for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
+  // 刪除所有報名
+  const relBooks=bookings.filter(b=>b.tourId===tourId);
+  for(const b of relBooks) await db.collection('bookings').doc(b.id).delete();
+  // 刪除行程本身
+  await db.collection('tours').doc(tourId).delete();
+  cm('tour');
+}
 
 // ── 報名CRUD ──
 let curBkTourId='';
@@ -700,7 +718,24 @@ async function saveBook(){
   const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false};
   if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
 }
-async function delBook(){if(!confirm('確定刪除？'))return;await db.collection('bookings').doc(eIds.book).delete();cm('book');}
+async function delBook(){
+  if(!confirm('確定刪除此報名記錄？'))return;
+  setSS('syncing','刪除中…');
+  const bk=bookings.find(x=>x.id===eIds.book);
+  await db.collection('bookings').doc(eIds.book).delete();
+  // 刪除後若該日期已無其他報名，一併刪除對應派車記錄
+  if(bk){
+    const remaining=bookings.filter(b=>b.id!==bk.id&&b.tourId===bk.tourId&&b.date===bk.date);
+    if(!remaining.length){
+      const t=tours.find(x=>x.id===bk.tourId);
+      const relDisps=dispatches.filter(d=>
+        d.start===bk.date&&(d.label?.includes(t?.name||'__NONE__')||d.groupTourId===bk.tourId+'_'+bk.date)
+      );
+      for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
+    }
+  }
+  cm('book');
+}
 
 // ══════════════════ PAGE: 個人包車團 ══════════════════
 function renderPrivate(){
@@ -892,7 +927,20 @@ async function savePriv(){
   const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
-async function delPriv(){if(!confirm('確定刪除？'))return;await db.collection('privates').doc(eIds.priv).delete();cm('priv');}
+async function delPriv(){
+  if(!confirm('確定刪除此包車團？\n對應的派車記錄也將一併刪除。'))return;
+  setSS('syncing','刪除中…');
+  const p=privates.find(x=>x.id===eIds.priv);
+  // 刪除對應派車記錄（比對 label 包含團名，且日期吻合）
+  if(p){
+    const relDisps=dispatches.filter(d=>
+      d.label?.includes(p.name)&&d.start===p.start
+    );
+    for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
+  }
+  await db.collection('privates').doc(eIds.priv).delete();
+  cm('priv');
+}
 
 // ══════════════════ PAGE: 派車總表 ══════════════════
 function getAllOrders(){
