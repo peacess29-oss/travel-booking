@@ -1469,12 +1469,22 @@ function assignManualExt(orderId,type,label,start,end,currentDispId){
 
 async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDispId=''){
   const newDrv=drivers.find(d=>d.id===drvId);
-  // 衝突檢查：排除正在被取代的舊記錄，自家司機同一天不可有兩張訂單
+  const orderDates=dateRange(start,end);
+  // 衝突檢查：自家司機（用 driverId 比對）
   if(newDrv?.type==='own'){
-    const orderDates=dateRange(start,end);
     const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own'&&d.id!==currentDispId).find(d=>orderDates.some(date=>isInDisp(date,d)));
     if(conflict){
       alert('❌ 無法指派！'+drvName+' 在 '+conflict.start+(conflict.start!==conflict.end?'～'+conflict.end:'')+' 已有排班「'+conflict.label+'」，同一天不能安排兩張訂單。');
+      return;
+    }
+  }
+  // 衝突檢查：外派司機（用 driverId 或 driverName 比對，同一天不可重複派）
+  if(!newDrv||newDrv.type==='external'){
+    const conflict=dispatches.filter(d=>d.id!==currentDispId&&d.driverType==='out'&&(
+      (drvId&&d.driverId===drvId)||(drvName&&d.driverName===drvName)
+    )).find(d=>orderDates.some(date=>isInDisp(date,d)));
+    if(conflict){
+      alert('❌ 無法指派！外派司機「'+drvName+'」在 '+conflict.start+(conflict.start!==conflict.end?'～'+conflict.end:'')+' 已有排班「'+conflict.label+'」，同一天不能安排兩張訂單。');
       return;
     }
   }
@@ -1553,12 +1563,22 @@ async function saveDisp(){
   const outManual=document.getElementById('df-outname').value.trim();
   const outSel=document.getElementById('df-out-sel')?.value||'';
   const drvName=dtype==='own'?(drivers.find(d=>d.id===drvId)?.name||'未指派'):(outManual||outSel||'外派未指定');
-  // [修正] 自家司機儲存前做衝突檢查，有衝突直接阻止，不允許覆蓋
+  // 衝突檢查：自家司機 + 外派司機，有衝突直接阻止
+  const orderDates=dateRange(start,end);
   if(dtype==='own'&&drvId){
-    const orderDates=dateRange(start,end);
     const conflict=dispatches.filter(d=>d.driverId===drvId&&d.driverType==='own'&&d.id!==eIds.disp).find(d=>orderDates.some(date=>isInDisp(date,d)));
     if(conflict){
-      alert('\u274c \u7121\u6cd5\u5132\u5b58\uff01'+drvName+' \u5728 '+conflict.start+(conflict.start!==conflict.end?'\uff5e'+conflict.end:'')+' \u5df2\u6709\u6392\u73ed\u300c'+conflict.label+'\u300d\uff0c\u540c\u4e00\u5929\u4e0d\u80fd\u5b89\u6392\u5169\u5f35\u8a02\u55ae\u3002\n\n\u8acb\u6539\u6d3e\u5176\u4ed6\u53f8\u6a5f\u6216\u4f7f\u7528\u5916\u6d3e\u53f8\u6a5f\u3002');
+      alert('❌ 無法儲存！'+drvName+' 在 '+conflict.start+(conflict.start!==conflict.end?'～'+conflict.end:'')+' 已有排班「'+conflict.label+'」，同一天不能安排兩張訂單。');
+      return;
+    }
+  }
+  if(dtype==='out'&&drvName&&drvName!=='外派未指定'){
+    const outDrvId=drivers.find(d=>d.name===drvName&&d.type==='external')?.id||'';
+    const conflict=dispatches.filter(d=>d.id!==eIds.disp&&d.driverType==='out'&&(
+      (outDrvId&&d.driverId===outDrvId)||(d.driverName===drvName)
+    )).find(d=>orderDates.some(date=>isInDisp(date,d)));
+    if(conflict){
+      alert('❌ 無法儲存！外派司機「'+drvName+'」在 '+conflict.start+(conflict.start!==conflict.end?'～'+conflict.end:'')+' 已有排班「'+conflict.label+'」，同一天不能安排兩張訂單。');
       return;
     }
   }
