@@ -407,8 +407,59 @@ function tslot(date,d){if(date===d.start&&d.startTime==='pm')return'pm';if(date=
 function getBks(tid){return bookings.filter(b=>b.tourId===tid);}
 function getDateBks(tid,dt){return bookings.filter(b=>b.tourId===tid&&b.date===dt);}
 function getDates(tid){return[...new Set(getBks(tid).map(b=>b.date))].sort();}
-function buildBuses(bks,max){const rows=[];bks.forEach(b=>{for(let i=0;i<b.count;i++)rows.push({...b})});const buses=[];let cur=[];rows.forEach(r=>{if(cur.length>=max){buses.push([...cur]);cur=[];}cur.push(r);});if(cur.length)buses.push(cur);return buses;}
-function isFormed(t,d){const buses=buildBuses(getDateBks(t.id,d),t.busMax||8);return buses.length>0&&buses.every(b=>b.length>=(t.min||4));}
+// busAssignMap：key = tourId+'_'+date+'_'+bookingId, value = busIndex(0=A,1=B,...)
+// 儲存在 Firestore meta/busAssign
+let busAssignMap={};
+db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.data():{};refresh();});
+async function setBusAssign(tourId,date,bookId,busIdx){
+  const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
+  await db.collection('meta').doc('busAssign').set({[key]:busIdx},{merge:true});
+  busAssignMap[key]=busIdx; // 本地立即更新
+  refresh();
+}
+function getBusIdx(tourId,date,bookId){
+  const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
+  return busAssignMap[key]??null; // null = 未手動指定
+}
+
+// buildBuses：支援手動分車（busAssign）+ 自動分配溢出
+function buildBuses(bks,max,tourId,date){
+  const BUS_LABELS=['A','B','C','D','E','F'];
+  // 展開每個 booking 的人數為獨立座位
+  const rows=[];
+  bks.forEach(b=>{
+    for(let i=0;i<b.count;i++) rows.push({...b,_seatIdx:i});
+  });
+  // 先依手動指定分組
+  const manualBuses={};
+  const unassigned=[];
+  rows.forEach(r=>{
+    const idx=tourId?getBusIdx(tourId,date,r.id):null;
+    if(idx!==null&&idx!==undefined){
+      if(!manualBuses[idx]) manualBuses[idx]=[];
+      manualBuses[idx].push(r);
+    } else {
+      unassigned.push(r);
+    }
+  });
+  // 算出已用的最大車號
+  const usedIdxs=Object.keys(manualBuses).map(Number);
+  // 自動填入未指定的座位（依序塞滿各車，從0號車開始）
+  let targetBus=0;
+  unassigned.forEach(r=>{
+    // 找第一個未滿的車
+    while((manualBuses[targetBus]?.length||0)>=max) targetBus++;
+    if(!manualBuses[targetBus]) manualBuses[targetBus]=[];
+    manualBuses[targetBus].push(r);
+  });
+  // 轉成陣列，依車號排序
+  const sortedIdxs=[...new Set([...Object.keys(manualBuses).map(Number)])].sort((a,b)=>a-b);
+  return sortedIdxs.map(i=>({busIdx:i,label:BUS_LABELS[i]||String(i+1),seats:manualBuses[i]||[]}));
+}
+function isFormed(t,d){
+  const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
+  return buses.length>0&&buses.every(b=>b.seats.length>=(t.min||4));
+}
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
 function getPrivStatus(p){
@@ -624,35 +675,96 @@ function renderGroup(){
 }
 function renderDateTable(t,d){
   const bks=getDateBks(t.id,d),total=bks.reduce((s,b)=>s+b.count,0);
-  const buses=buildBuses(bks,t.busMax||8),formed=buses.length>0&&buses.every(b=>b.length>=(t.min||4));
-  const pct=Math.min(100,Math.round(total/(t.min||4)*100));
+  const busMax=t.busMax||8,minPax=t.min||4;
+  const buses=buildBuses(bks,busMax,t.id,d);
+  const busCount=buses.length;
+  // 成團判斷：每台車都達到最少人數
+  const formed=busCount>0&&buses.every(b=>b.seats.length>=minPax);
+  // 各車獨立成團狀態
+  const allFormed=formed;
+  const pct=Math.min(100,Math.round(total/minPax*100));
   const gkey='g_'+t.id+'_'+d.replace(/-/g,''),grp=!!groupStatus[gkey];
   const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
   const dCnt=bks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count,0);
   const bCnt=bks.filter(b=>b.balancePaid).reduce((s,b)=>s+b.count,0);
   const iCnt=bks.filter(b=>b.insured).reduce((s,b)=>s+b.count,0);
   const hol=isHol(d),mkp=isMkp(d);
+  const BUS_LABELS=['A','B','C','D','E','F'];
+  // 車輛選項（當 busCount > 1 才顯示分車欄）
+  const showBusSel=busCount>1;
+  // 產生每台車的選項字串
+  const busOpts=(curIdx)=>buses.map(b=>`<option value="${b.busIdx}"${b.busIdx===curIdx?' selected':''}>${b.label}車</option>`).join('');
+
+  // 逐車渲染表格
+  const busTables=buses.map(bus=>{
+    const busFormed=bus.seats.length>=minPax;
+    // bus.seats 是展開後的座位列表，同一 booking id 可能出現多次（count>1）
+    // 還原成 booking 層級顯示（合併同 id 的）
+    const bkRows=[];
+    const seen={};
+    bus.seats.forEach(seat=>{
+      if(!seen[seat.id]){seen[seat.id]=true;bkRows.push(seat);}
+    });
+    return`<div style="margin-bottom:10px;border:1px solid ${busFormed?'var(--green)':'var(--border)'};border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${busFormed?'var(--green-l)':'var(--amber-l)'}">
+        <span style="font-weight:700;font-size:13px">${bus.label}車</span>
+        <span style="font-size:12px;color:${busFormed?'var(--green-d)':'var(--amber-d)'}">
+          ${busFormed?`✓ 已成團（${bus.seats.length}人）`:`待成團（${bus.seats.length}/${minPax}人）`}
+        </span>
+      </div>
+      <table class="xtable" style="border:none">
+        <thead><tr>
+          <th>#</th><th style="min-width:75px">姓名</th><th>人數</th>
+          <th>聯絡</th><th style="min-width:90px">電話/帳號</th><th>報名日</th>
+          <th class="chk" style="min-width:44px">定金</th>
+          <th class="chk" style="min-width:44px">尾款</th>
+          ${t.needInsurance?'<th class="chk" style="min-width:44px">旅遊險</th>':''}
+          ${showBusSel?'<th style="min-width:70px">分車</th>':''}
+          <th>備註</th><th></th>
+        </tr></thead>
+        <tbody>${bkRows.map((b,i)=>{
+          const curBusIdx=getBusIdx(t.id,d,b.id)??bus.busIdx;
+          return`<tr>
+            <td style="color:var(--text3)">${i+1}</td>
+            <td style="font-weight:600">${b.name}</td>
+            <td style="text-align:center">${b.count}</td>
+            <td>${chBadge(b.channel)}</td>
+            <td style="font-size:11px;color:var(--text2)">${[b.phone,b.contact].filter(Boolean).join('/')||'-'}</td>
+            <td style="color:var(--text2)">${b.regdate||'-'}</td>
+            <td class="chk" onclick="toggleBk('${b.id}','depositPaid',${!b.depositPaid})">${b.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
+            <td class="chk" onclick="toggleBk('${b.id}','balancePaid',${!b.balancePaid})">${b.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
+            ${t.needInsurance?`<td class="chk" onclick="toggleBk('${b.id}','insured',${!b.insured})">${b.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>`:''}
+            ${showBusSel?`<td><select style="height:28px;font-size:12px;padding:2px 4px" onchange="setBusAssign('${t.id}','${d}','${b.id}',parseInt(this.value))">${busOpts(curBusIdx)}</select></td>`:''}
+            <td style="font-size:11px;color:var(--text2)">${b.note||''}</td>
+            <td><button class="btn btn-sm" onclick="openBook('${b.tourId}','','${b.id}')"><i class="ti ti-edit"></i></button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
   return`<div style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--bg2);border-radius:8px;margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:14px;font-weight:700">${d} 週${WD[new Date(d).getDay()]}</span>
         ${hol&&!mkp?`<span class="tag-hol">假日 $${dep}/$${pr}</span>`:`<span style="font-size:11px;color:var(--text2)">平日 $${dep}/$${pr}</span>`}
         ${mkp?'<span class="tag-mkp">補班</span>':''}
-        ${formed?`<span class="badge" style="background:var(--green-l);color:var(--green-d)"><i class="ti ti-check"></i> 已成團 派${buses.length}車</span>`:`<span class="badge" style="background:var(--amber-l);color:var(--amber-d)">待成團 ${total}/${t.min||4}人</span>`}
+        ${allFormed
+          ?`<span class="badge" style="background:var(--green-l);color:var(--green-d)"><i class="ti ti-check"></i> 已成團 派${busCount}車</span>`
+          :`<span class="badge" style="background:var(--amber-l);color:var(--amber-d)">待成團 ${total}/${minPax}人</span>`}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:11px;color:var(--text2)">定${dCnt}/${total} 尾${bCnt}/${total}${t.needInsurance?' 險'+iCnt+'/'+total:''}</span>
         <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;color:${grp?'var(--green-d)':'var(--text2)'}"><input type="checkbox" ${grp?'checked':''} onchange="toggleGrp('${t.id}','${d}',this.checked)" style="width:13px;height:13px"> 群組${grp?' ✓':''}</label>
-        ${formed&&bks.some(b=>!b.depositPaid)?`<button class="btn btn-sm btn-success" onclick="alertDep('${t.id}','${d}')"><i class="ti ti-bell"></i> 通知定金</button>`:''}
+        ${allFormed&&bks.some(b=>!b.depositPaid)?`<button class="btn btn-sm btn-success" onclick="alertDep('${t.id}','${d}')"><i class="ti ti-bell"></i> 通知定金</button>`:''}
         <button class="btn btn-primary btn-sm" onclick="openBook('${t.id}','${d}')"><i class="ti ti-plus"></i> 加報名</button>
       </div>
     </div>
-    <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${formed?'var(--green)':'var(--blue)'}"></div></div>
-    <div class="tbl-wrap" style="margin-top:4px"><table class="xtable">
-      <thead><tr><th>#</th><th style="min-width:75px">姓名</th><th>人數</th><th>聯絡</th><th style="min-width:90px">電話/帳號</th><th>報名日</th><th class="chk" style="min-width:44px">定金</th><th class="chk" style="min-width:44px">尾款</th>${t.needInsurance?'<th class="chk" style="min-width:44px">旅遊險</th>':''}<th>備註</th><th></th></tr></thead>
-      <tbody>${bks.map((b,i)=>`<tr><td style="color:var(--text3)">${i+1}</td><td style="font-weight:600">${b.name}</td><td style="text-align:center">${b.count}</td><td>${chBadge(b.channel)}</td><td style="font-size:11px;color:var(--text2)">${[b.phone,b.contact].filter(Boolean).join('/')||'-'}</td><td style="color:var(--text2)">${b.regdate||'-'}</td><td class="chk" onclick="toggleBk('${b.id}','depositPaid',${!b.depositPaid})">${b.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td><td class="chk" onclick="toggleBk('${b.id}','balancePaid',${!b.balancePaid})">${b.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>${t.needInsurance?`<td class="chk" onclick="toggleBk('${b.id}','insured',${!b.insured})">${b.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>`:''}<td style="font-size:11px;color:var(--text2)">${b.note||''}</td><td><button class="btn btn-sm" onclick="openBook('${b.tourId}','','${b.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="2">合計</td><td style="text-align:center;font-weight:600">${total}</td><td colspan="3"></td><td style="text-align:center;font-size:11px;color:var(--green)">${dCnt}/${total}</td><td style="text-align:center;font-size:11px;color:var(--blue)">${bCnt}/${total}</td>${t.needInsurance?`<td style="text-align:center;font-size:11px;color:var(--amber)">${iCnt}/${total}</td>`:''}<td colspan="2"></td></tr></tfoot>
-    </table></div>
+    <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${allFormed?'var(--green)':'var(--blue)'}"></div></div>
+    <div style="margin-top:6px">${busTables}</div>
+    ${!allFormed?`<div style="font-size:12px;color:var(--text2);margin-top:4px;padding:4px 8px;background:var(--bg2);border-radius:6px">
+      目前 ${busCount} 台車共 ${total} 人${busCount>1?'，可用下拉選單手動調整各客人分車':''}
+    </div>`:''}
   </div>`;
 }
 async function toggleGrp(tid,date,val){const key='g_'+tid+'_'+date.replace(/-/g,'');await db.collection('meta').doc('groupStatus').set({[key]:val},{merge:true});}
