@@ -1207,12 +1207,19 @@ function renderDispatch(){
         const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
           (buses.length===1?dispatches.find(x=>x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d)):null);
         if(!disp)return; // 此台車未派車，不顯示
+        // 計算結束日
+        const tdays2=t.days||1;
+        let endDate2=d;
+        if(tdays2>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays2-1);endDate2=ed.toISOString().slice(0,10);}
+        // 以出發日為 key，但存入 startDate/endDate 讓後續每天格子都能比對
         if(!groupDates[d])groupDates[d]=[];
         groupDates[d].push({
           name:t.name,
           busLabel:buses.length>1?bus.label:'',
           driverName:disp.driverName||'',
-          dispId:disp.id
+          dispId:disp.id,
+          startDate:d,
+          endDate:endDate2
         });
       });
     });
@@ -1223,7 +1230,8 @@ function renderDispatch(){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     // 排除拼團派車記錄（有 groupTourId），拼團由 dayGrp 紫色 pill 顯示
     const dayDisps=mDisps.filter(d=>isInDisp(ds,d)&&!d.groupTourId),hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
-    const dayGrp=groupDates[ds]||[];
+    // 拼團：找出所有出發日 <= ds <= 結束日 的已派車拼團
+    const dayGrp=Object.values(groupDates).flat().filter(g=>ds>=g.startDate&&ds<=g.endDate);
     cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
       <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
       ${dayGrp.map(g=>{const did=g.dispId;return `<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer" onclick="event.stopPropagation();openDisp('`+did+`')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}</div>`;}).join('')}
