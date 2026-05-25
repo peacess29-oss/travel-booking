@@ -1165,6 +1165,8 @@ function getAllOrders(){
       buses.forEach(bus=>{
         const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
         const busPax=bus.seats; // bus.seats 已是整數人數
+        // 各車人數不足最少成團人數 → 此車不列入派車總表（待成團）
+        if(busPax<(t.min||4))return;
         // 此台車對應的派車記錄（groupTourId 精確比對至車號）
         const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
                    // 相容舊資料：只有一台車時，允許比對舊格式 tourId_date
