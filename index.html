@@ -1229,24 +1229,35 @@ function renderDispatch(){
   for(let day=1;day<=dim;day++){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     // 排除拼團派車記錄（有 groupTourId），拼團由 dayGrp 紫色 pill 顯示
-    const dayDisps=mDisps.filter(d=>isInDisp(ds,d)&&!d.groupTourId),hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
-    // 拼團：找出所有出發日 <= ds <= 結束日 的已派車拼團
-    const dayGrp=Object.values(groupDates).flat().filter(g=>ds>=g.startDate&&ds<=g.endDate);
+    // 去重：同一 id 的派車記錄只顯示一次（防止快速指派產生重複記錄）
+    const _rawDisps=mDisps.filter(d=>isInDisp(ds,d)&&!d.groupTourId);
+    const _seenDispIds=new Set();
+    const dayDisps=_rawDisps.filter(d=>{if(_seenDispIds.has(d.id))return false;_seenDispIds.add(d.id);return true;});
+    const hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
+    // 拼團：找出所有出發日 <= ds <= 結束日 的已派車或待派車拼團，同樣去重
+    const _rawGrp=Object.values(groupDates).flat().filter(g=>ds>=g.startDate&&ds<=g.endDate);
+    const _seenGrpKeys=new Set();
+    const dayGrp=_rawGrp.filter(g=>{const k=g.dispId||('pending_'+g.name+'_'+g.startDate+'_'+g.busLabel);if(_seenGrpKeys.has(k))return false;_seenGrpKeys.add(k);return true;});
     cells+=`<div class="cal-cell${isToday?' today':''}${hol&&!mkp?' holiday':''}${mkp?' makeup':''}" onclick="openDisp('','${ds}')">
       <div class="cal-date">${day}${hol&&!mkp?'<span style="font-size:9px;color:var(--red)"> 假</span>':''}${mkp?'<span style="font-size:9px;color:var(--blue)"> 補</span>':''}</div>
       ${dayGrp.map(g=>{const did=g.dispId;
         if(g.pending){
-          // 未派車：紅色 pill，點擊進入指派
+          // 未派車：只在出發日顯示紅色 pill
           return `<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('`+g.startDate+`_bus0','group','`+g.name+`','`+g.startDate+`','`+g.endDate+`')" title="待派車：${g.name}${g.busLabel?' '+g.busLabel+'車':''}">⚠️${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} 待派</div>`;
         }
+        // 已派車：整個區間都顯示（跨月正常）
         return `<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer" onclick="event.stopPropagation();openDisp('`+did+`')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}</div>`;
       }).join('')}
       ${dayDisps.map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
       ${(()=>{
         // 包車團待派車：出發日或區間內，紅色 pill
+        // 待派車：整個區間都顯示，但排除已有 dayDisps 記錄的訂單（防止重複）
+        // 同一筆訂單只由 dayDisps 或 pendPriv 其中一個渲染，不同時出現
+        const dispPrivIds=new Set(dayDisps.map(d=>d.privateId||'').filter(Boolean));
         const pendPriv=privates.filter(p=>{
           const st=getPrivStatus(p);
-          return !st.done&&st.label==='待派車'&&ds>=p.start&&ds<=p.end;
+          return !st.done&&st.label==='待派車'&&ds>=p.start&&ds<=p.end
+            &&!dispPrivIds.has(p.id);
         });
         return pendPriv.map(p=>`<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('${p.id}','private','${p.name}','${p.start}','${p.end}')" title="待派車：${p.name}">⚠️${p.name.slice(0,5)} 待派</div>`).join('');
       })()}
