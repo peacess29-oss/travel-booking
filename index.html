@@ -1210,6 +1210,8 @@ function renderDispatch(){
       if(tdays2>1){const ed=new Date(d);ed.setDate(ed.getDate()+tdays2-1);endDate2=ed.toISOString().slice(0,10);}
       const buses=buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d);
       buses.forEach(bus=>{
+        // 待成團的車不顯示在行事曆
+        if(bus.seats<(t.min||4))return;
         const busOrderId=t.id+'_'+d+'_bus'+bus.busIdx;
         const disp=dispatches.find(x=>x.groupTourId===busOrderId)||
           (buses.length===1?dispatches.find(x=>x.start===d&&(x.label?.includes(t.name)||x.groupTourId===t.id+'_'+d)):null);
