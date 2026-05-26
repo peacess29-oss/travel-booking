@@ -2084,9 +2084,45 @@ function openRec(id=''){
   cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===defaultCar?' selected':''}>${c}</option>`).join('');
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
-  toggleRecFields();om('rec');
+  toggleRecFields();
+  // 日期改變時，若是加油類別且備註空白，重新帶入派車訂單
+  const dateInput=document.getElementById('rf-date');
+  dateInput.onchange=function(){
+    if(document.getElementById('rf-type').value==='fuel'){
+      const noteEl=document.getElementById('rf-note');
+      if(!noteEl.value.trim()||noteEl.dataset.autoFilled==='1'){
+        const hint=getDispatchHint(this.value);
+        noteEl.value=hint;
+        noteEl.dataset.autoFilled=hint?'1':'';
+      }
+    }
+  };
+  om('rec');
 }
-function toggleRecFields(){const t=document.getElementById('rf-type').value;document.getElementById('rf-mileage-wrap').style.display=(t==='fuel'||t==='inspection')?'block':'none';document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';}
+function toggleRecFields(){
+  const t=document.getElementById('rf-type').value;
+  document.getElementById('rf-mileage-wrap').style.display=(t==='fuel'||t==='inspection')?'block':'none';
+  document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';
+  document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';
+  // 加油時：若備註空白，自動帶入當天派車訂單
+  if(t==='fuel'&&!eIds.rec){
+    const date=document.getElementById('rf-date').value;
+    const noteEl=document.getElementById('rf-note');
+    if(date&&!noteEl.value.trim()){
+      const hint=getDispatchHint(date);
+      if(hint) noteEl.value=hint;
+    }
+  }
+}
+// 取得某司機在指定日期的派車訂單標題（用於備註自動帶入）
+function getDispatchHint(date){
+  if(!curDriverId||!date) return '';
+  const myDisps=dispatches.filter(d=>
+    d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end
+  );
+  if(!myDisps.length) return '';
+  return myDisps.map(d=>d.label||'').filter(Boolean).join('、');
+}
 document.getElementById('rf-car').addEventListener('change',checkKmAlert);
 document.addEventListener('input',e=>{if(e.target.id==='rf-mileage')checkKmAlert();});
 function checkKmAlert(){const car=document.getElementById('rf-car').value,km=parseInt(document.getElementById('rf-mileage').value)||0;if(!car||!km)return;const last=getLastKm(car,eIds.rec||'');document.getElementById('rf-km-alert').style.display=(last&&km<last)?'block':'none';if(km&&last>0&&document.getElementById('rf-fuel-prev'))document.getElementById('rf-fuel-prev').textContent=km>last?'距上次加油：'+(km-last).toLocaleString()+' km':'';}
