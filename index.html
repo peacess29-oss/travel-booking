@@ -498,17 +498,26 @@ function isFormed(t,d){
 }
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
+function getPrivBusCars(p){return p.cars||1;}
+// 取得包車團每台車的指派司機（busAssignedDrivers:{0:'甲',1:'乙'}）
+function getPrivBusDrivers(p){return p.busAssignedDrivers||{};}
+// 包車團全部車輛都已指派才算「全部已派車」
+function isPrivFullyAssigned(p){
+  const cars=getPrivBusCars(p);
+  const drv=getPrivBusDrivers(p);
+  for(let i=0;i<cars;i++){if(!drv[i])return false;}
+  return true;
+}
 function getPrivStatus(p){
    const today=new Date().toISOString().slice(0,10);
    if(p.end<today) return {label:'已完成',cls:'badge-green',done:true};
-   if(!p.assignedDriver){
-     // 日期區段包含今天 → 進行中（未派車但已開始）
-     if(p.start<=today&&today<=p.end) return {label:'進行中',cls:'badge-amber',done:false};
-     return {label:'待派車',cls:'badge-red',done:false};
-   }
-   // 日期區段包含今天 → 進行中
+   const fullyAssigned=isPrivFullyAssigned(p);
    if(p.start<=today&&today<=p.end) return {label:'進行中',cls:'badge-amber',done:false};
-   return {label:'已派車 '+p.assignedDriver,cls:'badge-blue',done:false};
+   if(!fullyAssigned) return {label:'待派車',cls:'badge-red',done:false};
+   const cars=getPrivBusCars(p);
+   const drv=getPrivBusDrivers(p);
+   const drvStr=Array.from({length:cars},(_,i)=>drv[i]||'?').join('/');
+   return {label:'已派車 '+drvStr,cls:'badge-blue',done:false};
 }
 
 // ══════════════════ LISTENERS ══════════════════
@@ -973,7 +982,21 @@ function renderPrivate(){
         <td class="chk" onclick="togglePv('${p.id}','depositPaid',${!p.depositPaid})">${p.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
         <td class="chk" onclick="togglePv('${p.id}','balancePaid',${!p.balancePaid})">${p.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
         <td class="chk" onclick="togglePv('${p.id}','insured',${!p.insured})">${p.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>
-        <td>${(()=>{const st=getPrivStatus(p);return`<span class="badge ${st.cls}">${st.label}</span>`})()}</td>
+        <td>${(()=>{
+          const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
+          if(cars<=1){const st=getPrivStatus(p);return`<span class="badge ${st.cls}">${st.label}</span>`;}
+          return Array.from({length:cars},(_,i)=>{
+            const assigned=drv[i]||'';
+            const today2=new Date().toISOString().slice(0,10);
+            const isActive=p.start<=today2&&today2<=p.end;
+            const isDone=p.end<today2;
+            let cls=assigned?'badge-green':'badge-red';
+            let lbl=assigned?'✓ '+assigned:'待派';
+            if(isActive){cls='badge-amber';lbl=assigned?'進行中 '+assigned:'進行中';}
+            if(isDone){cls='badge-green';lbl='完成';}
+            return`<span class="badge ${cls}" style="margin:1px">${BUS[i]}車 ${lbl}</span>`;
+          }).join('');
+        })()}</td>
         <td style="font-size:11px;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td>
         <td><button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button></td>
       </tr>`
@@ -1144,10 +1167,31 @@ async function delPriv(){
 // ══════════════════ PAGE: 派車總表 ══════════════════
 function getAllOrders(){
   const today=new Date().toISOString().slice(0,10);
-  const pvOrders=privates.filter(p=>{const st=getPrivStatus(p);return !st.done;}).map(p=>{
+  const pvOrders=[];
+  privates.filter(p=>{const st=getPrivStatus(p);return !st.done;}).forEach(p=>{
     const st=getPrivStatus(p);
     const days=calcDays(p.start,p.end);
-    return{id:p.id,type:'private',source:p,label:p.name,start:p.start,end:p.end,days,pax:p.pax||1,cars:p.cars||1,status:st.label,statusCls:st.cls,assignedDriver:p.assignedDriver||''};
+    const cars=getPrivBusCars(p);
+    const drvMap=getPrivBusDrivers(p);
+    const BUS_LABELS=['A','B','C','D','E','F'];
+    if(cars<=1){
+      // 單車：維持原格式 id=privId
+      pvOrders.push({id:p.id,type:'private',source:p,label:p.name,start:p.start,end:p.end,days,pax:p.pax||1,cars:1,status:st.label,statusCls:st.cls,assignedDriver:drvMap[0]||p.assignedDriver||'',busIdx:0,privId:p.id});
+    } else {
+      // 多車：每台車各自一筆，id=privId_busN
+      for(let i=0;i<cars;i++){
+        const busLabel=BUS_LABELS[i]||String(i+1);
+        const assigned=drvMap[i]||'';
+        const today2=new Date().toISOString().slice(0,10);
+        const isActive=p.start<=today2&&today2<=p.end;
+        let statusLabel,statusCls;
+        if(p.end<today2){statusLabel='已完成';statusCls='badge-green';}
+        else if(isActive){statusLabel='進行中';statusCls='badge-amber';}
+        else if(!assigned){statusLabel='待派車';statusCls='badge-red';}
+        else{statusLabel='已派車 '+assigned;statusCls='badge-blue';}
+        pvOrders.push({id:p.id+'_bus'+i,type:'private',source:p,label:p.name+' ('+busLabel+'車)',start:p.start,end:p.end,days,pax:Math.ceil((p.pax||1)/cars),cars:1,status:statusLabel,statusCls,assignedDriver:assigned,busIdx:i,busLabel,privId:p.id});
+      }
+    }
   });
   const grpOrders=[];
   tours.forEach(t=>{
@@ -1260,13 +1304,20 @@ function renderDispatch(){
         // 包車團待派車：出發日或區間內，紅色 pill
         // 待派車：整個區間都顯示，但排除已有 dayDisps 記錄的訂單（防止重複）
         // 同一筆訂單只由 dayDisps 或 pendPriv 其中一個渲染，不同時出現
-        const dispPrivIds=new Set(dayDisps.map(d=>d.privateId||'').filter(Boolean));
-        const pendPriv=privates.filter(p=>{
+        const dispPrivIds=new Set(dayDisps.map(d=>d.privateId?(d.privateId+'_bus'+(d.privateBusIdx??0)):'' ).filter(Boolean));
+        const pendPrivPills=[];
+        privates.forEach(p=>{
           const st=getPrivStatus(p);
-          return !st.done&&st.label==='待派車'&&ds>=p.start&&ds<=p.end
-            &&!dispPrivIds.has(p.id);
+          if(st.done||!(ds>=p.start&&ds<=p.end))return;
+          const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
+          for(let i=0;i<cars;i++){
+            const orderId=cars>1?p.id+'_bus'+i:p.id;
+            if(dispPrivIds.has(orderId)||dispPrivIds.has(p.id))continue; // 已有派車記錄
+            if(drv[i])continue; // 此車已指派
+            pendPrivPills.push(`<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('${orderId}','private','${p.name+(cars>1?' ('+BUS[i]+'車)':'')}','${p.start}','${p.end}')" title="待派車：${p.name}${cars>1?' '+BUS[i]+'車':''}">⚠️${p.name.slice(0,4)}${cars>1?BUS[i]:''} 待派</div>`);
+          }
         });
-        return pendPriv.map(p=>`<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('${p.id}','private','${p.name}','${p.start}','${p.end}')" title="待派車：${p.name}">⚠️${p.name.slice(0,5)} 待派</div>`).join('');
+        return pendPrivPills.join('');
       })()}
     </div>`;
   }
@@ -1333,8 +1384,12 @@ function assignDriverModal(orderId,type,label,start,end){
     const p=privates.find(x=>x.id===orderId);
     if(p?.assignedDriver) currentDispatch=dispatches.find(d=>d.start===start&&d.driverId&&drivers.find(drv=>drv.name===p.assignedDriver&&drv.id===d.driverId));
   } else {
-    // orderId 已是帶 busIdx 的完整格式，直接比對 groupTourId
-    currentDispatch=dispatches.find(x=>x.groupTourId===orderId)||
+    // private：用 privateId + privateBusIdx 精確比對
+    const busMatch2=orderId.match(/_bus(\d+)$/);
+    const privId2=busMatch2?orderId.slice(0,orderId.lastIndexOf('_bus')):orderId;
+    const busIdx2=busMatch2?parseInt(busMatch2[1]):0;
+    currentDispatch=dispatches.find(x=>x.privateId===privId2&&x.privateBusIdx===busIdx2)||
+      dispatches.find(x=>x.groupTourId===orderId)||
       dispatches.find(x=>x.start===start&&x.label.includes(label));
   }
   const currentDriverId=currentDispatch?.driverId||'';
@@ -1487,7 +1542,10 @@ async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conf
   // 指派新司機前，先找出此訂單現有的派車記錄（第二次套用時必須先刪舊記錄）
   let existingDispId='';
   if(type==='private'){
-    const existDisp=dispatches.find(d=>d.driverId===drvId&&d.start===start)||
+    const busMatch3=orderId.match(/_bus(\d+)$/);
+    const privId3=busMatch3?orderId.slice(0,orderId.lastIndexOf('_bus')):orderId;
+    const busIdx3=busMatch3?parseInt(busMatch3[1]):0;
+    const existDisp=dispatches.find(d=>d.privateId===privId3&&d.privateBusIdx===busIdx3)||
                     dispatches.find(d=>d.note?.includes('來自包車團')&&d.label?.includes(label)&&d.start===start);
     existingDispId=existDisp?.id||'';
   } else {
@@ -1541,8 +1599,27 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
     outsourceName:'',car:'',carCount:1,
     note:type==='private'?'來自包車團：'+label:'來自拼團：'+label};
   if(type==='private'){
-    const p=privates.find(x=>x.id===orderId);
-    if(p) await db.collection('privates').doc(orderId).update({assignedDriver:drvName,dispatchStatus:'assigned'});
+    // orderId 格式：privId 或 privId_busN
+    const busMatch=orderId.match(/_bus(\d+)$/);
+    const privId=busMatch?orderId.slice(0,orderId.lastIndexOf('_bus')):orderId;
+    const busIdx=busMatch?parseInt(busMatch[1]):0;
+    const p=privates.find(x=>x.id===privId);
+    if(p){
+      const updDrv={...getPrivBusDrivers(p),[busIdx]:drvName};
+      const allDone=isPrivFullyAssigned({...p,busAssignedDrivers:updDrv});
+      await db.collection('privates').doc(privId).update({
+        busAssignedDrivers:updDrv,
+        assignedDriver:Object.values(updDrv).filter(Boolean).join('/'), // 相容舊欄位
+        dispatchStatus:allDone?'assigned':'pending'
+      });
+      // 本地同步
+      const idx=privates.findIndex(x=>x.id===privId);
+      if(idx>=0) privates[idx]={...privates[idx],busAssignedDrivers:updDrv,assignedDriver:Object.values(updDrv).filter(Boolean).join('/')};
+    }
+    // 派車記錄的 label 帶車號，groupTourId 帶 busIdx
+    newData.label=label;
+    newData.privateId=privId;
+    newData.privateBusIdx=busIdx;
     await db.collection('dispatches').doc(newDocId).set(newData);
   } else {
     // orderId 格式：tourId_date_busN，直接存為 groupTourId 精確識別每台車
@@ -1649,13 +1726,23 @@ async function delDisp(){
   // 立即更新本地陣列（拼團訂單狀態由 getAllOrders 即時計算，自動回到待派車）
   dispatches=dispatches.filter(x=>x.id!==eIds.disp);
   // 若是包車團派車記錄，同步清除 assignedDriver，讓包車團也回到待派車
-  if(d?.note?.includes('來自包車團')){
-    const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
-    if(matchPriv){
-      await db.collection('privates').doc(matchPriv.id).update({assignedDriver:'',dispatchStatus:'pending'});
-      // 本地同步
-      const idx=privates.findIndex(x=>x.id===matchPriv.id);
-      if(idx>=0) privates[idx]={...privates[idx],assignedDriver:'',dispatchStatus:'pending'};
+  if(d?.note?.includes('來自包車團')||d?.privateId){
+    const privId4=d.privateId||(privates.find(p=>d.label&&d.label.includes(p.name))?.id);
+    const busIdx4=d.privateBusIdx??0;
+    if(privId4){
+      const matchPriv=privates.find(p=>p.id===privId4);
+      if(matchPriv){
+        const updDrv={...getPrivBusDrivers(matchPriv)};
+        delete updDrv[busIdx4];
+        const allGone=Object.keys(updDrv).length===0;
+        await db.collection('privates').doc(privId4).update({
+          busAssignedDrivers:updDrv,
+          assignedDriver:Object.values(updDrv).filter(Boolean).join('/')||'',
+          dispatchStatus:'pending'
+        });
+        const idx=privates.findIndex(x=>x.id===privId4);
+        if(idx>=0) privates[idx]={...privates[idx],busAssignedDrivers:updDrv,assignedDriver:Object.values(updDrv).filter(Boolean).join('/')};
+      }
     }
   }
   cm('disp');
