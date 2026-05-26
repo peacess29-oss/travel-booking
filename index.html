@@ -965,7 +965,7 @@ async function delTour(){
   setSS('syncing','刪除中…');
   // 找出此行程的所有出發日期
   const tourDates=[...new Set(bookings.filter(b=>b.tourId===tourId).map(b=>b.date))];
-  const t=tours.find(x=>x.id===tourId);
+  // t 已在上方宣告
   // 刪除相關派車記錄（比對行程名稱或 groupTourId）
   const relDisps=dispatches.filter(x=>
     tourDates.some(date=>
