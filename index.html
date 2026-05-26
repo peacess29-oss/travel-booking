@@ -182,6 +182,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-balance" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
+  <div id="p-customers" class="page"></div>
+  <div id="p-customers" class="page"></div>
 </div>
 
 <!-- ═══ MODALS ═══ -->
@@ -598,6 +600,8 @@ function refresh(){
   if(curPage==='p-balance')renderBalance();
   if(curPage==='p-driver')renderDriverPage();
   if(curPage==='p-settings')renderSettings();
+  if(curPage==='p-customers')renderCustomers();
+  if(curPage==='p-customers')renderCustomers();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -688,7 +692,8 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-finance',this)"><i class="ti ti-chart-bar"></i> 財務報表</button>
     <button class="nav-tab" onclick="showPage('p-balance',this)"><i class="ti ti-cash"></i> 尾款收款</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
-    <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>`;
+    <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
+    <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
   } else {
     nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver',this)"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
   }
@@ -2425,6 +2430,261 @@ async function delRec(){
 }
 
 // ══════════════════ PAGE: 設定 ══════════════════
+// ══════════════════ PAGE: 客人明細 ══════════════════
+function renderCustomers(){
+  const el=document.getElementById('p-customers');
+  const today=new Date().toISOString().slice(0,10);
+  // 篩選狀態
+  const srcFilter=document.getElementById('cust-src')?.value||'all';
+  const tourFilter=document.getElementById('cust-tour')?.value||'';
+  const monthFilter=document.getElementById('cust-month')?.value||'';
+
+  // ── 拼團客人 ──
+  let groupRows=[];
+  tours.forEach(t=>{
+    getDates(t.id).forEach(d=>{
+      const bks=getDateBks(t.id,d);
+      bks.forEach(b=>{
+        const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price'),bal=pr-dep;
+        groupRows.push({
+          src:'group',tourName:t.name,date:d,name:b.name,count:b.count,
+          channel:b.channel||'',phone:b.phone||'',contact:b.contact||'',
+          regdate:b.regdate||'',note:b.note||'',
+          depositPaid:b.depositPaid,balancePaid:b.balancePaid,insured:b.insured,
+          deposit:dep*b.count,balance:bal*b.count,total:pr*b.count,
+          bookingId:b.id,tourId:t.id
+        });
+      });
+    });
+  });
+
+  // ── 包車團客人 ──
+  let privRows=[];
+  privates.forEach(p=>{
+    privRows.push({
+      src:'private',tourName:p.name,date:p.start,endDate:p.end,name:p.name,
+      count:p.pax||1,channel:p.channel||'',phone:p.phone||'',contact:p.contact||'',
+      note:p.note||'',regdate:'',
+      depositPaid:p.depositPaid,balancePaid:p.balancePaid,insured:p.insured,
+      deposit:p.deposit,balance:p.price-p.deposit,total:p.price,
+      privId:p.id,type:p.type
+    });
+  });
+
+  // 合併篩選
+  let rows=[...groupRows,...privRows];
+  if(srcFilter==='group') rows=groupRows;
+  else if(srcFilter==='private') rows=privRows;
+  if(tourFilter) rows=rows.filter(r=>r.tourId===tourFilter||r.privId===tourFilter);
+  if(monthFilter) rows=rows.filter(r=>r.date&&r.date.startsWith(monthFilter));
+  rows.sort((a,b)=>b.date>a.date?1:-1);
+
+  const totalPax=rows.reduce((s,r)=>s+(r.src==='group'?r.count:r.count),0);
+  const totalAmt=rows.reduce((s,r)=>s+r.total,0);
+  const totalDep=rows.reduce((s,r)=>s+r.deposit,0);
+  const totalBal=rows.reduce((s,r)=>s+r.balance,0);
+  const paidDep=rows.filter(r=>r.depositPaid).reduce((s,r)=>s+r.deposit,0);
+  const paidBal=rows.filter(r=>r.balancePaid).reduce((s,r)=>s+r.balance,0);
+
+  const tourOpts='<option value="">全部行程</option>'+
+    tours.map(t=>`<option value="${t.id}"${t.id===tourFilter?' selected':''}>${t.name}</option>`).join('')+
+    privates.map(p=>`<option value="${p.id}"${p.id===tourFilter?' selected':''}>${p.name}（包車）</option>`).join('');
+
+  el.innerHTML=`
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <select id="cust-src" onchange="renderCustomers()" style="height:34px;font-size:13px">
+      <option value="all"${srcFilter==='all'?' selected':''}>全部（拼團+包車）</option>
+      <option value="group"${srcFilter==='group'?' selected':''}>拼團行程</option>
+      <option value="private"${srcFilter==='private'?' selected':''}>包車團</option>
+    </select>
+    <select id="cust-tour" onchange="renderCustomers()" style="height:34px;font-size:13px;max-width:200px">${tourOpts}</select>
+    <input id="cust-month" type="month" value="${monthFilter}" onchange="renderCustomers()" style="height:34px;font-size:13px;width:140px" placeholder="篩選月份">
+    <button class="btn btn-sm" onclick="document.getElementById('cust-month').value='';renderCustomers()">清除月份</button>
+    <button class="btn btn-sm" style="border-color:var(--green);color:var(--green-d);margin-left:auto" onclick="exportCustomersExcel()">
+      <i class="ti ti-file-spreadsheet"></i> 下載 Excel
+    </button>
+  </div>
+  <div class="stat-row" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
+    <div class="stat-card"><div class="stat-label">總筆數</div><div class="stat-val">${rows.length}</div></div>
+    <div class="stat-card"><div class="stat-label">總人數</div><div class="stat-val">${totalPax}</div></div>
+    <div class="stat-card"><div class="stat-label">定金已收/應收</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${paidDep.toLocaleString()}/$${totalDep.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">尾款已收/應收</div><div class="stat-val" style="font-size:13px;color:var(--blue)">$${paidBal.toLocaleString()}/$${totalBal.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">總金額</div><div class="stat-val" style="font-size:13px">$${totalAmt.toLocaleString()}</div></div>
+  </div>
+  ${!rows.length?'<div class="empty">無資料</div>':`
+  <div class="tbl-wrap"><table class="xtable">
+    <thead><tr>
+      <th>類型</th><th>行程/團名</th><th>出發日</th>
+      <th style="min-width:75px">客人/團名</th><th>人數</th>
+      <th>聯絡</th><th style="min-width:90px">電話/帳號</th>
+      <th>報名日</th>
+      <th style="text-align:right">定金</th><th class="chk">定</th>
+      <th style="text-align:right">尾款</th><th class="chk">尾</th>
+      <th style="text-align:right">總額</th>
+      <th>備註</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td><span class="badge ${r.src==='group'?'badge-green':'badge-blue'}">${r.src==='group'?'拼團':'包車'}</span></td>
+      <td style="font-weight:600;font-size:12px">${r.tourName}</td>
+      <td style="font-size:12px">${r.date||'-'}${r.endDate&&r.endDate!==r.date?'~'+r.endDate.slice(5):''}</td>
+      <td style="font-weight:600">${r.src==='group'?r.name:r.tourName}</td>
+      <td style="text-align:center">${r.count}</td>
+      <td>${chBadge(r.channel)}</td>
+      <td style="font-size:11px;color:var(--text2)">${[r.phone,r.contact].filter(Boolean).join('/')||'-'}</td>
+      <td style="font-size:11px;color:var(--text2)">${r.regdate||'-'}</td>
+      <td style="text-align:right">$${r.deposit.toLocaleString()}</td>
+      <td class="chk" onclick="${r.bookingId?`toggleBk('${r.bookingId}','depositPaid',${!r.depositPaid})`:`togglePv('${r.privId}','depositPaid',${!r.depositPaid})`}">
+        ${r.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}
+      </td>
+      <td style="text-align:right">$${r.balance.toLocaleString()}</td>
+      <td class="chk" onclick="${r.bookingId?`toggleBk('${r.bookingId}','balancePaid',${!r.balancePaid})`:`togglePv('${r.privId}','balancePaid',${!r.balancePaid})`}">
+        ${r.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}
+      </td>
+      <td style="text-align:right;font-weight:600">$${r.total.toLocaleString()}</td>
+      <td style="font-size:11px;color:var(--text2)">${r.note||'-'}</td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr>
+      <td colspan="4">合計</td><td style="text-align:center">${totalPax}</td>
+      <td colspan="3"></td>
+      <td style="text-align:right;color:var(--green)">$${paidDep.toLocaleString()}</td><td></td>
+      <td style="text-align:right;color:var(--blue)">$${paidBal.toLocaleString()}</td><td></td>
+      <td style="text-align:right;font-weight:600">$${totalAmt.toLocaleString()}</td><td></td>
+    </tr></tfoot>
+  </table></div>`}`;
+}
+
+function exportCustomersExcel(){
+  const today=new Date().toISOString().slice(0,10);
+  const srcFilter=document.getElementById('cust-src')?.value||'all';
+  const tourFilter=document.getElementById('cust-tour')?.value||'';
+  const monthFilter=document.getElementById('cust-month')?.value||'';
+
+  let groupRows=[];
+  tours.forEach(t=>{
+    getDates(t.id).forEach(d=>{
+      getDateBks(t.id,d).forEach(b=>{
+        const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
+        groupRows.push({src:'拼團',tourName:t.name,date:d,endDate:d,
+          name:b.name,count:b.count,channel:b.channel||'',phone:b.phone||'',contact:b.contact||'',
+          regdate:b.regdate||'',note:b.note||'',
+          depositPaid:b.depositPaid?'✓':'',balancePaid:b.balancePaid?'✓':'',insured:b.insured?'✓':'',
+          deposit:dep*b.count,balance:(pr-dep)*b.count,total:pr*b.count});
+      });
+    });
+  });
+  let privRows=privates.map(p=>({
+    src:'包車',tourName:p.name,date:p.start,endDate:p.end,
+    name:p.name,count:p.pax||1,channel:p.channel||'',phone:p.phone||'',contact:p.contact||'',
+    regdate:'',note:p.note||'',
+    depositPaid:p.depositPaid?'✓':'',balancePaid:p.balancePaid?'✓':'',insured:p.insured?'✓':'',
+    deposit:p.deposit,balance:p.price-p.deposit,total:p.price}));
+
+  let rows=[...groupRows,...privRows];
+  if(srcFilter==='group') rows=groupRows;
+  else if(srcFilter==='private') rows=privRows;
+  if(tourFilter){
+    const t=tours.find(x=>x.id===tourFilter);
+    const p=privates.find(x=>x.id===tourFilter);
+    if(t) rows=rows.filter(r=>r.src==='拼團'&&r.tourName===t.name);
+    else if(p) rows=rows.filter(r=>r.src==='包車'&&r.tourName===p.name);
+  }
+  if(monthFilter) rows=rows.filter(r=>r.date&&r.date.startsWith(monthFilter));
+  rows.sort((a,b)=>b.date>a.date?1:-1);
+
+  const wb=XLSX.utils.book_new();
+  const headers=['類型','行程/團名','出發日','結束日','客人/團名','人數','聯絡方式','電話','帳號','報名日','備註','定金','已付定金','尾款','已付尾款','旅遊險','總金額'];
+  const data=[headers,...rows.map(r=>[r.src,r.tourName,r.date,r.endDate,r.name,r.count,r.channel,r.phone,r.contact,r.regdate,r.note,r.deposit,r.depositPaid,r.balance,r.balancePaid,r.insured,r.total])];
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:6},{wch:16},{wch:11},{wch:11},{wch:14},{wch:5},{wch:10},{wch:13},{wch:14},{wch:11},{wch:18},{wch:9},{wch:7},{wch:9},{wch:7},{wch:7},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'客人明細');
+
+  // 分工作表：拼團 / 包車
+  if(srcFilter==='all'||srcFilter==='group'){
+    const gData=[headers,...groupRows.filter(r=>!tourFilter||(tours.find(x=>x.id===tourFilter)&&r.tourName===tours.find(x=>x.id===tourFilter)?.name)).filter(r=>!monthFilter||r.date?.startsWith(monthFilter)).map(r=>[r.src,r.tourName,r.date,r.endDate,r.name,r.count,r.channel,r.phone,r.contact,r.regdate,r.note,r.deposit,r.depositPaid,r.balance,r.balancePaid,r.insured,r.total])];
+    if(gData.length>1){const wsG=XLSX.utils.aoa_to_sheet(gData);wsG['!cols']=ws['!cols'];XLSX.utils.book_append_sheet(wb,wsG,'拼團客人');}
+  }
+  if(srcFilter==='all'||srcFilter==='private'){
+    const pData=[headers,...privRows.filter(r=>!monthFilter||r.date?.startsWith(monthFilter)).map(r=>[r.src,r.tourName,r.date,r.endDate,r.name,r.count,r.channel,r.phone,r.contact,r.regdate,r.note,r.deposit,r.depositPaid,r.balance,r.balancePaid,r.insured,r.total])];
+    if(pData.length>1){const wsP=XLSX.utils.aoa_to_sheet(pData);wsP['!cols']=ws['!cols'];XLSX.utils.book_append_sheet(wb,wsP,'包車客人');}
+  }
+
+  const label=monthFilter?monthFilter:'全部';
+  XLSX.writeFile(wb,'客人明細_'+label+'.xlsx');
+}
+
+// ══════════════════ PAGE: 客人明細 ══════════════════
+function getCustomerRows(){
+  const rows=[];
+  // 拼團報名
+  bookings.forEach(b=>{
+    const t=tours.find(x=>x.id===b.tourId);
+    rows.push({
+      name:b.name,count:b.count,channel:b.channel||'',
+      phone:[b.phone,b.contact].filter(Boolean).join(' / '),
+      regdate:b.regdate||'',type:'拼團',
+      tourName:t?.name||'',date:b.date||''
+    });
+  });
+  // 包車團
+  privates.forEach(p=>{
+    rows.push({
+      name:p.name,count:p.pax||1,channel:p.channel||'',
+      phone:[p.phone,p.contact].filter(Boolean).join(' / '),
+      regdate:'',type:p.type==='car+hotel'?'包車+住宿':'純包車',
+      tourName:p.name,date:p.start||''
+    });
+  });
+  return rows.sort((a,b)=>b.date>a.date?1:-1);
+}
+function renderCustomers(){
+  const el=document.getElementById('p-customers');
+  const q=(document.getElementById('cust-q')?.value||'').toLowerCase();
+  const ft=document.getElementById('cust-type')?.value||'all';
+  let rows=getCustomerRows();
+  if(ft==='group') rows=rows.filter(r=>r.type==='拼團');
+  else if(ft==='private') rows=rows.filter(r=>r.type!=='拼團');
+  if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.tourName.toLowerCase().includes(q)||r.phone.includes(q));
+  const CH_CLS2={'LINE官方':'badge-green','LINE個人':'badge-green','FB':'badge-blue','WhatsApp':'badge-green','微信':'badge-amber'};
+  el.innerHTML=`
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <input id="cust-q" placeholder="搜尋客人姓名/行程/電話…" oninput="renderCustomers()" value="${q}" style="flex:1;max-width:240px;height:36px">
+    <select id="cust-type" onchange="renderCustomers()" style="height:36px;font-size:13px">
+      <option value="all">全部（${getCustomerRows().length}）</option>
+      <option value="group"${ft==='group'?' selected':''}>拼團報名</option>
+      <option value="private"${ft==='private'?' selected':''}>包車團</option>
+    </select>
+    <button class="btn btn-sm" onclick="exportCustomersExcel()" style="border-color:var(--green);color:var(--green-d)"><i class="ti ti-file-spreadsheet"></i> 下載 Excel</button>
+  </div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${rows.length} 筆</div>
+  ${rows.length===0?'<div class="empty">無符合資料</div>':`
+  <div class="tbl-wrap"><table class="xtable">
+    <thead><tr>
+      <th>客人名</th><th>人數</th><th>聯絡方式</th><th>電話/帳號</th>
+      <th>報名日</th><th>類型</th><th>行程名</th><th>出發日</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td style="font-weight:600">${r.name}</td>
+      <td style="text-align:center">${r.count}人</td>
+      <td><span class="badge ${CH_CLS2[r.channel]||'badge-blue'}">${r.channel||'-'}</span></td>
+      <td style="font-size:12px">${r.phone||'-'}</td>
+      <td style="color:var(--text2)">${r.regdate||'-'}</td>
+      <td><span class="badge ${r.type==='拼團'?'badge-green':'badge-blue'}">${r.type}</span></td>
+      <td>${r.tourName}</td>
+      <td>${r.date||'-'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`}`;
+}
+function exportCustomersExcel(){
+  const rows=getCustomerRows();
+  const wb=XLSX.utils.book_new();
+  const data=[['客人名','人數','聯絡方式','電話/帳號','報名日','類型','行程名','出發日']];
+  rows.forEach(r=>data.push([r.name,r.count,r.channel,r.phone,r.regdate,r.type,r.tourName,r.date]));
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:12},{wch:6},{wch:10},{wch:18},{wch:12},{wch:10},{wch:18},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'客人明細');
+  XLSX.writeFile(wb,'客人明細_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
 function renderSettings(){
   const el=document.getElementById('p-settings');
   el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
