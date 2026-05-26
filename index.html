@@ -1512,29 +1512,45 @@ async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conf
     const d=dispatches.find(x=>x.id===did);
     if(!d) continue;
     if(extDrv){
-      // 指定外派司機：更新派車記錄為外派
+      // 指定外派司機：更新派車記錄為外派（訂單仍顯示在行事曆，變橙色外派 pill）
       await db.collection('dispatches').doc(did).update({
         driverType:'out',driverId:'',
         driverName:extDrv.name,outsourceName:extDrv.name,
         note:(d.note||'')+' [智慧建議轉外派：'+extDrv.name+']'
       });
-      // 本地同步：把該記錄改為外派，讓後續衝突檢查不再看到此司機佔用此日期
+      // 本地同步
       const idx=dispatches.findIndex(x=>x.id===did);
-      if(idx>=0) dispatches[idx]={...dispatches[idx],driverType:'out',driverId:'',driverName:extDrv.name};
-      // 對應包車團更新 assignedDriver
-      if(d.note&&d.note.includes('來自包車團')){
-        const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
-        if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:extDrv.name,dispatchStatus:'assigned'});
+      if(idx>=0) dispatches[idx]={...dispatches[idx],driverType:'out',driverId:'',driverName:extDrv.name,outsourceName:extDrv.name};
+      // 對應包車團：更新 busAssignedDrivers 對應車號為外派司機
+      const privId6=d.privateId||(privates.find(p=>d.label&&d.label.includes(p.name))?.id);
+      if(privId6){
+        const matchPriv=privates.find(p=>p.id===privId6);
+        if(matchPriv){
+          const busIdx6=d.privateBusIdx??0;
+          const updDrv6={...getPrivBusDrivers(matchPriv),[busIdx6]:extDrv.name};
+          await db.collection('privates').doc(privId6).update({busAssignedDrivers:updDrv6,assignedDriver:Object.values(updDrv6).filter(Boolean).join('/'),dispatchStatus:'assigned'});
+          const pidx6=privates.findIndex(x=>x.id===privId6);
+          if(pidx6>=0) privates[pidx6]={...privates[pidx6],busAssignedDrivers:updDrv6,assignedDriver:Object.values(updDrv6).filter(Boolean).join('/')};
+        }
       }
     } else {
-      // 不指定外派：刪除派車記錄
+      // 不指定外派：刪除派車記錄（訂單變回待派車，行事曆顯示紅色待派車 pill）
       await db.collection('dispatches').doc(did).delete();
-      // ★ 關鍵：立即從本地 dispatches 移除，讓後續衝突檢查看到正確狀態
+      // ★ 立即從本地 dispatches 移除，後續衝突檢查看到正確狀態
       dispatches=dispatches.filter(x=>x.id!==did);
-      // 對應包車團設回待派車
-      if(d.note&&d.note.includes('來自包車團')){
-        const matchPriv=privates.find(p=>d.label&&d.label.includes(p.name));
-        if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:'',dispatchStatus:'pending'});
+      // 對應包車團清除該車號的司機，設回待派車狀態 → 行事曆顯示紅色 pill
+      const privId7=d.privateId||(privates.find(p=>d.label&&d.label.includes(p.name))?.id);
+      if(privId7){
+        const matchPriv=privates.find(p=>p.id===privId7);
+        if(matchPriv){
+          const busIdx7=d.privateBusIdx??0;
+          const updDrv7={...getPrivBusDrivers(matchPriv)};
+          delete updDrv7[busIdx7];
+          const newAssigned7=Object.values(updDrv7).filter(Boolean).join('');
+          await db.collection('privates').doc(privId7).update({busAssignedDrivers:updDrv7,assignedDriver:newAssigned7,dispatchStatus:'pending'});
+          const pidx7=privates.findIndex(x=>x.id===privId7);
+          if(pidx7>=0) privates[pidx7]={...privates[pidx7],busAssignedDrivers:updDrv7,assignedDriver:newAssigned7};
+        }
       }
     }
   }
