@@ -385,6 +385,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
+  <!-- 客收：顯示當天尾款待收項目 -->
+  <div id="rf-income-sec" style="display:none;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">當天尾款待收項目</div>
+    <div id="rf-balance-items"></div>
+  </div>
   <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
   <div id="rf-km-alert" style="display:none" class="warn-box">里程數低於上次記錄，請確認</div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-rec" style="display:none" onclick="delRec()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('rec')">取消</button><button class="btn btn-primary" onclick="saveRec()">儲存</button></div></div>
@@ -2085,10 +2090,13 @@ function openRec(id=''){
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
   toggleRecFields();
-  // 日期改變時，若是加油類別且備註空白，重新帶入派車訂單
+  // 日期改變時：重新觸發 toggleRecFields（更新備註、待收項目等）
   const dateInput=document.getElementById('rf-date');
   dateInput.onchange=function(){
-    if(document.getElementById('rf-type').value==='fuel'){
+    const t=document.getElementById('rf-type').value;
+    if(t==='income'){
+      renderBalanceItems(this.value);
+    } else {
       const noteEl=document.getElementById('rf-note');
       if(!noteEl.value.trim()||noteEl.dataset.autoFilled==='1'){
         const hint=getDispatchHint(this.value);
@@ -2104,15 +2112,86 @@ function toggleRecFields(){
   document.getElementById('rf-mileage-wrap').style.display=(t==='fuel'||t==='inspection')?'block':'none';
   document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';
   document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';
-  // 加油時：若備註空白，自動帶入當天派車訂單
-  if(t==='fuel'&&!eIds.rec){
-    const date=document.getElementById('rf-date').value;
-    const noteEl=document.getElementById('rf-note');
-    if(date&&!noteEl.value.trim()){
-      const hint=getDispatchHint(date);
-      if(hint) noteEl.value=hint;
-    }
+  document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
+  const date=document.getElementById('rf-date').value;
+  const noteEl=document.getElementById('rf-note');
+  // 所有支出類別：若備註空白且是新增，自動帶入當天派車訂單
+  if(t!=='income'&&!eIds.rec&&date&&!noteEl.value.trim()){
+    const hint=getDispatchHint(date);
+    if(hint){noteEl.value=hint;noteEl.dataset.autoFilled='1';}
   }
+  // 客收：顯示當天尾款待收項目
+  if(t==='income'&&date){
+    renderBalanceItems(date);
+  }
+}
+
+// 取得某日期對應此司機派車訂單的尾款待收項目
+function getBalanceItems(date){
+  if(!curDriverId||!date) return [];
+  const items=[];
+  // 找此司機當天有派車的訂單
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end);
+  if(!myDisps.length) return [];
+  // 拼團：找對應的 bookings 尾款
+  tours.forEach(t=>{
+    const dates2=getDates(t.id).filter(d=>d===date||d<=date);
+    dates2.forEach(d=>{
+      const disp=myDisps.find(x=>x.groupTourId?.includes(t.id+'_'+d)||x.label?.includes(t.name));
+      if(!disp)return;
+      const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);
+      bks.forEach(b=>{
+        const bal=(getPrice(t,d,'price')-getPrice(t,d,'deposit'))*b.count;
+        if(bal>0) items.push({type:'group',label:t.name+' / '+d+' / '+b.name+' × '+b.count+'人',amount:bal,bookingId:b.id,field:'balancePaid'});
+      });
+    });
+  });
+  // 包車團：找對應的尾款
+  privates.forEach(p=>{
+    if(!p.balancePaid&&date>=p.start&&date<=p.end){
+      const hasDisp=myDisps.some(d=>d.privateId===p.id||d.label?.includes(p.name));
+      if(hasDisp){
+        const bal=p.price-p.deposit;
+        if(bal>0) items.push({type:'private',label:p.name+' 包車團',amount:bal,privateId:p.id,field:'balancePaid'});
+      }
+    }
+  });
+  return items;
+}
+
+function renderBalanceItems(date){
+  const el=document.getElementById('rf-balance-items');
+  const items=getBalanceItems(date);
+  if(!items.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px">此日無尾款待收項目</div>';
+    return;
+  }
+  // 自動帶入第一筆金額
+  const amtEl=document.getElementById('rf-amt');
+  if(amtEl&&!amtEl.value) amtEl.value=items.reduce((s,i)=>s+i.amount,0);
+  el.innerHTML=items.map((item,idx)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg2);border-radius:6px;margin-bottom:4px;font-size:12px">
+      <div>
+        <div style="font-weight:600">${item.label}</div>
+        <div style="color:var(--blue-d)">尾款：$${item.amount.toLocaleString()}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="rf-bal-${idx}" data-idx="${idx}" style="width:14px;height:14px" onchange="updateIncomeAmt()">
+        <span>選取</span>
+      </label>
+    </div>`).join('');
+  // 儲存 items 供 saveRec 使用
+  document.getElementById('rf-balance-items').dataset.items=JSON.stringify(items);
+}
+
+function updateIncomeAmt(){
+  const el=document.getElementById('rf-balance-items');
+  const items=JSON.parse(el.dataset.items||'[]');
+  let total=0;
+  items.forEach((_,idx)=>{
+    if(document.getElementById('rf-bal-'+idx)?.checked) total+=items[idx].amount;
+  });
+  if(total>0) document.getElementById('rf-amt').value=total;
 }
 // 取得某司機在指定日期的派車訂單標題（用於備註自動帶入）
 function getDispatchHint(date){
@@ -2134,7 +2213,27 @@ async function saveRec(){
   if((type==='fuel'||type==='inspection')&&!mileage)return alert('加油/驗車記錄必須填寫里程數');
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',};
-  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);cm('rec');
+  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);
+  // 客收：自動標記勾選的尾款項目為已收
+  if(type==='income'&&!eIds.rec){
+    const balEl=document.getElementById('rf-balance-items');
+    const items=JSON.parse(balEl?.dataset.items||'[]');
+    for(let idx=0;idx<items.length;idx++){
+      const chk=document.getElementById('rf-bal-'+idx);
+      if(!chk?.checked) continue;
+      const item=items[idx];
+      if(item.type==='group'&&item.bookingId){
+        await db.collection('bookings').doc(item.bookingId).update({balancePaid:true});
+        const bi=bookings.findIndex(b=>b.id===item.bookingId);
+        if(bi>=0) bookings[bi]={...bookings[bi],balancePaid:true};
+      } else if(item.type==='private'&&item.privateId){
+        await db.collection('privates').doc(item.privateId).update({balancePaid:true});
+        const pi=privates.findIndex(p=>p.id===item.privateId);
+        if(pi>=0) privates[pi]={...privates[pi],balancePaid:true};
+      }
+    }
+  }
+  cm('rec');
 }
 async function delRec(){if(!confirm('確定刪除？'))return;await db.collection('driverRecs').doc(eIds.rec).delete();cm('rec');}
 
