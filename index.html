@@ -749,12 +749,45 @@ function setPvTab(v){
 }
 function renderGroup(){
   const el=document.getElementById('p-group');
+  const today=new Date().toISOString().slice(0,10);
+  const gfTab=document.getElementById('gf-tab')?.value||'active';
   const selEl=document.getElementById('gf-sel');
   const fv=selEl?selEl.value:'';
-  const show=fv?tours.filter(t=>t.id===fv):tours;
-  if(!tours.length){el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">拼團行程</span><button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button></div><div class="empty">尚無行程</div>`;return;}
-  el.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px"><option value="">全部行程（${tours.length}）</option>${tours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}</select>
+
+  // 判斷行程是否「已完成」：所有有報名的出發日期（含行程天數的結束日）都已過
+  // 注意：沒有任何報名的行程視為「進行中」（仍可接受報名）
+  function isTourDone(t){
+    const dates=getDates(t.id);
+    if(!dates.length) return false; // 無報名 → 視為未完成
+    const tdays=t.days||1;
+    return dates.every(d=>{
+      let ed=d;
+      if(tdays>1){const e=new Date(d);e.setDate(e.getDate()+tdays-1);ed=e.toISOString().slice(0,10);}
+      return ed<today;
+    });
+  }
+
+  // 所有行程都留在此頁，只依 tab 分組顯示
+  const activeTours=tours.filter(t=>!isTourDone(t));
+  const doneTours=tours.filter(t=>isTourDone(t));
+  const tabTours=gfTab==='done'?doneTours:activeTours;
+  const show=fv?tabTours.filter(t=>t.id===fv):tabTours;
+
+  if(!tours.length){
+    el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">拼團行程</span><button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button></div><div class="empty">尚無行程</div>`;
+    return;
+  }
+  el.innerHTML=`
+  <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border)">
+    <button class="nav-tab${gfTab==='active'?' active':''}" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 進行中（${activeTours.length}）</button>
+    <button class="nav-tab${gfTab==='done'?' active':''}" onclick="setGfTab('done')"><i class="ti ti-check"></i> 已完成（${doneTours.length}）</button>
+  </div>
+  <input type="hidden" id="gf-tab" value="${gfTab}">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px">
+      <option value="">全部（${tabTours.length}）</option>
+      ${tabTours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}
+    </select>
     <button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>
   </div>
   ${show.map(t=>{
