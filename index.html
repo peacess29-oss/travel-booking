@@ -228,8 +228,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   </div>
   <div class="divider"></div>
   <div id="pf-ins-row"><div class="fg2"><div><label>旅遊險整團金額（元）</label><input id="pf-ins" type="number" value="0" placeholder="整團保費"></div></div></div>
-  <div class="fg2"><div><label>聯絡方式</label><select id="pf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div><div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div></div>
-  <div class="fg2"><div><label>帳號</label><input id="pf-contact" placeholder="LINE ID"></div></div>
+  <div class="fg3">
+    <div><label>聯絡方式</label><select id="pf-ch"><option>WhatsApp</option><option>微信</option><option>FB</option><option>LINE官方</option><option>LINE個人</option></select></div>
+    <div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div>
+    <div><label>帳號（手動輸入）</label><input id="pf-contact" placeholder="LINE ID / 微信號…"></div>
+  </div>
   <div class="mb10"><label>備註</label><textarea id="pf-note" style="height:48px" placeholder="接機、特殊需求…"></textarea></div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-depaid" style="width:14px;height:14px"> 定金已付</label>
