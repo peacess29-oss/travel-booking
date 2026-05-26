@@ -1700,7 +1700,10 @@ async function saveDisp(){
     }
   }
   setSS('syncing','儲存中…');
-  const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim()};
+  // 保留原有 privateId / privateBusIdx（從舊記錄繼承，確保 saveDisp 能正確回寫）
+  const existingDisp=eIds.disp?dispatches.find(x=>x.id===eIds.disp):null;
+  const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,note:document.getElementById('df-note').value.trim(),
+    privateId:existingDisp?.privateId||'',privateBusIdx:existingDisp?.privateBusIdx??undefined};
   if(eIds.disp){
     await db.collection('dispatches').doc(eIds.disp).update(data);
     // 本地立即同步，讓行事曆和訂單表立刻反映變更
@@ -1711,7 +1714,30 @@ async function saveDisp(){
     await db.collection('dispatches').doc(newDocId).set(data);
     dispatches=[...dispatches,{id:newDocId,...data}];
   }
-  if(drvName&&dtype==='own'){
+  // 若是包車團派車記錄，同步更新 busAssignedDrivers
+  if(data.privateId){
+    const privId5=data.privateId;
+    const busIdx5=data.privateBusIdx??0;
+    const matchPriv=privates.find(p=>p.id===privId5);
+    if(matchPriv){
+      const updDrv={...getPrivBusDrivers(matchPriv)};
+      if(drvName&&dtype!==''){
+        updDrv[busIdx5]=drvName;
+      } else {
+        delete updDrv[busIdx5];
+      }
+      const newAssigned=Object.values(updDrv).filter(Boolean).join('/');
+      await db.collection('privates').doc(privId5).update({
+        busAssignedDrivers:updDrv,
+        assignedDriver:newAssigned,
+        dispatchStatus:isPrivFullyAssigned({...matchPriv,busAssignedDrivers:updDrv})?'assigned':'pending'
+      });
+      // 本地立即同步
+      const pidx=privates.findIndex(x=>x.id===privId5);
+      if(pidx>=0) privates[pidx]={...privates[pidx],busAssignedDrivers:updDrv,assignedDriver:newAssigned};
+    }
+  } else if(drvName&&dtype==='own'){
+    // 相容：無 privateId 時用 label 模糊比對（舊格式派車記錄）
     const pLabel=data.label;
     const matchPriv=privates.find(p=>pLabel.includes(p.name));
     if(matchPriv) await db.collection('privates').doc(matchPriv.id).update({assignedDriver:drvName});
