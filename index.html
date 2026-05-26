@@ -220,6 +220,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
   <div class="fg3"><div><label>人數</label><input id="pf-pax" type="number" value="1" min="1"></div><div><label>車輛數</label><input id="pf-cars" type="number" value="1" min="1"></div><div><label>外派司機</label><select id="pf-out" onchange="togglePriv()"><option value="0">否（自家）</option><option value="1">是（外派）</option></select></div></div>
   <div class="fg2"><div><label>總報價（元）</label><input id="pf-price" type="number" placeholder="20000"></div><div><label>定金（元）</label><input id="pf-dep" type="number" placeholder="5000"></div></div>
+  <!-- 自家司機薪資區塊（固定顯示） -->
+  <div id="pf-own-cost-sec"><div class="divider"></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:6px">司機薪資（自家）</div>
+    <div class="fg3">
+      <div><label>每天薪資（元）</label><input id="pf-own-day" type="number" placeholder="0" value="0"></div>
+      <div><label>外宿補貼/晚（元）</label><input id="pf-own-night" type="number" placeholder="0" value="0"></div>
+      <div><label>外宿晚數</label><input id="pf-own-nights" type="number" placeholder="0" value="0"></div>
+    </div>
+  </div>
+  <!-- 外派司機費用區塊（外派時才顯示） -->
   <div id="pf-out-sec" style="display:none"><div class="divider"></div><div style="font-size:12px;color:var(--text2);margin-bottom:6px">外派司機費用</div><div class="fg3"><div><label>每天費用</label><input id="pf-dday" type="number" value="5000"></div><div><label>外宿補貼/晚</label><input id="pf-dnight" type="number" value="1000"></div><div><label>外宿晚數</label><input id="pf-dnights" type="number" value="0"></div></div></div>
   <div id="pf-hotel-sec"><div class="divider"></div><div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">🏨 住宿安排（每晚可選不同酒店）</div>
     <div class="fg2" style="margin-bottom:8px"><div><label>住宿晚數</label><input id="pf-nights" type="number" value="0" min="0" onchange="renderNightlyPicker()"></div></div>
@@ -1026,6 +1036,10 @@ function openPriv(id=''){
   document.getElementById('pf-dday').value=p?.driverDayRate||costSettings.driverDayRate||5000;
   document.getElementById('pf-dnight').value=p?.driverNightRate||costSettings.driverNightRate||1000;
   document.getElementById('pf-dnights').value=p?.driverNights||0;
+  // 自家司機薪資
+  document.getElementById('pf-own-day').value=p?.ownDriverDayRate||0;
+  document.getElementById('pf-own-night').value=p?.ownDriverNightRate||0;
+  document.getElementById('pf-own-nights').value=p?.ownDriverNights||0;
   document.getElementById('pf-nights').value=p?.hotelNights||0;
   document.getElementById('pf-ins').value=p?.insCost||0;
   document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
@@ -1044,6 +1058,7 @@ function calcPrivDays(){
   // [修正] 不論 pf-nights 是否已有值都同步更新（編輯時修改日期應同步）
   document.getElementById('pf-nights').value=Math.max(0,days-1);
   document.getElementById('pf-dnights').value=Math.max(0,days-1);
+  document.getElementById('pf-own-nights').value=Math.max(0,days-1);
   renderNightlyPicker();
 }
 function togglePriv(){document.getElementById('pf-hotel-sec').style.display=document.getElementById('pf-type').value==='car+hotel'?'block':'none';document.getElementById('pf-out-sec').style.display=document.getElementById('pf-out').value==='1'?'block':'none';}
@@ -1134,7 +1149,15 @@ function getNightlyHotelCost(){
 function calcPrivCost(){
   const isOut=document.getElementById('pf-out').value==='1',isHotel=document.getElementById('pf-type').value==='car+hotel';
   const days=calcDays(document.getElementById('pf-start').value,document.getElementById('pf-end').value),cars=parseInt(document.getElementById('pf-cars').value)||1;
-  let dCost=0;if(isOut){const dr=parseInt(document.getElementById('pf-dday').value)||5000,nr=parseInt(document.getElementById('pf-dnight').value)||1000,dn=parseInt(document.getElementById('pf-dnights').value)||0;dCost=(days*dr+dn*nr)*cars;}
+  let dCost=0;
+  if(isOut){
+    const dr=parseInt(document.getElementById('pf-dday').value)||5000,nr=parseInt(document.getElementById('pf-dnight').value)||1000,dn=parseInt(document.getElementById('pf-dnights').value)||0;
+    dCost=(days*dr+dn*nr)*cars;
+  } else {
+    // 自家司機薪資
+    const odr=parseInt(document.getElementById('pf-own-day').value)||0,onr=parseInt(document.getElementById('pf-own-night').value)||0,odn=parseInt(document.getElementById('pf-own-nights').value)||0;
+    dCost=(days*odr+odn*onr)*cars;
+  }
   const hCost=isHotel?getNightlyHotelCost():0;
   const iCost=parseInt(document.getElementById('pf-ins').value)||0,price=parseInt(document.getElementById('pf-price').value)||0;
   const tCost=dCost+hCost+iCost,profit=price-tCost;
@@ -1147,13 +1170,14 @@ async function savePriv(){
   const isOut=document.getElementById('pf-out').value==='1',isHotel=document.getElementById('pf-type').value==='car+hotel';
   const days=calcDays(start,end),cars=parseInt(document.getElementById('pf-cars').value)||1;
   const dr=parseInt(document.getElementById('pf-dday').value)||5000,nr=parseInt(document.getElementById('pf-dnight').value)||1000,dn=parseInt(document.getElementById('pf-dnights').value)||0;
-  const dCost=isOut?(days*dr+dn*nr)*cars:0;
+  const odr=parseInt(document.getElementById('pf-own-day').value)||0,onr=parseInt(document.getElementById('pf-own-night').value)||0,odn=parseInt(document.getElementById('pf-own-nights').value)||0;
+  const dCost=isOut?(days*dr+dn*nr)*cars:(days*odr+odn*onr)*cars;
   const hn=parseInt(document.getElementById('pf-nights').value)||0;
   const hCost=isHotel?getNightlyHotelCost():0;
   const iCost=parseInt(document.getElementById('pf-ins').value)||0;
   const firstHotel=nightlyHotels.length?hotels.find(h=>h.id===nightlyHotels[0]?.hotelId):null;
   const hotelSummary=nightlyHotels.filter(n=>n.hotelId).map((n,i)=>{const h=hotels.find(x=>x.id===n.hotelId);return h?`第${i+1}晚:${h.name}`:''}).filter(Boolean).join(', ');
-  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
+  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
 async function delPriv(){
