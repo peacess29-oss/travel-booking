@@ -2075,7 +2075,13 @@ function openRec(id=''){
   eIds.rec=id||null;const r=id?driverRecs.find(x=>x.id===id):null;
   document.getElementById('mr-title').textContent=id?'編輯記錄':'新增記錄';document.getElementById('btn-del-rec').style.display=id?'inline-flex':'none';
   document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||'income';document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';
-  const cs=document.getElementById('rf-car');cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===r?.car?' selected':''}>${c}</option>`).join('');
+  // 新增記錄時預設常用車輛；編輯時保留原本選的車輛
+  const drv0=drivers.find(d=>d.id===curDriverId);
+  // 優先序：1. 編輯時原本的車 2. 設定的常用車輛 3. 最近一筆記錄的車
+  const lastUsedCar=driverRecs.filter(rec=>rec.driverId===curDriverId&&rec.car).sort((a,b)=>b.date>a.date?1:-1)[0]?.car||'';
+  const defaultCar=r?.car||(drv0?.preferredCar||lastUsedCar||'');
+  const cs=document.getElementById('rf-car');
+  cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===defaultCar?' selected':''}>${c}</option>`).join('');
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
   toggleRecFields();om('rec');
