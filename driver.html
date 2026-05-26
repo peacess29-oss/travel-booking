@@ -11,43 +11,59 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#fff;--bg2:#f6f6f6;--bg3:#eee;--text:#1a1a1a;--text2:#666;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--amber:#854F0B;--amber-l:#FAEEDA;--red:#A32D2D;--red-l:#FCEBEB;}
+:root{--bg:#fff;--bg2:#f6f6f6;--text:#1a1a1a;--text2:#666;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--red:#A32D2D;--red-l:#FCEBEB;}
 body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#dbeafe,#dcfce7);min-height:100vh;display:flex;align-items:center;justify-content:center;font-size:15px}
 .card{background:#fff;border-radius:16px;padding:28px 32px;width:380px;max-width:95vw;box-shadow:0 4px 32px rgba(0,0,0,.12)}
 h1{font-size:22px;font-weight:700;text-align:center;margin-bottom:4px}
 .sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:22px}
 label{font-size:13px;color:var(--text2);display:block;margin-bottom:3px}
 select,input{width:100%;padding:9px 10px;border:1px solid var(--border2);border-radius:8px;font-size:14px;height:40px;margin-bottom:12px}
-.btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .1s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-green{background:var(--green);color:var(--green-l)}
 .err{color:var(--red);font-size:13px;margin-bottom:8px;display:none}
-.back{text-align:center;margin-top:12px;font-size:13px;color:var(--text2)}
-.back a{color:var(--blue)}
+.loading{text-align:center;font-size:13px;color:var(--text2);margin-bottom:12px}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>🚌 司機登入</h1>
   <div class="sub">旅遊業務管理系統</div>
-  <label>選擇姓名</label>
-  <select id="drv-sel"></select>
-  <label>密碼</label>
-  <input type="password" id="drv-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')doLogin()">
-  <div class="err" id="err-msg"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
-  <button class="btn btn-green" onclick="doLogin()"><i class="ti ti-steering-wheel"></i> 登入</button>
+  <div class="loading" id="loading-msg"><i class="ti ti-loader"></i> 載入中…</div>
+  <div id="login-form" style="display:none">
+    <label>選擇姓名</label>
+    <select id="drv-sel"></select>
+    <label>密碼</label>
+    <input type="password" id="drv-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="err" id="err-msg"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
+    <button class="btn btn-green" id="login-btn" onclick="doLogin()"><i class="ti ti-steering-wheel"></i> 登入</button>
+  </div>
 </div>
 <script>
 firebase.initializeApp({apiKey:"AIzaSyAQNo3CGRWbFdGfyO2GFetJYjc4MGAc-yU",authDomain:"travel-booking-233b7.firebaseapp.com",projectId:"travel-booking-233b7",storageBucket:"travel-booking-233b7.firebasestorage.app",messagingSenderId:"1020869295331",appId:"1:1020869295331:web:deb14c36d3199a3654d9d6"});
 const db=firebase.firestore();
 const DRV_KEY='driverDeviceTrusted_v1';
 let drivers=[];
-// [修正] 加入旗標，防止自動跳轉在 onSnapshot 多次觸發時重複執行
 let redirected=false;
+let loaded=false;
 
 const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
   drivers=s.docs.map(d=>({id:d.id,...d.data()})).filter(d=>d.type==='own');
+
+  // 填充下拉選單
   const sel=document.getElementById('drv-sel');
+  const prevId=sel.value;
   sel.innerHTML=drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  // 嘗試恢復之前選取的項目
+  if(prevId&&drivers.find(d=>d.id===prevId)) sel.value=prevId;
+
+  // 資料載入完成後才顯示表單
+  if(!loaded){
+    loaded=true;
+    document.getElementById('loading-msg').style.display='none';
+    document.getElementById('login-form').style.display='block';
+    document.getElementById('drv-pwd').focus();
+  }
 
   // 若裝置已記住某位司機，自動跳轉（只執行一次）
   if(!redirected){
@@ -58,7 +74,6 @@ const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
         const drv=drivers.find(d=>d.id===info.id);
         if(drv){
           redirected=true;
-          // [修正] 跳轉前先取消訂閱，避免重複觸發
           unsubDrivers();
           sessionStorage.setItem('driverLogin',JSON.stringify({id:drv.id,name:drv.name}));
           window.location.href='index.html#driver';
@@ -66,13 +81,40 @@ const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
       }catch(e){localStorage.removeItem(DRV_KEY);}
     }
   }
+},err=>{
+  // Firestore 連線失敗時顯示錯誤
+  document.getElementById('loading-msg').textContent='⚠️ 連線失敗，請重新整理頁面';
 });
 
 function doLogin(){
-  const id=document.getElementById('drv-sel').value,pwd=document.getElementById('drv-pwd').value;
+  const errEl=document.getElementById('err-msg');
+  errEl.style.display='none';
+
+  if(!loaded||!drivers.length){
+    errEl.textContent='⏳ 資料尚未載入，請稍後再試';
+    errEl.style.display='block';
+    return;
+  }
+
+  const id=document.getElementById('drv-sel').value;
+  const pwd=document.getElementById('drv-pwd').value;
   const drv=drivers.find(d=>d.id===id);
-  if(!drv||drv.password!==pwd){document.getElementById('err-msg').style.display='block';return;}
-  // 記住此裝置
+
+  if(!drv){
+    errEl.textContent='⚠️ 找不到此司機，請重新整理';
+    errEl.style.display='block';
+    return;
+  }
+
+  // 密碼比對（確保都是字串）
+  if(String(drv.password)!==String(pwd)){
+    errEl.textContent='🔒 密碼錯誤，請重新輸入';
+    errEl.style.display='block';
+    document.getElementById('drv-pwd').value='';
+    document.getElementById('drv-pwd').focus();
+    return;
+  }
+
   localStorage.setItem(DRV_KEY,JSON.stringify({id,name:drv.name}));
   sessionStorage.setItem('driverLogin',JSON.stringify({id,name:drv.name}));
   window.location.href='index.html#driver';
