@@ -1859,6 +1859,10 @@ function calcPI(y,m,isYear){return privates.filter(p=>isYear?inYear(p.start,y):i
 });}
 function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
 function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
+// 司機客收（非關聯 bookings/privates 的額外收入，或無待收項目的現金收入）
+function calcDI(y,m,isYear){
+  return driverRecs.filter(r=>r.type==='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
+}
 function calcFE(y,m,isYear){
   const ms=y+'-'+String(m+1).padStart(2,'0');
   return fixedExpenses.filter(fe=>{if(fe.start&&ms<fe.start)return false;if(fe.end&&ms>fe.end)return false;if(isYear){return fe.cycle==='monthly'||(fe.cycle==='yearly'&&fe.start&&fe.start.startsWith(y+'-'));}if(fe.cycle==='monthly')return true;if(fe.cycle==='yearly')return fe.start&&fe.start===ms;return false;}).map(fe=>({...fe,eff:isYear&&fe.cycle==='monthly'?fe.amount*12:fe.amount}));
@@ -1867,9 +1871,10 @@ function exportFinanceExcel(){
   const mode=document.getElementById('fin-mode')?.value||'month';
   const y=finYear,m=finMonth;
   const isYear=mode==='year';
-  const gi=calcGI(y,m,isYear),pi=calcPI(y,m,isYear);
+  const gi=calcGI(y,m,isYear),pi=calcPI(y,m,isYear),di=calcDI(y,m,isYear);
   const me=calcME(y,m,isYear),de=calcDE(y,m,isYear),fe=calcFE(y,m,isYear);
-  const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0);
+  const tdi=di.reduce((s,r)=>s+r.amount,0);
+  const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0)+tdi;
   const tme=me.reduce((s,e)=>s+e.amount,0),tde=de.reduce((s,r)=>s+r.amount,0),tfe=fe.reduce((s,f)=>s+f.eff,0);
   const te=tme+tde+tfe,np=ti-te;
   const wb=XLSX.utils.book_new();
@@ -1883,6 +1888,7 @@ function exportFinanceExcel(){
     ['總收入','$'+ti.toLocaleString()],
     ['　拼團收入','$'+gi.reduce((s,x)=>s+x.collected,0).toLocaleString()],
     ['　包車收入','$'+pi.reduce((s,x)=>s+x.collected,0).toLocaleString()],
+    ['　司機客收','$'+tdi.toLocaleString()],
     [],
     ['總支出','$'+te.toLocaleString()],
     ['　手動支出','$'+tme.toLocaleString()],
@@ -1942,10 +1948,11 @@ function exportFinanceExcel(){
 
 function renderFinance(){
   const el=document.getElementById('p-finance'),mode=document.getElementById('fin-mode')?.value||'month',y=finYear,m=finMonth;
-  const gi=calcGI(y,m,mode==='year'),pi=calcPI(y,m,mode==='year'),me=calcME(y,m,mode==='year'),de=calcDE(y,m,mode==='year'),fe=calcFE(y,m,mode==='year');
-  const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0);
+  const gi=calcGI(y,m,mode==='year'),pi=calcPI(y,m,mode==='year'),me=calcME(y,m,mode==='year'),de=calcDE(y,m,mode==='year'),fe=calcFE(y,m,mode==='year'),di=calcDI(y,m,mode==='year');
+  const tdi=di.reduce((s,r)=>s+r.amount,0);
+  const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0)+tdi;
   const tme=me.reduce((s,e)=>s+e.amount,0),tde=de.reduce((s,r)=>s+r.amount,0),tfe=fe.reduce((s,f)=>s+f.eff,0),te=tme+tde+tfe,np=ti-te,pr=ti?Math.round(np/ti*100):0;
-  const monthly=mode==='year'?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0),e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0);return{income:i,exp:e,profit:i-e};}):null;
+  const monthly=mode==='year'?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0),e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0);return{income:i,exp:e,profit:i-e};}):null;
   const maxBar=monthly?Math.max(...monthly.map(d=>Math.max(d.income,d.exp)),1):1;
   el.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
     <select id="fin-mode" onchange="renderFinance()" style="height:34px;font-size:13px"><option value="month"${mode==='month'?' selected':''}>月報</option><option value="year"${mode==='year'?' selected':''}>年報</option></select>
@@ -1992,7 +1999,19 @@ function renderFinance(){
       <td style="text-align:right;color:var(--red)">$${pi.reduce((s,x)=>s+x.cost,0).toLocaleString()}</td>
       <td style="text-align:right;color:var(--green)">$${pi.reduce((s,x)=>s+x.collected-x.cost,0).toLocaleString()}</td>
     </tr></tfoot></table></div>`:''}
-    ${!gi.length&&!pi.length?'<div class="empty" style="padding:1rem">本期無收入</div>':''}
+    ${di.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">司機客收</div>
+    <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable">
+      <thead><tr><th>日期</th><th>司機</th><th>車輛</th><th>備註</th><th style="text-align:right">金額</th></tr></thead>
+      <tbody>${di.map(r=>`<tr>
+        <td>${r.date}</td>
+        <td style="font-size:12px">${r.driverName||'-'}</td>
+        <td style="font-size:12px">${r.car||'-'}</td>
+        <td style="font-size:11px;color:var(--text2)">${r.note||'-'}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600">$${r.amount.toLocaleString()}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="4">司機客收小計</td><td style="text-align:right;color:var(--green)">$${tdi.toLocaleString()}</td></tr></tfoot>
+    </table></div>`:''}
+    ${!gi.length&&!pi.length&&!di.length?'<div class="empty" style="padding:1rem">本期無收入</div>':''}
     <div style="text-align:right;font-size:14px;font-weight:700;color:var(--green)">總收入：$${ti.toLocaleString()}</div>
   </div>
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title" style="margin:0"><i class="ti ti-trending-down" style="color:var(--red)"></i> 支出</div></div>
