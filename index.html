@@ -790,6 +790,13 @@ function renderGroup(){
     </select>
     <button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>
   </div>
+  ${show.length===0?`<div class="empty">
+    ${gfTab==='active'&&doneTours.length?
+      `此處無進行中行程。<br><span style="font-size:12px;color:var(--text2)">已有 ${doneTours.length} 個行程在「已完成」tab，請點上方切換查看。</span>`:
+      gfTab==='done'&&activeTours.length?
+      `此處無已完成行程。`:
+      `目前無行程。`}
+  </div>`:''}
   ${show.map(t=>{
     const dates=getDates(t.id),allBks=getBks(t.id),totalPax=allBks.reduce((s,b)=>s+b.count,0),formedCnt=dates.filter(d=>isFormed(t,d)).length;
     const depAmt=allBks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
