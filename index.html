@@ -2208,9 +2208,18 @@ function checkKmAlert(){const car=document.getElementById('rf-car').value,km=par
 async function saveRec(){
   const date=document.getElementById('rf-date').value,type=document.getElementById('rf-type').value;
   if(!date)return alert('請填寫日期');
-  // [修正] 加油/驗車必須填里程
+  // 加油/驗車必須填里程
   const mileage=parseInt(document.getElementById('rf-mileage').value)||0;
   if((type==='fuel'||type==='inspection')&&!mileage)return alert('加油/驗車記錄必須填寫里程數');
+  // 客收：若有待收項目，強制至少勾選一項
+  if(type==='income'&&!eIds.rec){
+    const balEl0=document.getElementById('rf-balance-items');
+    const items0=JSON.parse(balEl0?.dataset.items||'[]');
+    if(items0.length){
+      const anyChecked=items0.some((_,i)=>document.getElementById('rf-bal-'+i)?.checked);
+      if(!anyChecked)return alert('請至少勾選一項尾款待收項目');
+    }
+  }
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
   const balEl2=document.getElementById('rf-balance-items');
