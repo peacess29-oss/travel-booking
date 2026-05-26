@@ -381,7 +381,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <div class="overlay" id="m-rec"><div class="modal">
   <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
+  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
@@ -1859,9 +1859,13 @@ function calcPI(y,m,isYear){return privates.filter(p=>isYear?inYear(p.start,y):i
 });}
 function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
 function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
-// 司機客收（非關聯 bookings/privates 的額外收入，或無待收項目的現金收入）
+// 司機客收（公司收入：含 income，不含 extra/tips 個人收入）
 function calcDI(y,m,isYear){
   return driverRecs.filter(r=>r.type==='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
+}
+// 司機個人收入（外收/小費，僅顯示參考，不納入公司損益）
+function calcDriverPersonal(y,m,isYear){
+  return driverRecs.filter(r=>(r.type==='extra'||r.type==='tips')&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
 }
 function calcFE(y,m,isYear){
   const ms=y+'-'+String(m+1).padStart(2,'0');
@@ -2012,6 +2016,7 @@ function renderFinance(){
       <tfoot><tr><td colspan="4">司機客收小計</td><td style="text-align:right;color:var(--green)">$${tdi.toLocaleString()}</td></tr></tfoot>
     </table></div>`:''}
     ${!gi.length&&!pi.length&&!di.length?'<div class="empty" style="padding:1rem">本期無收入</div>':''}
+    ${(()=>{const dp=calcDriverPersonal(y,m,mode==='year');const tdp=dp.reduce((s,r)=>s+r.amount,0);if(!dp.length)return'';return`<div style="margin-top:8px"><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">司機個人收入（外收/小費，不納入公司帳務）</div><div class="tbl-wrap" style="margin-bottom:6px"><table class="xtable"><thead><tr><th>日期</th><th>司機</th><th>類別</th><th>備註</th><th style="text-align:right">金額</th></tr></thead><tbody>${dp.map(r=>`<tr><td>${r.date}</td><td style="font-size:12px">${r.driverName||'-'}</td><td><span class="badge" style="background:var(--green-l);color:var(--green-d)">${TYPE_N[r.type]||r.type}</span></td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}</td><td style="text-align:right;color:var(--green);font-weight:600">$${r.amount.toLocaleString()}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4" style="color:var(--text2)">個人小計（不計入公司總收入）</td><td style="text-align:right;color:var(--text2)">$${tdp.toLocaleString()}</td></tr></tfoot></table></div></div>`;})()}
     <div style="text-align:right;font-size:14px;font-weight:700;color:var(--green)">總收入：$${ti.toLocaleString()}</div>
   </div>
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title" style="margin:0"><i class="ti ti-trending-down" style="color:var(--red)"></i> 支出</div></div>
@@ -2060,12 +2065,12 @@ function renderBalance(){
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
+const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
 function renderDriverPage(){
   const el=document.getElementById('p-driver');
   const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
   const myRecs=[...driverRecs.filter(r=>r.driverId===curDriverId)].sort((a,b)=>b.date>a.date?1:-1);
-  const myIncome=myRecs.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+  const myIncome=myRecs.filter(r=>r.type==='income'||r.type==='extra'||r.type==='tips').reduce((s,r)=>s+r.amount,0);
   const myExp=myRecs.filter(r=>r.type!=='income').reduce((s,r)=>s+r.amount,0);
   const fuelRecs=myRecs.filter(r=>r.type==='fuel'&&r.mileage).sort((a,b)=>a.mileage-b.mileage);
   let avgKmL='—';if(fuelRecs.length>=2){const km=fuelRecs[fuelRecs.length-1].mileage-fuelRecs[0].mileage;const l=fuelRecs.slice(1).reduce((s,r)=>s+(r.fuelLiters||0),0);if(l>0)avgKmL=(km/l).toFixed(1)+' km/L';}
@@ -2092,7 +2097,7 @@ function renderDriverPage(){
     <select id="dr-filter-car" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部車輛</option>${carsList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
     <input id="dr-filter-month" type="month" onchange="renderDriverPage()" style="height:34px;font-size:12px;width:135px">
   </div>
-  ${!filtered.length?'<div class="empty">尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=r.type==='income';const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');return`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)'}">${TYPE_N[r.type]||r.type}${mn}</span></td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${isIncome?'var(--green)':'var(--red)'}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`}).join('')}</tbody></table></div>`}`;
+  ${!filtered.length?'<div class="empty">尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=(r.type==='income'||r.type==='extra'||r.type==='tips');const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');return`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)'}">${TYPE_N[r.type]||r.type}${mn}</span></td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${isIncome?'var(--green)':'var(--red)'}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`}).join('')}</tbody></table></div>`}`;
 }
 function getLastKm(carId,excId=''){const recs=driverRecs.filter(r=>r.car===carId&&r.mileage&&r.id!==excId).sort((a,b)=>b.mileage-a.mileage);return recs.length?recs[0].mileage:0;}
 function openRec(id=''){
@@ -2134,7 +2139,8 @@ function toggleRecFields(){
   document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
   const date=document.getElementById('rf-date').value;
   const noteEl=document.getElementById('rf-note');
-  // 所有支出類別：若備註空白且是新增，自動帶入當天派車訂單
+  const isPersonalIncome=(t==='extra'||t==='tips');
+  // 所有非客收類別（含外收/小費）：若備註空白且是新增，自動帶入當天派車訂單
   if(t!=='income'&&!eIds.rec&&date&&!noteEl.value.trim()){
     const hint=getDispatchHint(date);
     if(hint){noteEl.value=hint;noteEl.dataset.autoFilled='1';}
@@ -2231,7 +2237,7 @@ async function saveRec(){
   const mileage=parseInt(document.getElementById('rf-mileage').value)||0;
   if((type==='fuel'||type==='inspection')&&!mileage)return alert('加油/驗車記錄必須填寫里程數');
   // 客收：若有待收項目，強制至少勾選一項
-  if(type==='income'&&!eIds.rec){
+  if(type==='income'&&type!=='extra'&&type!=='tips'&&!eIds.rec){
     const balEl0=document.getElementById('rf-balance-items');
     const items0=JSON.parse(balEl0?.dataset.items||'[]');
     if(items0.length){
