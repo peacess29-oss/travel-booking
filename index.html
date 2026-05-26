@@ -736,15 +736,44 @@ async function submitPub(){
 }
 
 // ══════════════════ PAGE: 拼團行程 ══════════════════
+function setGfTab(v){
+  const el=document.getElementById('gf-tab');
+  if(el) el.value=v;
+  // 重建，用隱藏 input 的值
+  renderGroup();
+}
+function setPvTab(v){
+  const el=document.getElementById('pv-tab');
+  if(el) el.value=v;
+  renderPrivate();
+}
 function renderGroup(){
   const el=document.getElementById('p-group');
+  const today=new Date().toISOString().slice(0,10);
+  const gfTab=document.getElementById('gf-tab')?.value||'active';
   const selEl=document.getElementById('gf-sel');
   const fv=selEl?selEl.value:'';
-  const show=fv?tours.filter(t=>t.id===fv):tours;
+  // 判斷行程是否已完成（所有有報名的日期都已過）
+  function isTourDone(t){
+    const dates=getDates(t.id);
+    if(!dates.length) return false;
+    const tdays=t.days||1;
+    return dates.every(d=>{let ed=d;if(tdays>1){const e=new Date(d);e.setDate(e.getDate()+tdays-1);ed=e.toISOString().slice(0,10);}return ed<today;});
+  }
+  const activeTours=tours.filter(t=>!isTourDone(t));
+  const doneTours=tours.filter(t=>isTourDone(t));
+  const showAll=gfTab==='done'?doneTours:activeTours;
+  const show=fv?showAll.filter(t=>t.id===fv):showAll;
   if(!tours.length){el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">拼團行程</span><button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button></div><div class="empty">尚無行程</div>`;return;}
-  el.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px"><option value="">全部行程（${tours.length}）</option>${tours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}</select>
-    <button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>
+  el.innerHTML=`
+  <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
+    <button class="nav-tab${gfTab==='active'?' active':''}" style="border-radius:0" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 進行中（${activeTours.length}）</button>
+    <button class="nav-tab${gfTab==='done'?' active':''}" style="border-radius:0" onclick="setGfTab('done')"><i class="ti ti-check"></i> 已完成（${doneTours.length}）</button>
+  </div>
+  <input type="hidden" id="gf-tab" value="${gfTab}">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px"><option value="">全部（${showAll.length}）</option>${showAll.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}</select>
+    ${gfTab==='active'?`<button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>`:''}
   </div>
   ${show.map(t=>{
     const dates=getDates(t.id),allBks=getBks(t.id),totalPax=allBks.reduce((s,b)=>s+b.count,0),formedCnt=dates.filter(d=>isFormed(t,d)).length;
@@ -976,41 +1005,55 @@ async function delBook(){
 // ══════════════════ PAGE: 個人包車團 ══════════════════
 function renderPrivate(){
   const el=document.getElementById('p-private');
+  const pvTab=document.getElementById('pv-tab')?.value||'active';
   const fv=document.getElementById('pv-filter')?.value||'all';
-  let list=privates;
-  const today=new Date().toISOString().slice(0,10);
-  // 預先計算各分類數量
-  const cntAll=privates.length;
-  const cntPend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
-  const cntAssigned=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車')).length;
-  const cntActive=privates.filter(p=>getPrivStatus(p).label.startsWith('出團中')).length;
-  const cntDone=privates.filter(p=>getPrivStatus(p).done).length;
-  if(fv==='pending')list=privates.filter(p=>getPrivStatus(p).label==='待派車');
-  else if(fv==='assigned')list=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車'));
-  else if(fv==='active')list=privates.filter(p=>getPrivStatus(p).label.startsWith('出團中'));
-  else if(fv==='done')list=privates.filter(p=>getPrivStatus(p).done);
-  else if(fv==='car')list=privates.filter(p=>p.type==='car');
-  else if(fv==='ch')list=privates.filter(p=>p.type==='car+hotel');
-  // 全部：顯示所有訂單（含已完成）
-  // else fv==='all'：list 保持 privates 全部
-  list=[...list].sort((a,b)=>a.start>b.start?1:-1);
-  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-    <select id="pv-filter" onchange="renderPrivate()" style="height:36px;font-size:13px">
-      <option value="all"${fv==='all'?' selected':''}>全部（${cntAll}）</option>
+  // 依 tab 分離進行中與已完成
+  const activePrivs=privates.filter(p=>!getPrivStatus(p).done);
+  const donePrivs=privates.filter(p=>getPrivStatus(p).done);
+  const baseList=pvTab==='done'?donePrivs:activePrivs;
+  let list=baseList;
+  // 進行中才有子篩選
+  const cntPend=activePrivs.filter(p=>getPrivStatus(p).label==='待派車').length;
+  const cntAssigned=activePrivs.filter(p=>getPrivStatus(p).label.startsWith('已派車')).length;
+  const cntActive=activePrivs.filter(p=>getPrivStatus(p).label.startsWith('出團中')).length;
+  if(pvTab==='active'){
+    if(fv==='pending')list=activePrivs.filter(p=>getPrivStatus(p).label==='待派車');
+    else if(fv==='assigned')list=activePrivs.filter(p=>getPrivStatus(p).label.startsWith('已派車'));
+    else if(fv==='active')list=activePrivs.filter(p=>getPrivStatus(p).label.startsWith('出團中'));
+    else if(fv==='car')list=activePrivs.filter(p=>p.type==='car');
+    else if(fv==='ch')list=activePrivs.filter(p=>p.type==='car+hotel');
+    else list=activePrivs;
+  }
+  list=[...list].sort((a,b)=>pvTab==='done'?b.start>a.start?1:-1:a.start>b.start?1:-1);
+  el.innerHTML=`
+  <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
+    <button class="nav-tab${pvTab==='active'?' active':''}" style="border-radius:0" onclick="setPvTab('active')"><i class="ti ti-car"></i> 進行中（${activePrivs.length}）</button>
+    <button class="nav-tab${pvTab==='done'?' active':''}" style="border-radius:0" onclick="setPvTab('done')"><i class="ti ti-check"></i> 已完成（${donePrivs.length}）</button>
+  </div>
+  <input type="hidden" id="pv-tab" value="${pvTab}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    ${pvTab==='active'?`<select id="pv-filter" onchange="renderPrivate()" style="height:36px;font-size:13px">
+      <option value="all"${fv==='all'?' selected':''}>全部（${activePrivs.length}）</option>
       <option value="pending"${fv==='pending'?' selected':''}>待派車（${cntPend}）</option>
       <option value="assigned"${fv==='assigned'?' selected':''}>已派車待出團（${cntAssigned}）</option>
       <option value="active"${fv==='active'?' selected':''}>出團中（${cntActive}）</option>
-      <option value="done"${fv==='done'?' selected':''}>完成出團（${cntDone}）</option>
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
-    </select>
+    </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
     <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
-    <div class="stat-card"><div class="stat-label">總數</div><div class="stat-val">${privates.length}</div></div>
+    ${pvTab==='done'?`
+    <div class="stat-card"><div class="stat-label">已完成總數</div><div class="stat-val" style="color:var(--green)">${donePrivs.length}</div></div>
+    <div class="stat-card"><div class="stat-label">完成總營收</div><div class="stat-val" style="font-size:13px">$${donePrivs.reduce((s,p)=>s+p.price,0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">已收款</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${donePrivs.reduce((s,p)=>s+(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">未收款</div><div class="stat-val" style="font-size:13px;color:var(--red)">$${donePrivs.reduce((s,p)=>s+(p.depositPaid?0:p.deposit)+(p.balancePaid?0:(p.price-p.deposit)),0).toLocaleString()}</div></div>
+    `:`
+    <div class="stat-card"><div class="stat-label">總數</div><div class="stat-val">${activePrivs.length}</div></div>
     <div class="stat-card"><div class="stat-label">待派車</div><div class="stat-val" style="color:var(--red)">${cntPend}</div></div>
-    <div class="stat-card"><div class="stat-label">預期總營收</div><div class="stat-val" style="font-size:13px">$${privates.reduce((s,p)=>s+p.price,0).toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">已收款</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${privates.reduce((s,p)=>s+(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">預期總營收</div><div class="stat-val" style="font-size:13px">$${activePrivs.reduce((s,p)=>s+p.price,0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">已收款</div><div class="stat-val" style="font-size:13px;color:var(--green)">$${activePrivs.reduce((s,p)=>s+(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0),0).toLocaleString()}</div></div>
+    `}
   </div>
   ${!list.length?'<div class="empty">無資料</div>':`<div class="tbl-wrap"><table class="xtable">
     <thead><tr><th>團名</th><th>類型</th><th>出發</th><th>結束</th><th>天</th><th>人</th><th>車</th><th>酒店</th><th>晚</th><th>報價</th><th>定金</th><th>尾款</th><th class="chk">定</th><th class="chk">尾</th><th class="chk">險</th><th>派車</th><th>利潤</th><th></th></tr></thead>
