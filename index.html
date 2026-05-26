@@ -911,7 +911,29 @@ function alertDep(tid,date){const bks=getDateBks(tid,date).filter(b=>!b.depositP
 function openTour(id=''){
   eIds.tour=id||null;const t=id?tours.find(x=>x.id===id):null;
   document.getElementById('mt-title').textContent=id?'編輯行程':'新增拼團行程';
-  document.getElementById('btn-del-tour').style.display=id?'inline-flex':'none';
+  // 有已完成日期的行程，刪除按鈕改為禁用並顯示提示
+  const hasDone=(()=>{
+    if(!id) return false;
+    const t2=tours.find(x=>x.id===id);
+    const today2=new Date().toISOString().slice(0,10);
+    const tdays2=t2?.days||1;
+    return getDates(id).some(d=>{let ed=d;if(tdays2>1){const e=new Date(d);e.setDate(e.getDate()+tdays2-1);ed=e.toISOString().slice(0,10);}return ed<today2;});
+  })();
+  const delBtn=document.getElementById('btn-del-tour');
+  if(id){
+    delBtn.style.display='inline-flex';
+    if(hasDone){
+      delBtn.disabled=true;
+      delBtn.title='有已完成的出發日期，無法刪除';
+      delBtn.style.opacity='0.4';
+    } else {
+      delBtn.disabled=false;
+      delBtn.title='';
+      delBtn.style.opacity='';
+    }
+  } else {
+    delBtn.style.display='none';
+  }
   document.getElementById('tf-name').value=t?.name||'';
   document.getElementById('tf-dep-wd').value=t?.depositWd||'';document.getElementById('tf-dep-wk').value=t?.depositWk||'';
   document.getElementById('tf-pr-wd').value=t?.priceWd||'';document.getElementById('tf-pr-wk').value=t?.priceWk||'';
@@ -925,9 +947,22 @@ async function saveTour(){
   if(eIds.tour)await db.collection('tours').doc(eIds.tour).update(data);else await db.collection('tours').doc(uid()).set(data);cm('tour');
 }
 async function delTour(){
+  const tourId=eIds.tour;
+  const t=tours.find(x=>x.id===tourId);
+  const today=new Date().toISOString().slice(0,10);
+  const tdays=(t?.days||1);
+  // 檢查是否有已完成的出發日期（結束日已過）
+  const doneDates=getDates(tourId).filter(d=>{
+    let ed=d;
+    if(tdays>1){const e=new Date(d);e.setDate(e.getDate()+tdays-1);ed=e.toISOString().slice(0,10);}
+    return ed<today;
+  });
+  if(doneDates.length){
+    alert(`⚠️ 無法刪除！\n此行程有 ${doneDates.length} 個已完成的出發日期（${doneDates.slice(0,3).join('、')}${doneDates.length>3?'…':''}）。\n\n已完成的行程記錄應予以保留，請改用「封存」概念——直接移除該日期的報名，或保留此行程記錄。`);
+    return;
+  }
   if(!confirm('確定刪除此行程？\n該行程所有報名記錄及相關派車記錄也將一併刪除。'))return;
   setSS('syncing','刪除中…');
-  const tourId=eIds.tour;
   // 找出此行程的所有出發日期
   const tourDates=[...new Set(bookings.filter(b=>b.tourId===tourId).map(b=>b.date))];
   const t=tours.find(x=>x.id===tourId);
