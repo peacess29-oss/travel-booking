@@ -2212,7 +2212,18 @@ async function saveRec(){
   const mileage=parseInt(document.getElementById('rf-mileage').value)||0;
   if((type==='fuel'||type==='inspection')&&!mileage)return alert('加油/驗車記錄必須填寫里程數');
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',};
+  // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
+  const balEl2=document.getElementById('rf-balance-items');
+  const balItems2=JSON.parse(balEl2?.dataset.items||'[]');
+  const relatedBookingIds=[];const relatedPrivateIds=[];
+  if(type==='income'&&!eIds.rec){
+    balItems2.forEach((_,idx)=>{
+      if(!document.getElementById('rf-bal-'+idx)?.checked) return;
+      if(balItems2[idx].type==='group'&&balItems2[idx].bookingId) relatedBookingIds.push(balItems2[idx].bookingId);
+      if(balItems2[idx].type==='private'&&balItems2[idx].privateId) relatedPrivateIds.push(balItems2[idx].privateId);
+    });
+  }
+  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds};
   if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);
   // 客收：自動標記勾選的尾款項目為已收
   if(type==='income'&&!eIds.rec){
@@ -2235,7 +2246,30 @@ async function saveRec(){
   }
   cm('rec');
 }
-async function delRec(){if(!confirm('確定刪除？'))return;await db.collection('driverRecs').doc(eIds.rec).delete();cm('rec');}
+async function delRec(){
+  if(!confirm('確定刪除此記錄？\n若此筆客收曾標記尾款已收，將同步還原為未收狀態。'))return;
+  const rec=driverRecs.find(x=>x.id===eIds.rec);
+  setSS('syncing','刪除中…');
+  await db.collection('driverRecs').doc(eIds.rec).delete();
+  // 還原相關 bookings 的 balancePaid
+  if(rec?.relatedBookingIds?.length){
+    for(const bid of rec.relatedBookingIds){
+      await db.collection('bookings').doc(bid).update({balancePaid:false});
+      const bi=bookings.findIndex(b=>b.id===bid);
+      if(bi>=0) bookings[bi]={...bookings[bi],balancePaid:false};
+    }
+  }
+  // 還原相關 privates 的 balancePaid
+  if(rec?.relatedPrivateIds?.length){
+    for(const pid of rec.relatedPrivateIds){
+      await db.collection('privates').doc(pid).update({balancePaid:false});
+      const pi=privates.findIndex(p=>p.id===pid);
+      if(pi>=0) privates[pi]={...privates[pi],balancePaid:false};
+    }
+  }
+  cm('rec');
+  refresh();
+}
 
 // ══════════════════ PAGE: 設定 ══════════════════
 function renderSettings(){
