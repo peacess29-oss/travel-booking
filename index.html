@@ -244,6 +244,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div>
     <div><label>帳號（手動輸入）</label><input id="pf-contact" placeholder="LINE ID / 微信號…"></div>
   </div>
+  <div class="divider"></div>
+  <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">特殊需求裝備</div>
+  <div class="fg3">
+    <div><label>安全座椅</label><input id="pf-carseat" type="number" min="0" value="0" placeholder="0"></div>
+    <div><label>嬰兒車</label><input id="pf-stroller" type="number" min="0" value="0" placeholder="0"></div>
+    <div><label>輪椅</label><input id="pf-wheelchair" type="number" min="0" value="0" placeholder="0"></div>
+  </div>
   <div class="mb10"><label>備註</label><textarea id="pf-note" style="height:48px" placeholder="接機、特殊需求…"></textarea></div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pf-depaid" style="width:14px;height:14px"> 定金已付</label>
@@ -530,6 +537,15 @@ function isFormed(t,d){
 }
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
+
+// 產生特殊需求標籤（安全座椅/嬰兒車/輪椅）
+function specialNeedsHtml(p,style=''){
+  const tags=[];
+  if(p.carSeat>0) tags.push(`<span class="badge badge-amber" style="${style}">🪑 安全座椅×${p.carSeat}</span>`);
+  if(p.stroller>0) tags.push(`<span class="badge badge-blue" style="${style}">🍼 嬰兒車×${p.stroller}</span>`);
+  if(p.wheelchair>0) tags.push(`<span class="badge badge-red" style="${style}">♿ 輪椅×${p.wheelchair}</span>`);
+  return tags.join(' ');
+}
 function getPrivBusCars(p){return p.cars||1;}
 // 取得包車團每台車的指派司機（busAssignedDrivers:{0:'甲',1:'乙'}）
 function getPrivBusDrivers(p){return p.busAssignedDrivers||{};}
@@ -1001,7 +1017,10 @@ function renderPrivate(){
     <tbody>${list.map(p=>{
       const bal=p.price-p.deposit,cost=(p.driverCost||0)+(p.hotelCost||0)+(p.insCost||0),profit=p.price-cost;
       return`<tr style="${!p.assignedDriver?'background:rgba(160,32,32,.03)':''}">
-        <td style="font-weight:600">${p.name}</td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
+        <td style="font-weight:600">
+          ${p.name}
+          ${(p.carSeat||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:3px">${specialNeedsHtml(p,'font-size:10px;padding:1px 5px')}</div>`:''}
+        </td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
         <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
         <td style="font-size:11px">${(()=>{
           if(!p.nightlyHotels?.length) return `<span style="color:var(--text2)">${p.hotelName||'-'}</span>`;
@@ -1063,6 +1082,9 @@ function openPriv(id=''){
   document.getElementById('pf-ins').value=p?.insCost||0;
   document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
   document.getElementById('pf-ch').value=p?.channel||'WhatsApp';document.getElementById('pf-note').value=p?.note||'';
+  document.getElementById('pf-carseat').value=p?.carSeat||0;
+  document.getElementById('pf-stroller').value=p?.stroller||0;
+  document.getElementById('pf-wheelchair').value=p?.wheelchair||0;
   document.getElementById('pf-depaid').checked=!!p?.depositPaid;document.getElementById('pf-balpaid').checked=!!p?.balancePaid;document.getElementById('pf-inspaid').checked=!!p?.insured;
   if(document.getElementById('pf-ins-chk'))document.getElementById('pf-ins-chk').checked=!!(p?.needInsurance||p?.insCost>0);
   // [修正] 移除對不存在的 pf-hotel 的操作
@@ -1196,7 +1218,7 @@ async function savePriv(){
   const iCost=parseInt(document.getElementById('pf-ins').value)||0;
   const firstHotel=nightlyHotels.length?hotels.find(h=>h.id===nightlyHotels[0]?.hotelId):null;
   const hotelSummary=nightlyHotels.filter(n=>n.hotelId).map((n,i)=>{const h=hotels.find(x=>x.id===n.hotelId);return h?`第${i+1}晚:${h.name}`:''}).filter(Boolean).join(', ');
-  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
+  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),carSeat:parseInt(document.getElementById('pf-carseat').value)||0,stroller:parseInt(document.getElementById('pf-stroller').value)||0,wheelchair:parseInt(document.getElementById('pf-wheelchair').value)||0,depositPaid:document.getElementById('pf-depaid').checked,balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
 async function delPriv(){
@@ -1464,8 +1486,11 @@ function assignDriverModal(orderId,type,label,start,end){
 
   // 訂單摘要
   const days=calcDays(start,end);
+  // 找出對應的包車團，取得特殊需求資訊
+  const metaPriv=type==='private'?privates.find(p=>p.id===orderId||(orderId.includes('_bus')&&p.id===orderId.slice(0,orderId.lastIndexOf('_bus')))):null;
+  const needsHtml=metaPriv?specialNeedsHtml(metaPriv,'font-size:11px'):'';
   document.getElementById('assign-order-meta').innerHTML=
-    `<i class="ti ti-calendar-event"></i> <strong>${label}</strong> &nbsp;|&nbsp; ${start}${start!==end?' ~ '+end:''} &nbsp;|&nbsp; ${days}天 &nbsp;|&nbsp; 出發 ${start}`;
+    `<i class="ti ti-calendar-event"></i> <strong>${label}</strong> &nbsp;|&nbsp; ${start}${start!==end?' ~ '+end:''} &nbsp;|&nbsp; ${days}天${needsHtml?' &nbsp;|&nbsp; '+needsHtml:''} &nbsp;|&nbsp; 出發 ${start}`;
 
   // 智慧建議區塊
   const tipEl=document.getElementById('assign-smart-tip');
