@@ -754,51 +754,51 @@ function renderGroup(){
   const selEl=document.getElementById('gf-sel');
   const fv=selEl?selEl.value:'';
 
-  // 判斷行程是否「已完成」：所有有報名的出發日期（含行程天數的結束日）都已過
-  // 注意：沒有任何報名的行程視為「進行中」（仍可接受報名）
-  function isTourDone(t){
-    const dates=getDates(t.id);
-    if(!dates.length) return false; // 無報名 → 視為未完成
+  // 判斷某出發日期是否已完成（結束日已過）
+  function isDateDone(t,d){
     const tdays=t.days||1;
-    return dates.every(d=>{
-      let ed=d;
-      if(tdays>1){const e=new Date(d);e.setDate(e.getDate()+tdays-1);ed=e.toISOString().slice(0,10);}
-      return ed<today;
-    });
+    let ed=d;
+    if(tdays>1){const e=new Date(d);e.setDate(e.getDate()+tdays-1);ed=e.toISOString().slice(0,10);}
+    return ed<today;
   }
-
-  // 所有行程都留在此頁，只依 tab 分組顯示
-  const activeTours=tours.filter(t=>!isTourDone(t));
-  const doneTours=tours.filter(t=>isTourDone(t));
-  const tabTours=gfTab==='done'?doneTours:activeTours;
-  const show=fv?tabTours.filter(t=>t.id===fv):tabTours;
 
   if(!tours.length){
     el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">拼團行程</span><button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button></div><div class="empty">尚無行程</div>`;
     return;
   }
+
+  const show=fv?tours.filter(t=>t.id===fv):tours;
+
+  // 出團記錄：所有行程的已過期出發日期
+  const doneRecords=[];
+  tours.forEach(t=>{
+    getDates(t.id).filter(d=>isDateDone(t,d)).forEach(d=>{
+      doneRecords.push({t,d});
+    });
+  });
+  doneRecords.sort((a,b)=>b.d>a.d?1:-1); // 最新的在前
+
   el.innerHTML=`
   <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border)">
-    <button class="nav-tab${gfTab==='active'?' active':''}" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 進行中（${activeTours.length}）</button>
-    <button class="nav-tab${gfTab==='done'?' active':''}" onclick="setGfTab('done')"><i class="ti ti-check"></i> 已完成（${doneTours.length}）</button>
+    <button class="nav-tab${gfTab==='active'?' active':''}" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 拼團行程（${tours.length}）</button>
+    <button class="nav-tab${gfTab==='records'?' active':''}" onclick="setGfTab('records')"><i class="ti ti-history"></i> 出團記錄（${doneRecords.length}）</button>
   </div>
   <input type="hidden" id="gf-tab" value="${gfTab}">
+
+  ${gfTab==='active'?`
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
     <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px">
-      <option value="">全部（${tabTours.length}）</option>
-      ${tabTours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}
+      <option value="">全部行程（${tours.length}）</option>
+      ${tours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}
     </select>
     <button class="btn btn-primary btn-sm" onclick="openTour()"><i class="ti ti-plus"></i> 新增行程</button>
   </div>
-  ${show.length===0?`<div class="empty">
-    ${gfTab==='active'&&doneTours.length?
-      `此處無進行中行程。<br><span style="font-size:12px;color:var(--text2)">已有 ${doneTours.length} 個行程在「已完成」tab，請點上方切換查看。</span>`:
-      gfTab==='done'&&activeTours.length?
-      `此處無已完成行程。`:
-      `目前無行程。`}
-  </div>`:''}
   ${show.map(t=>{
-    const dates=getDates(t.id),allBks=getBks(t.id),totalPax=allBks.reduce((s,b)=>s+b.count,0),formedCnt=dates.filter(d=>isFormed(t,d)).length;
+    const allDates=getDates(t.id);
+    // 只顯示未過期的出發日期
+    const dates=allDates.filter(d=>!isDateDone(t,d));
+    const doneDatesCnt=allDates.filter(d=>isDateDone(t,d)).length;
+    const allBks=getBks(t.id),totalPax=allBks.reduce((s,b)=>s+b.count,0),formedCnt=dates.filter(d=>isFormed(t,d)).length;
     const depAmt=allBks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
     return`<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -806,20 +806,45 @@ function renderGroup(){
           <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
             <span>平日 $${t.depositWd||0}/$${t.priceWd||0}</span><span>假日 <span style="color:var(--red)">$${t.depositWk||0}/$${t.priceWk||0}</span></span>
             <span>成團${t.min||4}人/每車${t.busMax||8}人</span>${t.needInsurance?`<span style="color:var(--amber)"><i class="ti ti-shield"></i> 旅遊險$${t.insPrice||0}/人</span>`:''}
+            ${doneDatesCnt?`<span style="color:var(--text3)"><i class="ti ti-history"></i> 已出團${doneDatesCnt}次</span>`:''}
           </div>
         </div>
         <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="openTour('${t.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-primary btn-sm" onclick="openBook('${t.id}')"><i class="ti ti-user-plus"></i> 報名</button></div>
       </div>
       <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
-        <div class="stat-card"><div class="stat-label">有報名日期</div><div class="stat-val">${dates.length}</div></div>
+        <div class="stat-card"><div class="stat-label">待出發日期</div><div class="stat-val">${dates.length}</div></div>
         <div class="stat-card"><div class="stat-label">已成團</div><div class="stat-val" style="color:var(--green)">${formedCnt}</div></div>
         <div class="stat-card"><div class="stat-label">總報名人數</div><div class="stat-val">${totalPax}</div></div>
         <div class="stat-card"><div class="stat-label">已收定金</div><div class="stat-val" style="font-size:14px">$${depAmt.toLocaleString()}</div></div>
       </div>
-      ${dates.length===0?'<div class="empty" style="padding:1rem">尚無報名</div>':dates.map(d=>renderDateTable(t,d)).join('')}
-    </div>`
-  }).join('')}`;
+      ${dates.length===0?'<div class="empty" style="padding:1rem">目前無待出發報名</div>':dates.map(d=>renderDateTable(t,d)).join('')}
+    </div>`;
+  }).join('')}
+  `:`
+  <!-- 出團記錄 tab -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <select id="gf-sel" onchange="renderGroup()" style="flex:1;max-width:260px;height:36px">
+      <option value="">全部行程（${tours.length}）</option>
+      ${tours.map(t=>`<option value="${t.id}"${t.id===fv?' selected':''}>${t.name}</option>`).join('')}
+    </select>
+  </div>
+  ${doneRecords.filter(r=>!fv||r.t.id===fv).length===0
+    ?'<div class="empty">尚無出團記錄</div>'
+    :doneRecords.filter(r=>!fv||r.t.id===fv).map(({t,d})=>`
+    <div class="card" style="border-left:3px solid var(--green)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <span style="font-weight:700;font-size:14px">${t.name}</span>
+          <span style="font-size:12px;color:var(--text2);margin-left:8px">${d} 週${WD[new Date(d).getDay()]}${isHol(d)?' 假日':''}</span>
+        </div>
+        <button class="btn btn-sm" onclick="openBook('${t.id}','${d}')"><i class="ti ti-edit"></i> 查看報名</button>
+      </div>
+      ${renderDateTable(t,d)}
+    </div>`).join('')
+  }
+  `}`;
 }
+
 function renderDateTable(t,d){
   const bks=getDateBks(t.id,d),total=bks.reduce((s,b)=>s+b.count,0);
   const busMax=t.busMax||8,minPax=t.min||4;
