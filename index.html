@@ -544,11 +544,14 @@ function getPrivStatus(p){
    const today=new Date().toISOString().slice(0,10);
    if(p.end<today) return {label:'已完成',cls:'badge-green',done:true};
    const fullyAssigned=isPrivFullyAssigned(p);
-   if(p.start<=today&&today<=p.end) return {label:'進行中',cls:'badge-amber',done:false};
+   const isActive=p.start<=today&&today<=p.end;
+   // 未派車
    if(!fullyAssigned) return {label:'待派車',cls:'badge-red',done:false};
+   // 已派車：日期在區間內 → 出團中；否則 → 已派車待出團
    const cars=getPrivBusCars(p);
    const drv=getPrivBusDrivers(p);
    const drvStr=Array.from({length:cars},(_,i)=>drv[i]||'?').join('/');
+   if(isActive) return {label:'出團中 '+drvStr,cls:'badge-amber',done:false};
    return {label:'已派車 '+drvStr,cls:'badge-blue',done:false};
 }
 
@@ -964,11 +967,11 @@ function renderPrivate(){
   const cntAll=privates.length;
   const cntPend=privates.filter(p=>getPrivStatus(p).label==='待派車').length;
   const cntAssigned=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車')).length;
-  const cntActive=privates.filter(p=>getPrivStatus(p).label==='進行中').length;
+  const cntActive=privates.filter(p=>getPrivStatus(p).label.startsWith('出團中')).length;
   const cntDone=privates.filter(p=>getPrivStatus(p).done).length;
   if(fv==='pending')list=privates.filter(p=>getPrivStatus(p).label==='待派車');
   else if(fv==='assigned')list=privates.filter(p=>getPrivStatus(p).label.startsWith('已派車'));
-  else if(fv==='active')list=privates.filter(p=>getPrivStatus(p).label==='進行中');
+  else if(fv==='active')list=privates.filter(p=>getPrivStatus(p).label.startsWith('出團中'));
   else if(fv==='done')list=privates.filter(p=>getPrivStatus(p).done);
   else if(fv==='car')list=privates.filter(p=>p.type==='car');
   else if(fv==='ch')list=privates.filter(p=>p.type==='car+hotel');
@@ -1024,7 +1027,8 @@ function renderPrivate(){
             const isDone=p.end<today2;
             let cls=assigned?'badge-green':'badge-red';
             let lbl=assigned?'✓ '+assigned:'待派';
-            if(isActive){cls='badge-amber';lbl=assigned?'進行中 '+assigned:'進行中';}
+            if(assigned&&isActive){cls='badge-amber';lbl='出團中 '+assigned;}
+            else if(!assigned&&isActive){cls='badge-amber';lbl='出團中（未派）';}
             if(isDone){cls='badge-green';lbl='完成';}
             return`<span class="badge ${cls}" style="margin:1px">${BUS[i]}車 ${lbl}</span>`;
           }).join('');
