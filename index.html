@@ -1619,7 +1619,7 @@ function assignDriverModal(orderId,type,label,start,end){
     tipEl.innerHTML=`<div class="warn-box" style="font-size:13px">
       <div style="font-weight:600;margin-bottom:8px"><i class="ti ti-bulb"></i> 智慧建議：將此訂單安排給 ${drv.name}</div>
       <div style="font-size:12px;margin-bottom:10px;line-height:1.7">
-        新訂單 <strong>${days}天</strong> &gt; 現有衝突排班 <strong>${smartSuggest.smart.conflictDays}天</strong>（${conflictStr}）<br>
+        新訂單 <strong>${days}天</strong> > 現有衝突排班 <strong>${smartSuggest.smart.conflictDays}天</strong>（${conflictStr}）<br>
         建議將新訂單指派給 <strong>${drv.name}</strong>，衝突舊排班刪除並設回待派車或指定外派司機。
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
@@ -2761,7 +2761,7 @@ function renderSettings(){
       <button class="btn btn-success btn-sm" onclick="exportBackupExcel()"><i class="ti ti-file-spreadsheet"></i> 匯出 Excel 備份</button>
       <button class="btn btn-sm" onclick="exportBackupJSON()"><i class="ti ti-file-code"></i> 匯出 JSON 備份</button>
     </div>
-  </div>\`;
+  </div>`;
   // 更新上次備份狀態顯示
   setTimeout(updateBackupStatus,0);
 }
@@ -2958,8 +2958,8 @@ function openDriver(id='',forceType=''){
   // 填充常用車輛下拉（來自 carsList）
   const carSel=document.getElementById('dvf-car');
   if(carSel){
-    carSel.innerHTML='<option value="">— 不指定 —</option>'+
-      carsList.map(c=>`<option value="${c}"${c===d?.preferredCar?' selected':''}>${c}</option>`).join('');
+    const carOpts=carsList.map(c=>'<option value="'+c+'"'+(c===d?.preferredCar?' selected':'')+'>'+c+'</option>').join('');
+    carSel.innerHTML='<option value="">— 不指定 —</option>'+carOpts;
   }
   document.getElementById('dvf-note').value=d?.note||'';
   document.getElementById('dvf-car-sec').style.display=(d?.type||forceType||'own')==='own'?'block':'none';
