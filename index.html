@@ -615,7 +615,12 @@ function populateLoginSel(){
 // [修正] 管理員密碼改從 Firestore meta 讀取，不再硬編碼在前端
 // 若 meta/config 不存在則 fallback 到預設值（首次部署時使用）
 let ADMIN_PASSWORD='jay888';
-db.collection('meta').doc('config').get().then(s=>{if(s.exists&&s.data().adminPwd)ADMIN_PASSWORD=s.data().adminPwd;}).catch(()=>{});
+// 嘗試從 Firestore 讀取管理員密碼，失敗時 fallback 預設值，不阻塞登入
+try{
+  db.collection('meta').doc('config').get()
+    .then(s=>{if(s.exists&&s.data().adminPwd)ADMIN_PASSWORD=s.data().adminPwd;})
+    .catch(()=>{}); // Firestore 未就緒時靜默忽略
+}catch(e){}
 
 const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
