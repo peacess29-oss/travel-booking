@@ -1964,7 +1964,16 @@ async function delDisp(){
 // ══════════════════ PAGE: 財務報表 ══════════════════
 const EXP_CAT={salary:'司機薪資',outsource:'外派費用',hotel:'住宿成本',insurance:'旅遊險',fuel:'油錢',parking:'停車費',toll:'過路費',maint:'保養/維修',ad:'廣告行銷',misc:'其他雜支'};
 const FIXED_CAT={insurance:'車輛保險',license:'牌照稅',registration:'行照費',loan:'車輛貸款',ad:'廣告行銷',other:'其他'};
-function calcGI(y,m,isYear){return tours.map(t=>{const bks=bookings.filter(b=>b.tourId===t.id&&(isYear?inYear(b.date,y):inMonth(b.date,y,m)));const depPaid=bks.filter(b=>b.depositPaid).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);const balPaid=bks.filter(b=>b.balancePaid).reduce((s,b)=>s+b.count*(getPrice(t,b.date,'price')-getPrice(t,b.date,'deposit')),0);return{name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bks.reduce((s,b)=>s+b.count,0),cnt:bks.length};}).filter(x=>x.collected>0||x.cnt>0);}
+function calcGI(y,m,isYear){return tours.map(t=>{
+  const allBks=bookings.filter(b=>b.tourId===t.id);
+  // 定金：以報名日（regdate）歸屬月份；若無報名日則以出發日
+  const depPaid=allBks.filter(b=>b.depositPaid&&(isYear?inYear(b.regdate||b.date,y):inMonth(b.regdate||b.date,y,m))).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
+  // 尾款：以出發日歸屬月份
+  const balPaid=allBks.filter(b=>b.balancePaid&&(isYear?inYear(b.date,y):inMonth(b.date,y,m))).reduce((s,b)=>s+b.count*(getPrice(t,b.date,'price')-getPrice(t,b.date,'deposit')),0);
+  // 本期有任何報名（含定金或尾款）才顯示
+  const bksInPeriod=allBks.filter(b=>isYear?inYear(b.regdate||b.date,y)||inYear(b.date,y):inMonth(b.regdate||b.date,y,m)||inMonth(b.date,y,m));
+  return{name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bksInPeriod.reduce((s,b)=>s+b.count,0),cnt:bksInPeriod.length};
+}).filter(x=>x.collected>0||x.cnt>0);}
 function calcPI(y,m,isYear){return privates.filter(p=>isYear?inYear(p.start,y):inMonth(p.start,y,m)).map(p=>{
   const collected=(p.depositPaid?p.deposit:0)+(p.balancePaid?(p.price-p.deposit):0);
   const isOut=p.outsource;
