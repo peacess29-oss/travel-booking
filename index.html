@@ -641,6 +641,7 @@ function loginAs(role){
   initListeners();
   showPage('p-group');
   setTimeout(checkUrgentDispatch,2000);
+  setTimeout(checkAutoBackup,3000);
 }
 function checkUrgentDispatch(){
   const today=new Date().toISOString().slice(0,10);
@@ -2742,8 +2743,175 @@ function renderSettings(){
   <div class="card"><div class="card-title"><i class="ti ti-adjustments"></i> 成本預設值</div>
     <div class="fg2"><div><label>外派司機每天費用（元）</label><input id="cs-day" type="number" value="${costSettings.driverDayRate||5000}"></div><div><label>外宿補貼每晚（元）</label><input id="cs-night" type="number" value="${costSettings.driverNightRate||1000}"></div></div>
     <button class="btn btn-primary btn-sm" onclick="saveCostSetting()"><i class="ti ti-device-floppy"></i> 儲存設定</button>
-  </div>`;
+  </div>
+  <!-- 資料備份 -->
+  <div class="card">
+    <div class="card-title"><i class="ti ti-database-export"></i> 資料備份</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7">
+      資料儲存於 Firebase Firestore（Google 雲端），建議定期手動備份至本機。<br>
+      每天下午 5:00 後開啟本頁面會自動觸發備份下載。
+    </div>
+    <div id="backup-status" style="font-size:12px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-success btn-sm" onclick="exportBackupExcel()"><i class="ti ti-file-spreadsheet"></i> 匯出 Excel 備份</button>
+      <button class="btn btn-sm" onclick="exportBackupJSON()"><i class="ti ti-file-code"></i> 匯出 JSON 備份</button>
+    </div>
+  </div>\`;
+  // 更新上次備份狀態顯示
+  setTimeout(updateBackupStatus,0);
 }
+
+// ══════════════════ 資料備份 ══════════════════
+const BACKUP_KEY='lastAutoBackup';
+
+function getBackupData(){
+  return{
+    exportedAt:new Date().toISOString(),
+    tours,bookings,privates,dispatches,
+    drivers,hotels,expenses,driverRecs,
+    fixedExpenses,carsList,costSettings
+  };
+}
+
+function exportBackupJSON(){
+  const data=getBackupData();
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='旅遊管理備份_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  localStorage.setItem(BACKUP_KEY,new Date().toISOString());
+  updateBackupStatus();
+}
+
+function exportBackupExcel(){
+  const wb=XLSX.utils.book_new();
+  const now=new Date().toISOString().slice(0,10);
+
+  // 工作表：拼團行程
+  if(tours.length){
+    const ws1=XLSX.utils.json_to_sheet(tours.map(t=>({
+      id:t.id,名稱:t.name,平日定金:t.depositWd,假日定金:t.depositWk,
+      平日全額:t.priceWd,假日全額:t.priceWk,最少成團人數:t.min,
+      每車上限:t.busMax,幾日遊:t.days,需旅遊險:t.needInsurance?'是':'否',
+      旅遊險每人:t.insPrice,說明:t.desc
+    })));
+    XLSX.utils.book_append_sheet(wb,ws1,'拼團行程');
+  }
+
+  // 工作表：報名記錄
+  if(bookings.length){
+    const ws2=XLSX.utils.json_to_sheet(bookings.map(b=>{
+      const t=tours.find(x=>x.id===b.tourId);
+      return{行程:t?.name||b.tourId,姓名:b.name,人數:b.count,
+        出發日:b.date,報名日:b.regdate,聯絡方式:b.channel,
+        電話:b.phone,帳號:b.contact,備註:b.note,
+        已付定金:b.depositPaid?'是':'否',已付尾款:b.balancePaid?'是':'否',
+        已投旅遊險:b.insured?'是':'否'};
+    }));
+    XLSX.utils.book_append_sheet(wb,ws2,'報名記錄');
+  }
+
+  // 工作表：包車團
+  if(privates.length){
+    const ws3=XLSX.utils.json_to_sheet(privates.map(p=>({
+      團名:p.name,類型:p.type,出發日:p.start,結束日:p.end,天數:p.days,
+      人數:p.pax,車輛數:p.cars,報價:p.price,定金:p.deposit,
+      定金收款日:p.depositDate||'',已付定金:p.depositPaid?'是':'否',
+      已付尾款:p.balancePaid?'是':'否',已投旅遊險:p.insured?'是':'否',
+      指派司機:p.assignedDriver||'',聯絡方式:p.channel,電話:p.phone,
+      帳號:p.contact,備註:p.note,酒店:p.hotelName||''
+    })));
+    XLSX.utils.book_append_sheet(wb,ws3,'包車團');
+  }
+
+  // 工作表：派車記錄
+  if(dispatches.length){
+    const ws4=XLSX.utils.json_to_sheet(dispatches.map(d=>({
+      說明:d.label,開始日:d.start,結束日:d.end,
+      司機類型:d.driverType==='own'?'自家':'外派',
+      司機:d.driverName,車輛:d.car,台數:d.carCount,備註:d.note
+    })));
+    XLSX.utils.book_append_sheet(wb,ws4,'派車記錄');
+  }
+
+  // 工作表：司機記錄
+  if(driverRecs.length){
+    const TYPE_BK={income:'客收',extra:'外收',tips:'小費',fuel:'加油',
+      parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
+    const ws5=XLSX.utils.json_to_sheet(driverRecs.map(r=>({
+      日期:r.date,司機:r.driverName,車輛:r.car,
+      類別:TYPE_BK[r.type]||r.type,金額:r.amount,
+      里程:r.mileage||'',加油量:r.fuelLiters||'',備註:r.note
+    })));
+    XLSX.utils.book_append_sheet(wb,ws5,'司機記錄');
+  }
+
+  // 工作表：支出
+  if(expenses.length){
+    const ws6=XLSX.utils.json_to_sheet(expenses.map(e=>({
+      日期:e.date,類別:e.category,金額:e.amount,說明:e.desc,
+      車輛:e.car||'',司機:e.driverName||''
+    })));
+    XLSX.utils.book_append_sheet(wb,ws6,'手動支出');
+  }
+
+  // 工作表：司機資料
+  if(drivers.length){
+    const ws7=XLSX.utils.json_to_sheet(drivers.map(d=>({
+      姓名:d.name,類型:d.type==='own'?'自家':'外派',電話:d.phone,
+      月薪:d.salary||0,每趟薪資:d.perTrip||0,
+      常用車輛:d.preferredCar||'',備註:d.note
+    })));
+    XLSX.utils.book_append_sheet(wb,ws7,'司機資料');
+  }
+
+  // 工作表：酒店資料
+  if(hotels.length){
+    const ws8=XLSX.utils.json_to_sheet(hotels.map(h=>({
+      名稱:h.name,地區:h.area||'',
+      '2人房（平日）':h.r2,'2人房（假日）':h.r2wk,
+      '3人房（平日）':h.r3,'3人房（假日）':h.r3wk,
+      '4人房（平日）':h.r4,'4人房（假日）':h.r4wk,備註:h.note
+    })));
+    XLSX.utils.book_append_sheet(wb,ws8,'酒店資料');
+  }
+
+  XLSX.writeFile(wb,'旅遊管理備份_'+now+'.xlsx');
+  localStorage.setItem(BACKUP_KEY,new Date().toISOString());
+  updateBackupStatus();
+  alert('✅ Excel 備份已下載！共 '+wb.SheetNames.length+' 個工作表');
+}
+
+function updateBackupStatus(){
+  const el=document.getElementById('backup-status');
+  if(!el) return;
+  const last=localStorage.getItem(BACKUP_KEY);
+  if(last){
+    const d=new Date(last);
+    const ds=d.toLocaleDateString('zh-TW')+' '+d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+    el.innerHTML='<span style="color:var(--green)"><i class="ti ti-check"></i> 上次備份：'+ds+'</span>';
+  } else {
+    el.innerHTML='<span style="color:var(--text3)">尚未備份</span>';
+  }
+}
+
+// 自動備份：每天下午 5:00（17:00）後首次開啟設定頁觸發一次
+function checkAutoBackup(){
+  if(curRole!=='admin') return;
+  const now=new Date();
+  const todayKey=now.toISOString().slice(0,10);
+  const autoKey='autoBackupDone_'+todayKey;
+  if(localStorage.getItem(autoKey)) return; // 今天已自動備份過
+  if(now.getHours()<17) return; // 還沒到下午5點
+  // 標記今天已備份，然後匯出
+  localStorage.setItem(autoKey,new Date().toISOString());
+  // 清理7天前的 autoBackup 標記，避免 localStorage 無限增長
+  for(let i=8;i<=30;i++){const old=new Date(now);old.setDate(old.getDate()-i);localStorage.removeItem('autoBackupDone_'+old.toISOString().slice(0,10));}
+  exportBackupExcel();
+}
+
 function addCar(){carsList.push('');renderSettings();}
 function removeCar(i){carsList.splice(i,1);renderSettings();}
 async function saveCars(){const nc=carsList.map((_,i)=>document.getElementById('car-'+i)?.value.trim()).filter(Boolean);carsList=nc;await db.collection('meta').doc('cars').set({list:carsList});alert('車輛已儲存');renderSettings();}
