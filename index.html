@@ -1612,12 +1612,19 @@ function renderDispatch(){
           if(st.done||!(ds>=p.start&&ds<=p.end))return;
           // 免車日不顯示待派車 pill
           if(p.freeDays?.length&&p.freeDays.includes(ds))return;
-          const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
+          const cars=getPrivBusCars(p),BUS=['A','B','C','D','E','F'];
           for(let i=0;i<cars;i++){
-            const orderId=cars>1?p.id+'_bus'+i:p.id;
-            if(dispPrivIds.has(orderId)||dispPrivIds.has(p.id))continue; // 已有派車記錄
-            if(drv[i])continue; // 此車已指派
-            pendPrivPills.push(`<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('${orderId}','private','${p.name+(cars>1?' ('+BUS[i]+'車)':'')}','${p.start}','${p.end}')" title="待派車：${p.name}${cars>1?' '+BUS[i]+'車':''}">⚠️${p.name.slice(0,4)}${cars>1?BUS[i]:''} 待派</div>`);
+            const busOrderId=cars>1?p.id+'_bus'+i:p.id;
+            // 判斷這一天（ds）是否已有 dispatch 記錄涵蓋（不管哪個日期段）
+            const coveredByDisp=dispatches.some(d=>
+              (d.privateId===p.id||(d.label&&d.label.includes(p.name)&&d.start>=p.start&&d.end<=p.end))
+              &&ds>=d.start&&ds<=d.end
+            );
+            if(coveredByDisp)continue; // 這天已有派車記錄，不顯示待派車
+            const _pName=p.name+(cars>1?' ('+BUS[i]+'車)':'');
+            pendPrivPills.push('<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('+
+              ["'"+busOrderId+"'","'private'","'"+_pName.replace(/'/g,"\'")+"'","'"+p.start+"'","'"+p.end+"'"].join(',')+
+              ')" title="待派車：'+_pName+'">⚠️'+p.name.slice(0,4)+(cars>1?BUS[i]:'')+' 待派</div>');
           }
         });
         return pendPrivPills.join('');
@@ -1793,7 +1800,7 @@ function renderAssignSuggestions(){
       '<div style="font-size:12px;margin-bottom:10px;line-height:1.7">新訂單 <strong>'+days+'天</strong> > 現有衝突排班 <strong>'+smartSuggest.smart.conflictDays+'天</strong>（'+conflictStr+'）<br>建議將新訂單指派給 <strong>'+drv.name+'</strong>，衝突舊排班刪除並設回待派車或指定外派司機。</div>'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><label style="font-size:12px;font-weight:600;white-space:nowrap">衝突排班處理方式：</label><select id="smart-ext-sel" style="height:32px;font-size:12px;flex:1;min-width:160px">'+extDrvOpts+'</select></div>'+
       '<button class="btn btn-sm btn-warn" style="font-size:12px;width:100%;justify-content:center" onclick="applySmartSuggest('+
-        JSON.stringify([orderId,type,label,effStart,effEnd,drv.id,drv.name]).slice(1,-1)+
+        [orderId,type,label,effStart,effEnd,drv.id,drv.name].map(v=>"'"+String(v).replace(/'/g,"\\'")+"'").join(',')+
         ',['+conflictIds+'])">'+
       '<i class="ti ti-arrows-exchange"></i> 套用建議（指派 '+drv.name+'，衝突排班設回待派車）</button></div>';
   } else {
@@ -1810,7 +1817,9 @@ function renderAssignSuggestions(){
         ? '<span style="font-size:11px;color:var(--red-d);padding:4px 8px;background:var(--red-l);border:1px solid #F09595;border-radius:6px;flex-shrink:0"><i class="ti ti-ban"></i> 衝突（可縮短日期範圍後指派）</span>'
         : isCurrentDrv
           ? '<span style="font-size:11px;color:var(--blue-d);padding:4px 8px;background:var(--blue-l);border:1px solid var(--blue);border-radius:6px;flex-shrink:0">已指派</span>'
-          : `<button class="btn btn-sm btn-success" onclick="quickAssign(${JSON.stringify(orderId)},${JSON.stringify(type)},${JSON.stringify(label)},${JSON.stringify(effStart)},${JSON.stringify(effEnd)},${JSON.stringify(s.drv.id)},${JSON.stringify(s.drv.name)},${JSON.stringify(currentDispatch?.id||'')})"><i class="ti ti-check"></i> ${currentDriverId?'更換為此司機':'指派'}</button>`
+          : '<button class="btn btn-sm btn-success" onclick="quickAssign('+
+            [orderId,type,label,effStart,effEnd,s.drv.id,s.drv.name,currentDispatch?.id||''].map(v=>"'"+String(v).replace(/'/g,"\\'")+"'").join(',')+
+            ')"><i class=\"ti ti-check\"></i> '+(currentDriverId?'更換為此司機':'指派')+'</button>'
       )+'</div>';
   }).join('');
 
@@ -1818,12 +1827,16 @@ function renderAssignSuggestions(){
   const extListHtml=extDrivers.map(d=>{
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--amber-l);border-radius:8px;margin-bottom:6px">'+
       '<div><div style="font-weight:600">'+d.name+'</div><div style="font-size:12px;color:var(--text2)">'+(d.phone||'')+(d.note?' ｜ '+d.note:'')+'</div></div>'+
-      `<button class="btn btn-sm btn-warn" onclick="quickAssign(${JSON.stringify(orderId)},${JSON.stringify(type)},${JSON.stringify(label)},${JSON.stringify(effStart)},${JSON.stringify(effEnd)},${JSON.stringify(d.id)},${JSON.stringify(d.name)},${JSON.stringify(currentDispatch?.id||'')})"><i class="ti ti-check"></i> ${currentDriverId?'更換為外派':'指派'}</button></div>`;
+      '<button class="btn btn-sm btn-warn" onclick="quickAssign('+
+      [orderId,type,label,effStart,effEnd,d.id,d.name,currentDispatch?.id||''].map(v=>"'"+String(v).replace(/'/g,"\\'")+"'").join(',')+
+      ')"><i class=\"ti ti-check\"></i> '+(currentDriverId?'更換為外派':'指派')+'</button></div>';
   }).join('');
   const extHtml='<div style="margin-top:10px"><div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text2)">外派司機</div>'+extListHtml+
     '<div style="background:var(--amber-l);border-radius:8px;padding:8px;margin-bottom:4px"><div style="font-size:12px;color:var(--text2);margin-bottom:5px"><i class="ti ti-pencil"></i> 手動輸入外派司機姓名</div>'+
     '<div style="display:flex;gap:6px;align-items:center"><input id="assign-manual-ext" placeholder="輸入姓名…" style="flex:1;height:32px;font-size:13px">'+
-    `<button class="btn btn-sm btn-warn" onclick="assignManualExt(${JSON.stringify(orderId)},${JSON.stringify(type)},${JSON.stringify(label)},${JSON.stringify(effStart)},${JSON.stringify(effEnd)},${JSON.stringify(currentDispatch?.id||'')})"><i class="ti ti-check"></i> ${currentDriverId?'更換':'指派'}</button></div></div></div>`;
+    '<button class="btn btn-sm btn-warn" onclick="assignManualExt('+
+    [orderId,type,label,effStart,effEnd,currentDispatch?.id||''].map(v=>"'"+String(v).replace(/'/g,"\\'")+"'").join(',')+
+    ')"><i class=\"ti ti-check\"></i> '+(currentDriverId?'更換':'指派')+'</button></div></div></div>';
 
   document.getElementById('assign-order-title').textContent=label+' ('+effStart+(effStart!==effEnd?'~'+effEnd:'')+')';
   document.getElementById('assign-suggestions').innerHTML=sugHtml+extHtml;
