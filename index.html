@@ -221,6 +221,38 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mh"><span class="mh-title" id="mp-title">新增包車團</span><button class="btn btn-sm" onclick="cm('priv')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
   <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
+  <!-- 接機 -->
+  <div class="mb10" style="background:var(--bg2);border-radius:8px;padding:10px;border:1px solid var(--border)">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px;font-weight:600">
+      <input type="checkbox" id="pf-pickup" style="width:14px;height:14px" onchange="togglePickup()"> ✈️ 接機（出發日）
+    </label>
+    <div id="pf-pickup-sec" style="display:none">
+      <div class="fg2">
+        <div><label>班機抵台時間</label><input type="time" id="pf-pickup-time" placeholder="14:30"></div>
+        <div><label>班機編號</label><input id="pf-pickup-flight" placeholder="BR123"></div>
+      </div>
+      <div><label>備註</label><input id="pf-pickup-note" placeholder="接機地點…"></div>
+    </div>
+  </div>
+  <!-- 送機 -->
+  <div class="mb10" style="background:var(--bg2);border-radius:8px;padding:10px;border:1px solid var(--border)">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px;font-weight:600">
+      <input type="checkbox" id="pf-dropoff" style="width:14px;height:14px" onchange="toggleDropoff()"> 🛫 送機（結束日）
+    </label>
+    <div id="pf-dropoff-sec" style="display:none">
+      <div class="fg2">
+        <div><label>班機出發時間</label><input type="time" id="pf-dropoff-time" placeholder="10:00"></div>
+        <div><label>班機編號</label><input id="pf-dropoff-flight" placeholder="CI456"></div>
+      </div>
+      <div><label>備註</label><input id="pf-dropoff-note" placeholder="送機地點…"></div>
+    </div>
+  </div>
+  <!-- 免車日 -->
+  <div class="mb10">
+    <label style="font-size:13px;color:var(--text2)">免車日期 <span style="font-size:11px">（中間不需用車的日期，用逗號分隔，例：2026-06-13,2026-06-14）</span></label>
+    <input id="pf-freedays" placeholder="YYYY-MM-DD,YYYY-MM-DD…">
+    <div id="pf-freedays-btns" style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap"></div>
+  </div>
   <div class="fg3"><div><label>人數</label><input id="pf-pax" type="number" value="1" min="1"></div><div><label>車輛數</label><input id="pf-cars" type="number" value="1" min="1"></div><div><label>外派司機</label><select id="pf-out" onchange="togglePriv()"><option value="0">否（自家）</option><option value="1">是（外派）</option></select></div></div>
   <div class="fg2"><div><label>總報價（元）</label><input id="pf-price" type="number" placeholder="20000"></div><div><label>定金（元）</label><input id="pf-dep" type="number" placeholder="5000"></div></div>
   <!-- 自家司機薪資區塊（固定顯示） -->
@@ -1122,6 +1154,9 @@ function renderPrivate(){
         <td style="font-weight:600">
           ${p.name}
           ${(p.carSeat||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:3px">${specialNeedsHtml(p,'font-size:10px;padding:1px 5px')}</div>`:''}
+          ${p.pickup?`<div style="font-size:11px;color:var(--blue-d);margin-top:2px">✈️ 接機 ${p.pickupTime||''} ${p.pickupFlight||''}</div>`:''}
+          ${p.dropoff?`<div style="font-size:11px;color:var(--blue-d);margin-top:2px">🛫 送機 ${p.dropoffTime||''} ${p.dropoffFlight||''}</div>`:''}
+          ${p.freeDays?.length?`<div style="font-size:11px;color:var(--text3);margin-top:2px">免車：${p.freeDays.map(d=>d.slice(5)).join('、')}</div>`:''}
         </td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
         <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
         <td style="font-size:11px">${(()=>{
@@ -1193,6 +1228,21 @@ function openPriv(id=''){
   const depDateEl=document.getElementById('pf-dep-date');
   depDateEl.value=p?.depositDate||'';
   depDateEl.style.display=p?.depositPaid?'inline-block':'none';
+  // 接機
+  document.getElementById('pf-pickup').checked=!!p?.pickup;
+  document.getElementById('pf-pickup-sec').style.display=p?.pickup?'block':'none';
+  document.getElementById('pf-pickup-time').value=p?.pickupTime||'';
+  document.getElementById('pf-pickup-flight').value=p?.pickupFlight||'';
+  document.getElementById('pf-pickup-note').value=p?.pickupNote||'';
+  // 送機
+  document.getElementById('pf-dropoff').checked=!!p?.dropoff;
+  document.getElementById('pf-dropoff-sec').style.display=p?.dropoff?'block':'none';
+  document.getElementById('pf-dropoff-time').value=p?.dropoffTime||'';
+  document.getElementById('pf-dropoff-flight').value=p?.dropoffFlight||'';
+  document.getElementById('pf-dropoff-note').value=p?.dropoffNote||'';
+  // 免車日
+  document.getElementById('pf-freedays').value=(p?.freeDays||[]).join(',');
+  setTimeout(renderFreedaysBtns,0);
   if(document.getElementById('pf-ins-chk'))document.getElementById('pf-ins-chk').checked=!!(p?.needInsurance||p?.insCost>0);
   // [修正] 移除對不存在的 pf-hotel 的操作
   nightlyHotels=p?.nightlyHotels||[];
@@ -1207,6 +1257,42 @@ function toggleDepDate(){
   if(chk&&!dt.value) dt.value=new Date().toISOString().slice(0,10);
   if(!chk) dt.value='';
 }
+function togglePickup(){
+  const chk=document.getElementById('pf-pickup').checked;
+  document.getElementById('pf-pickup-sec').style.display=chk?'block':'none';
+}
+function toggleDropoff(){
+  const chk=document.getElementById('pf-dropoff').checked;
+  document.getElementById('pf-dropoff-sec').style.display=chk?'block':'none';
+}
+// 免車日快速選按鈕（出發/結束日確定後自動產生日期選項）
+function renderFreedaysBtns(){
+  const s=document.getElementById('pf-start').value;
+  const e=document.getElementById('pf-end').value;
+  const el=document.getElementById('pf-freedays-btns');
+  if(!s||!e||!el){if(el)el.innerHTML='';return;}
+  const cur=(document.getElementById('pf-freedays').value||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const days=[];let d=new Date(s);const end=new Date(e);
+  d.setDate(d.getDate()+1); // 出發日不算免車日
+  while(d<end){ // 結束日也不算
+    days.push(d.toISOString().slice(0,10));
+    d.setDate(d.getDate()+1);
+  }
+  if(!days.length){el.innerHTML='';return;}
+  el.innerHTML='<span style="font-size:11px;color:var(--text2);margin-right:4px">快速選：</span>'+
+    days.map(dd=>{
+      const sel=cur.includes(dd);
+      return '<button type="button" class="btn btn-sm" style="height:26px;font-size:11px;'+(sel?'background:var(--amber);color:var(--amber-l);':'')+';" onclick="toggleFreeday(\'' + dd + '\')">'+(sel?'✕ ':'')+dd.slice(5)+'</button>';
+    }).join('');
+}
+function toggleFreeday(dd){
+  const el=document.getElementById('pf-freedays');
+  const cur=(el.value||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const idx=cur.indexOf(dd);
+  if(idx>=0) cur.splice(idx,1); else cur.push(dd);
+  el.value=cur.join(',');
+  renderFreedaysBtns();
+}
 function calcPrivDays(){
   const s=document.getElementById('pf-start').value,e=document.getElementById('pf-end').value;
   const days=calcDays(s,e);
@@ -1216,6 +1302,7 @@ function calcPrivDays(){
   document.getElementById('pf-dnights').value=Math.max(0,days-1);
   document.getElementById('pf-own-nights').value=Math.max(0,days-1);
   renderNightlyPicker();
+  renderFreedaysBtns();
 }
 function togglePriv(){document.getElementById('pf-hotel-sec').style.display=document.getElementById('pf-type').value==='car+hotel'?'block':'none';document.getElementById('pf-out-sec').style.display=document.getElementById('pf-out').value==='1'?'block':'none';}
 function togglePrivIns(){const chk=document.getElementById('pf-ins-chk')?.checked;const insRow=document.getElementById('pf-ins-row');if(insRow)insRow.style.display=chk?'block':'none';}
@@ -1333,7 +1420,16 @@ async function savePriv(){
   const iCost=parseInt(document.getElementById('pf-ins').value)||0;
   const firstHotel=nightlyHotels.length?hotels.find(h=>h.id===nightlyHotels[0]?.hotelId):null;
   const hotelSummary=nightlyHotels.filter(n=>n.hotelId).map((n,i)=>{const h=hotels.find(x=>x.id===n.hotelId);return h?`第${i+1}晚:${h.name}`:''}).filter(Boolean).join(', ');
-  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),carSeat:parseInt(document.getElementById('pf-carseat').value)||0,stroller:parseInt(document.getElementById('pf-stroller').value)||0,wheelchair:parseInt(document.getElementById('pf-wheelchair').value)||0,depositPaid:document.getElementById('pf-depaid').checked,depositDate:document.getElementById('pf-depaid').checked?(document.getElementById('pf-dep-date').value||new Date().toISOString().slice(0,10)):'',balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
+  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),
+    pickup:document.getElementById('pf-pickup').checked,
+    pickupTime:document.getElementById('pf-pickup-time').value,
+    pickupFlight:document.getElementById('pf-pickup-flight').value.trim(),
+    pickupNote:document.getElementById('pf-pickup-note').value.trim(),
+    dropoff:document.getElementById('pf-dropoff').checked,
+    dropoffTime:document.getElementById('pf-dropoff-time').value,
+    dropoffFlight:document.getElementById('pf-dropoff-flight').value.trim(),
+    dropoffNote:document.getElementById('pf-dropoff-note').value.trim(),
+    freeDays:(document.getElementById('pf-freedays').value||'').split(',').map(x=>x.trim()).filter(Boolean),carSeat:parseInt(document.getElementById('pf-carseat').value)||0,stroller:parseInt(document.getElementById('pf-stroller').value)||0,wheelchair:parseInt(document.getElementById('pf-wheelchair').value)||0,depositPaid:document.getElementById('pf-depaid').checked,depositDate:document.getElementById('pf-depaid').checked?(document.getElementById('pf-dep-date').value||new Date().toISOString().slice(0,10)):'',balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
 async function delPriv(){
@@ -1541,7 +1637,14 @@ function renderDispatch(){
   <div style="font-size:13px;font-weight:700;margin-bottom:8px"><i class="ti ti-calendar-event"></i> 派車記錄</div>
   <div class="tbl-wrap"><table class="xtable">
     <thead><tr><th>開始</th><th>結束</th><th>說明</th><th>司機</th><th>類型</th><th>車輛</th><th>台數</th><th>備註</th><th></th></tr></thead>
-    <tbody>${[...dispatches].sort((a,b)=>a.start>b.start?1:-1).map(d=>`<tr><td>${d.start}</td><td>${d.end}</td><td style="font-weight:600">${d.label||'-'}</td><td><span class="badge ${d.driverType==='own'?'badge-green':'badge-amber'}">${d.driverName||'未指派'}</span></td><td><span class="badge ${d.driverType==='own'?'badge-blue':'badge-amber'}">${d.driverType==='own'?'自家':'外派'}</span></td><td style="font-size:12px">${d.car||'-'}</td><td style="text-align:center">${d.carCount||1}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
+    <tbody>${[...dispatches].sort((a,b)=>a.start>b.start?1:-1).map(d=>`<tr><td>${d.start}</td><td>${d.end}</td><td style="font-weight:600">${d.label||'-'}</td><td><span class="badge ${d.driverType==='own'?'badge-green':'badge-amber'}">${d.driverName||'未指派'}</span></td><td><span class="badge ${d.driverType==='own'?'badge-blue':'badge-amber'}">${d.driverType==='own'?'自家':'外派'}</span></td><td style="font-size:12px">${d.car||'-'}</td><td style="text-align:center">${d.carCount||1}</td><td style="font-size:12px;color:var(--text2)">${(()=>{
+          const p2=privates.find(p=>d.privateId===p.id||(d.label&&d.label.includes(p.name)&&d.start===p.start));
+          const parts=[];if(d.note) parts.push(d.note);
+          if(p2?.pickup) parts.push('✈️ 接機 '+(p2.pickupTime||'')+(p2.pickupFlight?' '+p2.pickupFlight:''));
+          if(p2?.dropoff) parts.push('🛫 送機 '+(p2.dropoffTime||'')+(p2.dropoffFlight?' '+p2.dropoffFlight:''));
+          if(p2?.freeDays?.length) parts.push('免車：'+p2.freeDays.map(fd=>fd.slice(5)).join('、'));
+          return parts.join(' ／ ')||'-';
+        })()}</td><td><button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
   </table></div>`;
 }
 
@@ -1604,8 +1707,11 @@ function assignDriverModal(orderId,type,label,start,end){
   // 找出對應的包車團，取得特殊需求資訊
   const metaPriv=type==='private'?privates.find(p=>p.id===orderId||(orderId.includes('_bus')&&p.id===orderId.slice(0,orderId.lastIndexOf('_bus')))):null;
   const needsHtml=metaPriv?specialNeedsHtml(metaPriv,'font-size:11px'):'';
+  const pickupHtml=metaPriv?.pickup?(' &nbsp;|&nbsp; ✈️ 接機 '+(metaPriv.pickupTime||'')+(metaPriv.pickupFlight?' '+metaPriv.pickupFlight:'')):'';
+  const dropoffHtml=metaPriv?.dropoff?(' &nbsp;|&nbsp; 🛫 送機 '+(metaPriv.dropoffTime||'')+(metaPriv.dropoffFlight?' '+metaPriv.dropoffFlight:'')):'';
+  const freeDaysHtml=metaPriv?.freeDays?.length?(' &nbsp;|&nbsp; <span style="color:var(--text3)">免車：'+metaPriv.freeDays.map(d=>d.slice(5)).join('、')+'</span>'):'';
   document.getElementById('assign-order-meta').innerHTML=
-    `<i class="ti ti-calendar-event"></i> <strong>${label}</strong> &nbsp;|&nbsp; ${start}${start!==end?' ~ '+end:''} &nbsp;|&nbsp; ${days}天${needsHtml?' &nbsp;|&nbsp; '+needsHtml:''} &nbsp;|&nbsp; 出發 ${start}`;
+    '<i class="ti ti-calendar-event"></i> <strong>'+label+'</strong> &nbsp;|&nbsp; '+start+(start!==end?' ~ '+end:'')+' &nbsp;|&nbsp; '+days+'天'+(needsHtml?' &nbsp;|&nbsp; '+needsHtml:'')+pickupHtml+dropoffHtml+freeDaysHtml+' &nbsp;|&nbsp; 出發 '+start;
 
   // 智慧建議區塊
   const tipEl=document.getElementById('assign-smart-tip');
