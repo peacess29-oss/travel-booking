@@ -1564,7 +1564,14 @@ function renderDispatch(){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     // 排除拼團派車記錄（有 groupTourId），拼團由 dayGrp 紫色 pill 顯示
     // 去重：同一 id 的派車記錄只顯示一次（防止快速指派產生重複記錄）
-    const _rawDisps=mDisps.filter(d=>isInDisp(ds,d)&&!d.groupTourId);
+    // 排除免車日：找出 dispatch 對應的包車團，若 ds 是其免車日則不顯示
+    const _rawDisps=mDisps.filter(d=>{
+      if(!isInDisp(ds,d)||d.groupTourId) return false;
+      // 找對應包車團
+      const matchP=privates.find(p=>d.privateId===p.id||(d.label&&d.label.includes(p.name)&&d.start===p.start));
+      if(matchP?.freeDays?.length&&matchP.freeDays.includes(ds)) return false;
+      return true;
+    });
     const _seenDispIds=new Set();
     const dayDisps=_rawDisps.filter(d=>{if(_seenDispIds.has(d.id))return false;_seenDispIds.add(d.id);return true;});
     const hol=isHol(ds),mkp=isMkp(ds),isToday=ds===today;
@@ -1592,6 +1599,8 @@ function renderDispatch(){
         privates.forEach(p=>{
           const st=getPrivStatus(p);
           if(st.done||!(ds>=p.start&&ds<=p.end))return;
+          // 免車日不顯示待派車 pill
+          if(p.freeDays?.length&&p.freeDays.includes(ds))return;
           const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
           for(let i=0;i<cars;i++){
             const orderId=cars>1?p.id+'_bus'+i:p.id;
@@ -1624,7 +1633,18 @@ function renderDispatch(){
     <tbody>${allOrders.map(o=>`<tr>
       <td style="font-weight:600">${o.start||'-'}</td>
       <td>${o.end||'-'}</td>
-      <td style="font-weight:600">${o.label}</td>
+      <td style="font-weight:600">
+        ${o.label}
+        ${(()=>{
+          const p=o.type==='private'?o.source:null;
+          const parts=[];
+          if(p?.pickup) parts.push('✈️ 接機 '+(p.pickupTime||'')+(p.pickupFlight?' '+p.pickupFlight:''));
+          if(p?.dropoff) parts.push('🛫 送機 '+(p.dropoffTime||'')+(p.dropoffFlight?' '+p.dropoffFlight:''));
+          if(p?.freeDays?.length) parts.push('免車：'+p.freeDays.map(d=>d.slice(5)).join('、'));
+          if(p?.note) parts.push(p.note);
+          return parts.length?'<div style="font-size:11px;color:var(--text2);margin-top:2px">'+parts.join(' ／ ')+'</div>':'';
+        })()}
+      </td>
       <td><span class="badge ${o.type==='private'?'badge-blue':'badge-green'}">${o.type==='private'?'包車團':'拼團'}</span></td>
       <td style="text-align:center">${o.days||1}天</td>
       <td style="text-align:center">${o.pax}人${o.pax>4?'<span style="color:var(--red);font-size:10px"> ⚠️9座</span>':''}</td>
