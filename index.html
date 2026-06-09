@@ -1220,10 +1220,6 @@ function renderPrivate(){
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
 
-  }
-  document.getElementById('pf-contact').value=r.contact||'';
-  document.getElementById('pf-pax').value=r.pax||1;
-}
 function openPriv(id=''){
   eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
   document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
@@ -3274,8 +3270,7 @@ if(window.location.hash==='#booking'){
     }
   }
 }
-</script>
-<script>
+
 // Firebase 載入失敗偵測
 window.addEventListener('load', function(){
   if(typeof firebase === 'undefined'){
