@@ -758,7 +758,7 @@ function showPage(id, tabEl){
 
 // ══════════════════ QR CODE ══════════════════
 function showQR(){
-  const url=window.location.href.split('#')[0]+'#booking';
+  const url=window.location.href.split('/').slice(0,-1).join('/')+'/booking.html';
   document.getElementById('qr-url').textContent=url;
   const qrEl=document.getElementById('qr-container');
   qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="QR Code" style="border-radius:6px">`;

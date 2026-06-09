@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>旅遊報名</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,#dbeafe,#dcfce7);min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
+.card{background:#fff;border-radius:16px;padding:28px;width:460px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+.title{font-size:20px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.sub{font-size:13px;color:#666;margin-bottom:22px}
+label{font-size:13px;color:#666;display:block;margin-bottom:3px}
+input,select{width:100%;padding:9px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;height:36px;background:#fff;color:#1a1a1a}
+input:focus,select:focus{outline:none;border-color:#185FA5;box-shadow:0 0 0 2px rgba(24,95,165,.08)}
+.mb10{margin-bottom:10px}
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.btn{width:100%;padding:11px;border:none;border-radius:8px;font-size:14px;cursor:pointer;background:#185FA5;color:#E6F1FB;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600;transition:background .15s}
+.btn:hover{background:#0C447C}
+.btn:active{transform:scale(.98)}
+.btn:disabled{background:#aaa;cursor:not-allowed}
+.ok{background:#EAF3DE;border:1px solid #97C459;border-radius:8px;padding:12px;font-size:13px;color:#27500A;margin-bottom:12px;display:none}
+.err{background:#FCEBEB;border:1px solid #F09595;border-radius:8px;padding:12px;font-size:13px;color:#791F1F;margin-bottom:12px;display:none}
+.loading{text-align:center;color:#666;padding:40px 0;font-size:14px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title"><i class="ti ti-map" style="color:#185FA5"></i> 旅遊報名</div>
+  <div class="sub">請填寫以下資料，業務人員會與您確認</div>
+
+  <div id="loading" class="loading"><i class="ti ti-loader" style="animation:spin 1s linear infinite;display:inline-block"></i> 載入行程中…</div>
+
+  <div id="form" style="display:none">
+    <div class="mb10"><label>選擇行程 *</label><select id="pub-tour"></select></div>
+    <div class="mb10"><label>姓名 *</label><input id="pub-name" placeholder="請輸入姓名"></div>
+    <div class="fg2">
+      <div><label>報名人數 *</label><input id="pub-cnt" type="number" value="1" min="1"></div>
+      <div><label>出發日期 *</label><input id="pub-date" type="date"></div>
+    </div>
+    <div class="fg2">
+      <div><label>聯絡方式</label><select id="pub-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div>
+      <div><label>電話（選填）</label><input id="pub-phone" placeholder="0912345678"></div>
+    </div>
+    <div class="mb10"><label>備註（選填）</label><input id="pub-note" placeholder="特殊需求…"></div>
+    <div id="result-ok" class="ok"></div>
+    <div id="result-err" class="err"></div>
+    <button class="btn" id="submit-btn" onclick="submitForm()"><i class="ti ti-send"></i> 送出報名</button>
+  </div>
+</div>
+
+<style>
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+</style>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",
+  authDomain:"travel-booking-89df8.firebaseapp.com",
+  projectId:"travel-booking-89df8",
+  storageBucket:"travel-booking-89df8.firebasestorage.app",
+  messagingSenderId:"436528685102",
+  appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"
+});
+const db = firebase.firestore();
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+
+// 載入行程
+db.collection('tours').get().then(snap => {
+  const tours = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  const sel = document.getElementById('pub-tour');
+  if(tours.length === 0){
+    sel.innerHTML = '<option disabled>目前無可報名行程</option>';
+  } else {
+    sel.innerHTML = tours.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('form').style.display = 'block';
+}).catch(() => {
+  document.getElementById('loading').innerHTML = '<span style="color:#A32D2D">載入失敗，請重新整理頁面</span>';
+});
+
+async function submitForm(){
+  const name = document.getElementById('pub-name').value.trim();
+  const date = document.getElementById('pub-date').value;
+  const tourId = document.getElementById('pub-tour').value;
+  const count = parseInt(document.getElementById('pub-cnt').value) || 1;
+
+  document.getElementById('result-ok').style.display = 'none';
+  document.getElementById('result-err').style.display = 'none';
+
+  if(!name || !date){
+    const err = document.getElementById('result-err');
+    err.textContent = '請填寫姓名和出發日期';
+    err.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite;display:inline-block"></i> 送出中…';
+
+  try {
+    await db.collection('bookings').doc(uid()).set({
+      name, count,
+      channel: document.getElementById('pub-ch').value,
+      phone: document.getElementById('pub-phone').value.trim(),
+      contact: '',
+      tourId, date,
+      note: document.getElementById('pub-note').value.trim(),
+      regdate: new Date().toISOString().slice(0,10),
+      depositPaid: false,
+      insured: false,
+      balancePaid: false
+    });
+
+    const ok = document.getElementById('result-ok');
+    ok.innerHTML = `<i class="ti ti-circle-check"></i> 報名成功！${name} × ${count}人 ｜ 出發：${date}<br><span style="font-size:11px">業務人員將盡快與您聯繫確認</span>`;
+    ok.style.display = 'block';
+
+    // 清空表單
+    document.getElementById('pub-name').value = '';
+    document.getElementById('pub-phone').value = '';
+    document.getElementById('pub-note').value = '';
+    document.getElementById('pub-cnt').value = 1;
+    document.getElementById('pub-date').value = '';
+  } catch(e) {
+    const err = document.getElementById('result-err');
+    err.textContent = '送出失敗，請稍後再試';
+    err.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-send"></i> 送出報名';
+}
+</script>
+</body>
+</html>
