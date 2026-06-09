@@ -177,14 +177,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="nav" id="main-nav"></div>
   <div id="p-group" class="page active"></div>
   <div id="p-private" class="page"></div>
-  <div id="pv-search-bar" style="display:none;position:sticky;top:96px;z-index:49;background:var(--bg);border-bottom:1px solid var(--border);padding:6px 16px">
-    <div style="max-width:1100px;margin:0 auto;display:flex;justify-content:flex-end">
-      <div style="position:relative">
-        <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;pointer-events:none"></i>
-        <input id="pv-q-fixed" placeholder="搜尋團名 / 電話 / 備註…" oninput="renderPrivate()" style="height:32px;font-size:13px;padding-left:28px;width:220px;border-radius:8px">
-      </div>
-    </div>
-  </div>
   <div id="p-dispatch" class="page"></div>
   <div id="p-finance" class="page"></div>
   <div id="p-balance" class="page"></div>
@@ -471,6 +463,7 @@ const db=firebase.firestore();
 // ══════════════════ STATE ══════════════════
 let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
 let curPage='p-group',curRole='',curDriverId='',eIds={};
+let pvSearchQ='';
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
@@ -767,9 +760,15 @@ function showPage(id, tabEl){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if(tabEl) tabEl.classList.add('active');
-  const sb=document.getElementById('pv-search-bar');
-  if(sb) sb.style.display=(id==='p-private')?'block':'none';
-  refresh();
+  // 明確呼叫對應頁面 render，確保切換時一定重繪
+  if(id==='p-group')renderGroup();
+  else if(id==='p-private')renderPrivate();
+  else if(id==='p-dispatch')renderDispatch();
+  else if(id==='p-finance')renderFinance();
+  else if(id==='p-balance')renderBalance();
+  else if(id==='p-driver')renderDriverPage();
+  else if(id==='p-settings')renderSettings();
+  else if(id==='p-customers')renderCustomers();
 }
 
 // ══════════════════ QR CODE ══════════════════
@@ -1121,7 +1120,7 @@ async function delBook(){
 // ══════════════════ PAGE: 個人包車團 ══════════════════
 function renderPrivate(){
   const el=document.getElementById('p-private');
-  const pvQ=(document.getElementById('pv-q-fixed')?.value||'').trim();
+  const pvQ=(pvSearchQ||'').trim();
   const pvTab=document.getElementById('pv-tab')?.value||'active';
   const fv=document.getElementById('pv-filter')?.value||'all';
   // 依 tab 分離進行中與已完成
@@ -1158,7 +1157,13 @@ function renderPrivate(){
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
     </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
-    <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="position:relative">
+        <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;pointer-events:none"></i>
+        <input id="pv-q-fixed" placeholder="搜尋團名 / 電話 / 備註…" oninput="pvSearchQ=this.value;renderPrivate()" style="height:32px;font-size:13px;padding-left:28px;width:200px;border-radius:8px" value="${pvSearchQ}">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
+    </div>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     ${pvTab==='done'?`
@@ -1222,6 +1227,8 @@ function renderPrivate(){
     }).join('')}</tbody>
     <tfoot><tr><td colspan="9">合計</td><td>$${list.reduce((s,p)=>s+p.price,0).toLocaleString()}</td><td>$${list.reduce((s,p)=>s+p.deposit,0).toLocaleString()}</td><td style="color:var(--blue)">$${list.reduce((s,p)=>s+(p.price-p.deposit),0).toLocaleString()}</td><td colspan="6"></td></tr></tfoot>
   </table></div>`}`;
+  // 若搜尋框有焦點需求，渲染後移到末尾
+  if(pvSearchQ){const q=document.getElementById('pv-q-fixed');if(q){q.focus();const l=q.value.length;q.setSelectionRange(l,l);}}
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
 
