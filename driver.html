@@ -48,8 +48,7 @@ let redirected=false;
 let loaded=false;
 
 const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
-  console.log('[driver] snapshot docs:', s.docs.length, s.docs.map(d=>({id:d.id,...d.data()})));
-  drivers=s.docs.map(d=>({id:d.id,...d.data()}));
+  drivers=s.docs.map(d=>({id:d.id,...d.data()})).filter(d=>d.type==='own');
 
   // 填充下拉選單
   const sel=document.getElementById('drv-sel');
