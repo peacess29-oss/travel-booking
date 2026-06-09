@@ -219,7 +219,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <!-- 包車團 -->
 <div class="overlay" id="m-priv"><div class="modal modal-lg">
   <div class="mh"><span class="mh-title" id="mp-title">新增包車團</span><button class="btn btn-sm" onclick="cm('priv')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
+  <div class="fg2"><div><label>團名 *</label><div style="position:relative"><input id="pf-name" placeholder="王先生一家" autocomplete="off" oninput="privNameSearch(this.value)" onblur="setTimeout(()=>document.getElementById('pf-name-drop').style.display='none',200)"><div id="pf-name-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg);border:1px solid var(--border2);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:300;max-height:200px;overflow-y:auto;margin-top:2px"></div></div></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
   <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
   <!-- 接機 -->
   <div class="mb10" style="background:var(--bg2);border-radius:8px;padding:10px;border:1px solid var(--border)">
@@ -663,7 +663,7 @@ try{
     .catch(()=>{}); // Firestore 未就緒時靜默忽略
 }catch(e){}
 
-const ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
+var ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
 function adminLogin(){
   if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){loginAs('admin');return;}
@@ -1207,6 +1207,46 @@ function renderPrivate(){
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
 
+function privNameSearch(val){
+  const drop=document.getElementById('pf-name-drop');
+  const kw=val.trim();
+  if(!kw){drop.style.display='none';return;}
+  const matches=privates.filter(p=>p.name&&p.name.includes(kw)).slice(0,8);
+  if(!matches.length){drop.style.display='none';return;}
+  drop.innerHTML=matches.map(p=>`
+    <div onclick="privNamePick('${p.id}')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
+      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''">
+      <div>
+        <div style="font-weight:600">${p.name}</div>
+        <div style="font-size:11px;color:var(--text2)">${p.start||''} ～ ${p.end||''} ｜ ${p.pax||1}人 ${p.cars||1}車</div>
+      </div>
+      <span style="font-size:11px;color:var(--text3)">套用</span>
+    </div>`).join('');
+  drop.style.display='block';
+}
+function privNamePick(id){
+  const p=privates.find(x=>x.id===id);
+  if(!p)return;
+  document.getElementById('pf-name-drop').style.display='none';
+  document.getElementById('pf-name').value=p.name;
+  document.getElementById('pf-type').value=p.type||'car+hotel';
+  document.getElementById('pf-pax').value=p.pax||1;
+  document.getElementById('pf-cars').value=p.cars||1;
+  document.getElementById('pf-out').value=p.outsource?'1':'0';
+  document.getElementById('pf-price').value=p.price||'';
+  document.getElementById('pf-dep').value=p.deposit||'';
+  document.getElementById('pf-phone').value=p.phone||'';
+  document.getElementById('pf-ch').value=p.channel||'WhatsApp';
+  document.getElementById('pf-contact').value=p.contact||'';
+  document.getElementById('pf-note').value=p.note||'';
+  document.getElementById('pf-own-day').value=p.driverDayRate||0;
+  document.getElementById('pf-own-night').value=p.driverNightAllowance||0;
+  document.getElementById('pf-own-nights').value=p.driverNights||0;
+  document.getElementById('pf-dday').value=p.driverDayRate||5000;
+  document.getElementById('pf-dnight').value=p.driverNightAllowance||1000;
+  document.getElementById('pf-dnights').value=p.driverNights||0;
+  togglePriv();
+}
 function openPriv(id=''){
   eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
   document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
