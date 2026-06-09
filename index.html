@@ -1233,6 +1233,12 @@ function renderPrivate(){
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
 
+function goToPriv(id){
+  const tab=document.querySelector('.nav-tab[onclick*="p-private"]');
+  showPage('p-private',tab);
+  // renderPrivate 是非同步更新 DOM，等它完成再開 modal
+  setTimeout(()=>openPriv(id),50);
+}
 function openPriv(id=''){
   eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
   document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
@@ -1678,7 +1684,9 @@ function renderDispatch(){
       <td style="font-weight:600">${o.start||'-'}</td>
       <td>${o.end||'-'}</td>
       <td style="font-weight:600">
-        ${o.label}
+        ${o.type==='private'
+          ?`<span style="color:var(--blue);cursor:pointer;text-decoration:underline" onclick="goToPriv('${o.privId}')">${o.label}</span>`
+          :o.label}
         ${(()=>{
           const p=o.type==='private'?o.source:null;
           const parts=[];
