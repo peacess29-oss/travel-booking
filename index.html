@@ -177,7 +177,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="nav" id="main-nav"></div>
   <div id="p-group" class="page active"></div>
   <div id="p-private" class="page"></div>
-  <div id="pv-search-bar" style="display:none"></div>
+  <div id="pv-search-bar" style="display:none;position:sticky;top:96px;z-index:49;background:var(--bg);border-bottom:1px solid var(--border);padding:6px 16px">
+    <div style="max-width:1100px;margin:0 auto;display:flex;justify-content:flex-end">
+      <div style="position:relative">
+        <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;pointer-events:none"></i>
+        <input id="pv-q-fixed" placeholder="搜尋團名 / 電話 / 備註…" oninput="renderPrivate()" style="height:32px;font-size:13px;padding-left:28px;width:220px;border-radius:8px">
+      </div>
+    </div>
+  </div>
   <div id="p-dispatch" class="page"></div>
   <div id="p-finance" class="page"></div>
   <div id="p-balance" class="page"></div>
@@ -760,7 +767,8 @@ function showPage(id, tabEl){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if(tabEl) tabEl.classList.add('active');
-
+  const sb=document.getElementById('pv-search-bar');
+  if(sb) sb.style.display=(id==='p-private')?'block':'none';
   refresh();
 }
 
@@ -1150,13 +1158,7 @@ function renderPrivate(){
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
     </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="position:relative">
-        <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;pointer-events:none"></i>
-        <input id="pv-q-fixed" placeholder="搜尋團名 / 電話 / 備註…" oninput="renderPrivate()" style="height:32px;font-size:13px;padding-left:28px;width:200px;border-radius:8px">
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
-    </div>
+    <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     ${pvTab==='done'?`
