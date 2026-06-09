@@ -219,7 +219,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <!-- 包車團 -->
 <div class="overlay" id="m-priv"><div class="modal modal-lg">
   <div class="mh"><span class="mh-title" id="mp-title">新增包車團</span><button class="btn btn-sm" onclick="cm('priv')"><i class="ti ti-x"></i></button></div>
-  <div class="fg2"><div><label>團名 *</label><div style="position:relative"><input id="pf-name" placeholder="王先生一家" autocomplete="off" oninput="privNameSearch(this.value)" onblur="setTimeout(()=>document.getElementById('pf-name-drop').style.display='none',200)"><div id="pf-name-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg);border:1px solid var(--border2);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:300;max-height:200px;overflow-y:auto;margin-top:2px"></div></div></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
+  <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
   <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
   <!-- 接機 -->
   <div class="mb10" style="background:var(--bg2);border-radius:8px;padding:10px;border:1px solid var(--border)">
@@ -1103,6 +1103,9 @@ async function delBook(){
 }
 
 // ══════════════════ PAGE: 個人包車團 ══════════════════
+let _pvQ='';
+function pvSearch(v){_pvQ=v.trim();renderPrivate();// 渲染後還原焦點
+setTimeout(()=>{const el=document.getElementById('pv-q');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);}
 function renderPrivate(){
   const el=document.getElementById('p-private');
   const pvTab=document.getElementById('pv-tab')?.value||'active';
@@ -1124,7 +1127,7 @@ function renderPrivate(){
     else if(fv==='ch')list=activePrivs.filter(p=>p.type==='car+hotel');
     else list=activePrivs;
   }
-  const pvQ=(document.getElementById('pv-q')?.value||'').trim();
+  const pvQ=_pvQ||'';
   if(pvQ) list=list.filter(p=>(p.name||'').includes(pvQ)||(p.phone||'').includes(pvQ)||(p.note||'').includes(pvQ));
   list=[...list].sort((a,b)=>pvTab==='done'?b.start>a.start?1:-1:a.start>b.start?1:-1);
   el.innerHTML=`
@@ -1142,7 +1145,7 @@ function renderPrivate(){
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
     </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
-    <input id="pv-q" placeholder="🔍 搜尋團名/電話/備註…" oninput="renderPrivate()" style="height:36px;font-size:13px;flex:1;max-width:220px">
+    <input id="pv-q" placeholder="🔍 搜尋團名/電話/備註…" oninput="pvSearch(this.value)" style="height:36px;font-size:13px;flex:1;max-width:220px" value="${pvQ}">
     <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
@@ -1210,47 +1213,6 @@ function renderPrivate(){
 }
 async function togglePv(id,f,v){setSS('syncing','更新…');await db.collection('privates').doc(id).update({[f]:v});}
 
-function privNameSearch(val){
-  const drop=document.getElementById('pf-name-drop');
-  const kw=val.trim();
-  if(!kw){drop.style.display='none';return;}
-  // 從 bookings 和 privates 搜尋客人姓名
-  const seen=new Set();
-  const results=[];
-  // 搜尋包車團歷史
-  privates.forEach(p=>{
-    if(p.name&&p.name.includes(kw)){
-      const key=p.name+'|'+p.phone;
-      if(!seen.has(key)){seen.add(key);results.push({src:'包車',name:p.name,phone:p.phone||'',channel:p.channel||'',contact:p.contact||'',pax:p.pax||1});}
-    }
-  });
-  // 搜尋拼團報名歷史
-  bookings.forEach(b=>{
-    if(b.name&&b.name.includes(kw)){
-      const key=b.name+'|'+b.phone;
-      if(!seen.has(key)){seen.add(key);results.push({src:'拼團',name:b.name,phone:b.phone||'',channel:b.channel||'',contact:b.contact||'',pax:b.count||1});}
-    }
-  });
-  if(!results.length){drop.style.display='none';return;}
-  drop.innerHTML=results.slice(0,8).map((r,i)=>`
-    <div onclick="privNamePick(${i},'${encodeURIComponent(JSON.stringify(r))}')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
-      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''">
-      <div>
-        <div style="font-weight:600">${r.name} <span style="font-size:11px;color:var(--text3);font-weight:400">${r.src}</span></div>
-        <div style="font-size:11px;color:var(--text2)">${r.phone||'無電話'} ｜ ${r.channel||''} ${r.contact?'・'+r.contact:''}</div>
-      </div>
-      <span style="font-size:11px;color:var(--blue)">套用</span>
-    </div>`).join('');
-  drop.style.display='block';
-}
-function privNamePick(i, encoded){
-  const r=JSON.parse(decodeURIComponent(encoded));
-  document.getElementById('pf-name-drop').style.display='none';
-  document.getElementById('pf-name').value=r.name;
-  document.getElementById('pf-phone').value=r.phone||'';
-  if(r.channel){
-    const chSel=document.getElementById('pf-ch');
-    for(let o of chSel.options){if(o.value===r.channel){chSel.value=r.channel;break;}}
   }
   document.getElementById('pf-contact').value=r.contact||'';
   document.getElementById('pf-pax').value=r.pax||1;
