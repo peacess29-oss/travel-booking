@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="旅遊管理">
 <title>旅遊業務管理系統</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#fff;--bg2:#f6f6f6;--bg3:#eee;--text:#1a1a1a;--text2:#666;--text3:#999;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--amber:#854F0B;--amber-l:#FAEEDA;--amber-d:#633806;--red:#A32D2D;--red-l:#FCEBEB;--red-d:#791F1F;--purple:#5b3fa0;--purple-l:#ede8f8;}
@@ -177,6 +177,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="nav" id="main-nav"></div>
   <div id="p-group" class="page active"></div>
   <div id="p-private" class="page"></div>
+  <div id="pv-search-bar" style="display:none;position:sticky;top:96px;z-index:49;background:var(--bg);border-bottom:1px solid var(--border);padding:8px 16px">
+    <input id="pv-q-fixed" placeholder="🔍 搜尋團名 / 電話 / 備註…" oninput="renderPrivate()" style="width:100%;max-width:320px;height:36px;font-size:13px">
+  </div>
   <div id="p-dispatch" class="page"></div>
   <div id="p-finance" class="page"></div>
   <div id="p-balance" class="page"></div>
@@ -666,11 +669,17 @@ try{
 var ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
 function adminLogin(){
-  if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){loginAs('admin');return;}
+  // 已記住裝置 → 直接登入（不需密碼）
+  if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){
+    if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
+    loginAs('admin');return;
+  }
+  // 展開密碼輸入框（不需 Firebase）
   const wrap=document.getElementById('admin-pwd-wrap');
   if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}
 }
 function adminPwdConfirm(){
+  if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
   const pwd=document.getElementById('admin-pwd-input').value;
   if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}
   localStorage.setItem(ADMIN_DEVICE_KEY,'1');
@@ -753,6 +762,8 @@ function showPage(id, tabEl){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if(tabEl) tabEl.classList.add('active');
+  const sb=document.getElementById('pv-search-bar');
+  if(sb) sb.style.display=(id==='p-private')?'block':'none';
   refresh();
 }
 
@@ -1103,11 +1114,9 @@ async function delBook(){
 }
 
 // ══════════════════ PAGE: 個人包車團 ══════════════════
-let _pvQ='';
-function pvSearch(v){_pvQ=v.trim();renderPrivate();// 渲染後還原焦點
-setTimeout(()=>{const el=document.getElementById('pv-q');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0);}
 function renderPrivate(){
   const el=document.getElementById('p-private');
+  const pvQ=(document.getElementById('pv-q-fixed')?.value||'').trim();
   const pvTab=document.getElementById('pv-tab')?.value||'active';
   const fv=document.getElementById('pv-filter')?.value||'all';
   // 依 tab 分離進行中與已完成
@@ -1127,7 +1136,6 @@ function renderPrivate(){
     else if(fv==='ch')list=activePrivs.filter(p=>p.type==='car+hotel');
     else list=activePrivs;
   }
-  const pvQ=_pvQ||'';
   if(pvQ) list=list.filter(p=>(p.name||'').includes(pvQ)||(p.phone||'').includes(pvQ)||(p.note||'').includes(pvQ));
   list=[...list].sort((a,b)=>pvTab==='done'?b.start>a.start?1:-1:a.start>b.start?1:-1);
   el.innerHTML=`
@@ -1145,7 +1153,6 @@ function renderPrivate(){
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
     </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
-    <input id="pv-q" placeholder="🔍 搜尋團名/電話/備註…" oninput="pvSearch(this.value)" style="height:36px;font-size:13px;flex:1;max-width:220px" value="${pvQ}">
     <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
   </div>
   <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
@@ -3267,6 +3274,14 @@ if(window.location.hash==='#booking'){
     }
   }
 }
+</script>
+<script>
+// Firebase 載入失敗偵測
+window.addEventListener('load', function(){
+  if(typeof firebase === 'undefined'){
+    document.body.innerHTML='<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#fff8f0;font-family:sans-serif"><div style="text-align:center;padding:32px;max-width:400px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:18px;font-weight:700;margin-bottom:8px;color:#854F0B">系統載入失敗</div><div style="font-size:14px;color:#666;margin-bottom:20px">Firebase 無法連線，可能是網路問題或瀏覽器封鎖。<br>請嘗試以下方式：</div><div style="font-size:13px;color:#444;text-align:left;background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #e0e0e0;margin-bottom:16px"><div>1. 重新整理頁面（Ctrl+R / ⌘R）</div><div style="margin-top:6px">2. 關閉廣告封鎖擴充功能</div><div style="margin-top:6px">3. 換用 Chrome 瀏覽器</div></div><button onclick="location.reload()" style="padding:10px 24px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🔄 重新整理</button></div></div>';
+  }
+});
 </script>
 </body>
 </html>
