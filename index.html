@@ -3197,11 +3197,23 @@ db.collection('tours').get().then(s=>{
 db.collection('meta').doc('cars').get().then(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 
 // 判斷是否公開報名頁
-if(window.location.hash==='#booking'){
+function enterBookingMode(){
   document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='none';
   document.getElementById('pub-screen').style.display='flex';
-  initListeners();
-  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));initPubPage();});
+  if(!listenersInited){
+    initListeners();
+    db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));initPubPage();});
+  } else {
+    initPubPage();
+  }
+}
+// 支援 hash 延遲載入（某些行動瀏覽器）
+window.addEventListener('hashchange',()=>{
+  if(window.location.hash==='#booking') enterBookingMode();
+});
+if(window.location.hash==='#booking'){
+  enterBookingMode();
 } else if(window.location.hash==='#driver'){
   // 來自 driver.html 的跳轉
   const driverData=JSON.parse(sessionStorage.getItem('driverLogin')||'null');
