@@ -48,7 +48,8 @@ let redirected=false;
 let loaded=false;
 
 const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
-  drivers=s.docs.map(d=>({id:d.id,...d.data()})).filter(d=>d.type==='own');
+  console.log('[driver] snapshot docs:', s.docs.length, s.docs.map(d=>({id:d.id,...d.data()})));
+  drivers=s.docs.map(d=>({id:d.id,...d.data()}));
 
   // 填充下拉選單
   const sel=document.getElementById('drv-sel');
@@ -90,8 +91,13 @@ function doLogin(){
   const errEl=document.getElementById('err-msg');
   errEl.style.display='none';
 
-  if(!loaded||!drivers.length){
+  if(!loaded){
     errEl.textContent='⏳ 資料尚未載入，請稍後再試';
+    errEl.style.display='block';
+    return;
+  }
+  if(!drivers.length){
+    errEl.textContent='⚠️ 目前無司機資料，請確認 Firestore 內有 drivers 集合';
     errEl.style.display='block';
     return;
   }
