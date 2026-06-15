@@ -1346,53 +1346,94 @@ function renderPrivate(){
     `}
   </div>
   ${!list.length?'<div class="empty">無資料</div>':`<div class="tbl-wrap"><table class="xtable">
-    <thead><tr><th>團名</th><th>類型</th><th>出發</th><th>結束</th><th>天</th><th>人</th><th>車</th><th>酒店</th><th>晚</th><th>報價</th><th>定金</th><th>尾款</th><th class="chk">定</th><th class="chk">尾</th><th class="chk">險</th><th>派車</th><th>利潤</th><th></th></tr></thead>
+    <thead><tr>
+      <th style="min-width:140px">團名／類型／人</th>
+      <th style="min-width:110px">出發／結束</th>
+      <th style="white-space:nowrap">天／晚／車</th>
+      <th style="min-width:150px">酒店</th>
+      <th style="min-width:120px">報價／訂金／尾款</th>
+      <th style="white-space:nowrap">定／尾／險</th>
+      <th style="min-width:90px">派車</th>
+      <th style="white-space:nowrap">利潤</th>
+      <th style="position:sticky;right:0;background:var(--bg2);z-index:1"></th>
+    </tr></thead>
     <tbody>${list.map(p=>{
       const bal=p.price-p.deposit,cost=(p.driverCost||0)+(p.hotelCost||0)+(p.insCost||0),profit=p.price-cost;
+      // 酒店欄
+      const hotelCell=(()=>{
+        if(!p.nightlyHotels?.length) return `<span style="color:var(--text2);font-size:12px">${p.hotelName||'-'}</span>`;
+        return p.nightlyHotels.map((n,i)=>{
+          const h=hotels.find(x=>x.id===n.hotelId);
+          const name=h?h.name:n.hotelId?'?':'-';
+          const color=n.booked?'var(--blue)':'var(--text2)';
+          return `<span style="color:${color};font-size:12px" title="${n.booked?'第'+(i+1)+'晚已訂房確認':''}">${n.booked?'✓ ':''}${name}</span>`;
+        }).join('<br>');
+      })();
+      // 派車欄
+      const dispCell=(()=>{
+        const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
+        if(cars<=1){const st=getPrivStatus(p);return`<span class="badge ${st.cls}">${st.label}</span>`;}
+        return Array.from({length:cars},(_,i)=>{
+          const assigned=drv[i]||'';
+          const today2=new Date().toISOString().slice(0,10);
+          const isActive=p.start<=today2&&today2<=p.end;
+          const isDone=p.end<today2;
+          let cls=assigned?'badge-green':'badge-red';
+          let lbl=assigned?'✓ '+assigned:'待派';
+          if(assigned&&isActive){cls='badge-amber';lbl='出團中 '+assigned;}
+          else if(!assigned&&isActive){cls='badge-amber';lbl='出團中（未派）';}
+          if(isDone){cls='badge-green';lbl='完成';}
+          return`<span class="badge ${cls}" style="margin:1px;font-size:10px">${BUS[i]}${lbl}</span>`;
+        }).join('');
+      })();
       return`<tr style="${!p.assignedDriver?'background:rgba(160,32,32,.03)':''}">
-        <td style="font-weight:600">
-          ${p.name}
-          ${(p.carSeat||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:3px">${specialNeedsHtml(p,'font-size:10px;padding:1px 5px')}</div>`:''}
-          ${p.pickup?`<div style="font-size:11px;color:var(--blue-d);margin-top:2px">✈️ 接機 ${p.pickupTime||''} ${p.pickupFlight||''}</div>`:''}
-          ${p.dropoff?`<div style="font-size:11px;color:var(--blue-d);margin-top:2px">🛫 送機 ${p.dropoffTime||''} ${p.dropoffFlight||''}</div>`:''}
-          ${p.freeDays?.length?`<div style="font-size:11px;color:var(--text3);margin-top:2px">免車：${p.freeDays.map(d=>d.slice(5)).join('、')}</div>`:''}
-        </td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
-        <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
-        <td style="font-size:11px">${(()=>{
-          if(!p.nightlyHotels?.length) return `<span style="color:var(--text2)">${p.hotelName||'-'}</span>`;
-          return p.nightlyHotels.map((n,i)=>{
-            const h=hotels.find(x=>x.id===n.hotelId);
-            const name=h?h.name:n.hotelId?'?':'-';
-            const color=n.booked?'var(--blue)':'var(--text2)';
-            const mark=n.booked?'✓ ':'';
-            return `<span style="color:${color}" title="${n.booked?'第'+(i+1)+'晚已訂房確認':''}"><strong>${mark}</strong>${name}</span>`;
-          }).join('<br>');
-        })()}</td><td style="text-align:center">${p.hotelNights||0}</td>
-        <td style="font-weight:600">$${(p.price||0).toLocaleString()}</td><td>$${(p.deposit||0).toLocaleString()}</td><td style="color:var(--blue)">$${bal.toLocaleString()}</td>
-        <td class="chk" onclick="togglePv('${p.id}','depositPaid',${!p.depositPaid})">${p.depositPaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
-        <td class="chk" onclick="togglePv('${p.id}','balancePaid',${!p.balancePaid})">${p.balancePaid?'<span style="color:var(--green)">✓</span>':'<span style="color:#ccc">○</span>'}</td>
-        <td class="chk" onclick="togglePv('${p.id}','insured',${!p.insured})">${p.insured?'<span style="color:var(--green)">✓</span>':'<span style="color:#EF9F27">✗</span>'}</td>
-        <td>${(()=>{
-          const cars=getPrivBusCars(p),drv=getPrivBusDrivers(p),BUS=['A','B','C','D','E','F'];
-          if(cars<=1){const st=getPrivStatus(p);return`<span class="badge ${st.cls}">${st.label}</span>`;}
-          return Array.from({length:cars},(_,i)=>{
-            const assigned=drv[i]||'';
-            const today2=new Date().toISOString().slice(0,10);
-            const isActive=p.start<=today2&&today2<=p.end;
-            const isDone=p.end<today2;
-            let cls=assigned?'badge-green':'badge-red';
-            let lbl=assigned?'✓ '+assigned:'待派';
-            if(assigned&&isActive){cls='badge-amber';lbl='出團中 '+assigned;}
-            else if(!assigned&&isActive){cls='badge-amber';lbl='出團中（未派）';}
-            if(isDone){cls='badge-green';lbl='完成';}
-            return`<span class="badge ${cls}" style="margin:1px">${BUS[i]}車 ${lbl}</span>`;
-          }).join('');
-        })()}</td>
-        <td style="font-size:11px;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td>
-        <td style="white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="printPriv('${p.id}')"><i class="ti ti-printer"></i></button><button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button></td>
-      </tr>`
+        <td>
+          <div style="font-weight:600">${p.name}</div>
+          <div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}" style="font-size:10px">${p.type==='car+hotel'?'車+住宿':'純包車'}</span>
+            <span style="font-size:11px;color:var(--text2)">${p.pax||'-'}人</span>
+          </div>
+          ${(p.carSeat||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:2px">${specialNeedsHtml(p,'font-size:10px;padding:1px 4px')}</div>`:''}
+          ${p.pickup?`<div style="font-size:11px;color:var(--blue-d);margin-top:1px">✈️ ${p.pickupTime||''} ${p.pickupFlight||''}</div>`:''}
+          ${p.dropoff?`<div style="font-size:11px;color:var(--blue-d);margin-top:1px">🛫 ${p.dropoffTime||''} ${p.dropoffFlight||''}</div>`:''}
+          ${p.freeDays?.length?`<div style="font-size:10px;color:var(--text3);margin-top:1px">免車：${p.freeDays.map(d=>d.slice(5)).join('、')}</div>`:''}
+        </td>
+        <td style="white-space:nowrap;font-size:13px">
+          <div>${p.start||'-'}</div>
+          <div style="color:var(--text2)">${p.end||'-'}</div>
+        </td>
+        <td style="text-align:center;font-size:12px;white-space:nowrap">
+          <div>${p.days||'-'}天</div>
+          <div style="color:var(--text2)">${p.hotelNights||0}晚 ${p.cars||1}車</div>
+        </td>
+        <td>${hotelCell}</td>
+        <td style="font-size:12px;white-space:nowrap">
+          <div style="font-weight:600">$${(p.price||0).toLocaleString()}</div>
+          <div style="color:var(--text2)">訂 $${(p.deposit||0).toLocaleString()}</div>
+          <div style="color:var(--blue);font-weight:600">尾 $${bal.toLocaleString()}</div>
+        </td>
+        <td style="text-align:center;white-space:nowrap">
+          <span onclick="togglePv('${p.id}','depositPaid',${!p.depositPaid})" style="cursor:pointer;margin:0 2px">${p.depositPaid?'<span style="color:var(--green)">定✓</span>':'<span style="color:#ccc">定○</span>'}</span>
+          <span onclick="togglePv('${p.id}','balancePaid',${!p.balancePaid})" style="cursor:pointer;margin:0 2px">${p.balancePaid?'<span style="color:var(--green)">尾✓</span>':'<span style="color:#ccc">尾○</span>'}</span>
+          <span onclick="togglePv('${p.id}','insured',${!p.insured})" style="cursor:pointer;margin:0 2px">${p.insured?'<span style="color:var(--green)">險✓</span>':'<span style="color:#EF9F27">險✗</span>'}</span>
+        </td>
+        <td>${dispCell}</td>
+        <td style="font-size:12px;white-space:nowrap;color:${profit>=0?'var(--green)':'var(--red)'};font-weight:600">$${profit.toLocaleString()}</td>
+        <td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-2px 0 4px rgba(0,0,0,.06)">
+          <button class="btn btn-sm" style="margin-right:4px" onclick="printPriv('${p.id}')"><i class="ti ti-printer"></i></button>
+          <button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button>
+        </td>
+      </tr>`;
     }).join('')}</tbody>
-    <tfoot><tr><td colspan="9">合計</td><td>$${list.reduce((s,p)=>s+p.price,0).toLocaleString()}</td><td>$${list.reduce((s,p)=>s+p.deposit,0).toLocaleString()}</td><td style="color:var(--blue)">$${list.reduce((s,p)=>s+(p.price-p.deposit),0).toLocaleString()}</td><td colspan="6"></td></tr></tfoot>
+    <tfoot><tr>
+      <td colspan="4">合計</td>
+      <td style="font-size:12px;white-space:nowrap">
+        <div style="font-weight:600">$${list.reduce((s,p)=>s+p.price,0).toLocaleString()}</div>
+        <div style="color:var(--text2)">訂 $${list.reduce((s,p)=>s+p.deposit,0).toLocaleString()}</div>
+        <div style="color:var(--blue);font-weight:600">尾 $${list.reduce((s,p)=>s+(p.price-p.deposit),0).toLocaleString()}</div>
+      </td>
+      <td colspan="4"></td>
+    </tr></tfoot>
   </table></div>`}`;
   // 若搜尋框有焦點需求，渲染後移到末尾
   if(pvSearchQ){const q=document.getElementById('pv-q-fixed');if(q){q.focus();const l=q.value.length;q.setSelectionRange(l,l);}}
@@ -3081,20 +3122,56 @@ function renderDriverPage(){
     }
     // 拼團
     if(d.groupTourId){
-      const tId=d.groupTourId.split('_')[0];
+      // groupTourId 格式：tourId_date_busN（或舊格式 tourId_date）
+      const parts=d.groupTourId.split('_');
+      const tId=parts[0];
+      const tDate=parts[1]?(parts[0]+'_'===d.groupTourId.slice(0,parts[0].length+1)?'':parts[1]):'';
+      // 更精確解析：tourId 可能含底線，用 start 日期比對
+      const dateStr=d.start;
       const t=tours.find(x=>x.id===tId);
       const tName=t?t.name:d.label||'拼團';
       const isActive=d.start<=today&&today<=d.end;
       const badge=isActive?`<span class="badge badge-amber">出團中</span>`:`<span class="badge badge-green">即將出發</span>`;
+      // 取該車乘客：從 groupTourId 解析 busIdx
+      let passengerHtml='';
+      if(t){
+        // groupTourId: tId + '_' + date + '_bus' + N  或  tId + '_' + date（單車舊格式）
+        const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+        const busIdx=busMatch?parseInt(busMatch[1]):0;
+        const bks=getDateBks(t.id,dateStr);
+        const buses=buildBuses(bks,t.busMax||8,t.id,dateStr);
+        const myBus=buses.find(b=>b.busIdx===busIdx)||(buses.length===1?buses[0]:null);
+        if(myBus&&myBus.bookings.length){
+          const rows=myBus.bookings.map(b=>`<tr>
+            <td style="font-weight:600;font-size:13px">${b.name}</td>
+            <td style="font-size:12px">${b.count}人</td>
+            <td style="font-size:12px">${b.channel||''}${b.phone?' '+b.phone:''}</td>
+            <td style="font-size:12px;color:var(--text2)">${b.note||''}</td>
+          </tr>`).join('');
+          passengerHtml=`<div style="margin-top:10px">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:4px">本車乘客（${myBus.seats}人）</div>
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr>
+                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">姓名</th>
+                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">人數</th>
+                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">聯絡</th>
+                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">備註</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+        }
+      }
       return`<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
           <div>
             <div style="font-weight:700;font-size:15px">🚌 ${tName}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:2px">${d.start} ～ ${d.end}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px">${d.start}${d.start!==d.end?' ～ '+d.end:''}</div>
           </div>
           ${badge}
         </div>
-        ${d.note?`<div style="margin-top:6px;font-size:12px;color:var(--text2)">備註：${d.note}</div>`:''}
+        ${passengerHtml}
+        ${d.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px">備註：${d.note}</div>`:''}
       </div>`;
     }
     return'';
