@@ -1760,6 +1760,7 @@ function printPriv(id){
   </div>`:''}
   ${hotelHtml}
   ${itinHtml}
+  ${p.note?`<div class="p-section"><div class="p-label">備註</div><div style="font-size:14px;white-space:pre-wrap">${p.note}</div></div>`:''}
   <div style="margin-top:32px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#aaa;text-align:right">列印時間：${new Date().toLocaleString('zh-TW')}</div>
   <script>window.onload=()=>window.print();<\/script>
   </body></html>`);
@@ -3201,7 +3202,7 @@ function renderDriverPage(){
         <div style="font-size:13px;margin-bottom:6px"><span style="color:var(--text2)">客收尾款：</span><strong style="color:var(--red)">$${bal.toLocaleString()}</strong></div>
         ${hotelHtml}
         ${itinHtml}
-        ${p.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2)">備註：${p.note}</div>`:''}
+        ${p.note?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text2)"><span style="font-weight:600">備註：</span>${p.note}</div>`:''}
       </div>`;
     }
     // 拼團
