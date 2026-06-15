@@ -2661,8 +2661,15 @@ function renderFinance(){
         const mr=me.filter(e=>sec.meCats.includes(e.category));
         const dr=de.filter(r=>sec.deTypes.includes(r.type));
         const fr=fe.filter(f=>sec.feCats.includes(f.category));
-        // 酒店費用：額外加入包車團 hotelCost
-        const piHotelRows=sec.id==='hotel'?pi.filter(x=>x.hotelCost>0).map(x=>`<tr><td>${privates.find(p=>p.id===x.id)?.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">包車團：${x.name}（${x.hotelCost?x.hotelCost+'元':'-'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${x.hotelCost.toLocaleString()}</td><td></td></tr>`):[];
+        // 酒店費用：額外加入包車團 hotelCost，並標示代墊狀態
+        const piHotelRows=sec.id==='hotel'?pi.filter(x=>x.hotelCost>0).map(x=>{
+          const pv=privates.find(p=>p.id===x.id);
+          const isPaid=pv?.balancePaid;
+          const badge=isPaid
+            ?`<span class="badge badge-green" style="font-size:10px">已結清</span>`
+            :`<span class="badge badge-amber" style="font-size:10px">⚠️ 代墊中</span>`;
+          return `<tr><td>${pv?.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">包車團：${x.name} ${badge}</td><td style="text-align:right;color:var(--red);font-weight:600">$${x.hotelCost.toLocaleString()}</td><td></td></tr>`;
+        }):[];
         const rows=[
           ...mr.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr><td>${e.date}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">${e.desc||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`),
           ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
@@ -2904,17 +2911,28 @@ function renderBalance(){
   const selMonth=document.getElementById('bal-month')?.value||balMonth;
   const filterByMonth=(date)=>!selMonth||date.startsWith(selMonth);
   const tourItems=tours.flatMap(t=>[...new Set(getBks(t.id).map(b=>b.date))].sort().filter(d=>filterByMonth(d)).map(d=>{const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);if(!bks.length)return null;const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price'),bal=pr-dep;return{label:t.name+' / '+d,bks:bks.map(b=>({...b,perPax:bal})),subtotal:bks.reduce((s,b)=>s+b.count*bal,0)};}).filter(Boolean));
-  const pvItems=privates.filter(p=>!p.balancePaid&&filterByMonth(p.start||'')).map(p=>({label:p.name+'（'+(p.type==='car+hotel'?'車+住宿':'純包車')+'）'+p.start,subtotal:p.price-p.deposit,id:p.id}));
+  const pvItems=privates.filter(p=>!p.balancePaid&&filterByMonth(p.start||'')).map(p=>{
+    // 代墊房費：finalQuote 優先，沒有則用房型估算
+    let advHotel=0;
+    if(p.type==='car+hotel'&&p.nightlyHotels?.length){
+      p.nightlyHotels.forEach(n=>{
+        if(n.finalQuote){advHotel+=n.finalQuote;}
+        else{const h=hotels.find(x=>x.id===n.hotelId);advHotel+=(n.r2||0)*getHotelRoomRate(h,p.start,'r2')+(n.r3||0)*getHotelRoomRate(h,p.start,'r3')+(n.r4||0)*getHotelRoomRate(h,p.start,'r4');}
+      });
+    }
+    return{label:p.name+'（'+(p.type==='car+hotel'?'車+住宿':'純包車')+'）'+p.start,subtotal:p.price-p.deposit,id:p.id,advHotel};
+  });
   const grand=[...tourItems,...pvItems].reduce((s,x)=>s+x.subtotal,0);
+  const totalAdvHotel=pvItems.reduce((s,x)=>s+(x.advHotel||0),0);
   // DEBUG
   console.log('[renderBalance] tours:', tours.length, 'bookings:', bookings.length, 'privates:', privates.length);
   console.log('[renderBalance] tourItems:', tourItems.length, 'pvItems:', pvItems.length);
   console.log('[renderBalance] selMonth:', selMonth);
   const monthSel=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><label style="font-size:13px;font-weight:600">篩選月份：</label><input type="month" id="bal-month" value="${selMonth}" style="height:36px;font-size:13px;width:150px" onchange="balMonth=this.value;renderBalance()"><button class="btn btn-sm" onclick="balMonth='';document.getElementById('bal-month').value='';renderBalance()">全部</button></div>`;
   if(!tourItems.length&&!pvItems.length){el.innerHTML=monthSel+'<div class="empty"><i class="ti ti-check" style="font-size:40px;display:block;margin-bottom:8px;color:var(--green)"></i>所選期間尾款皆已收齊</div>';return;}
-  el.innerHTML=monthSel+`<div class="stat-row" style="grid-template-columns:1fr 1fr"><div class="stat-card"><div class="stat-label">待收項目</div><div class="stat-val">${tourItems.length+pvItems.length}</div></div><div class="stat-card"><div class="stat-label">尾款總計</div><div class="stat-val" style="color:var(--blue)">$${grand.toLocaleString()}</div></div></div>
+  el.innerHTML=monthSel+`<div class="stat-row" style="grid-template-columns:1fr 1fr 1fr"><div class="stat-card"><div class="stat-label">待收項目</div><div class="stat-val">${tourItems.length+pvItems.length}</div></div><div class="stat-card"><div class="stat-label">尾款總計</div><div class="stat-val" style="color:var(--blue)">$${grand.toLocaleString()}</div></div><div class="stat-card" style="border-color:#F09595;background:var(--red-l)"><div class="stat-label" style="color:var(--red-d)">⚠️ 其中代墊房費</div><div class="stat-val" style="color:var(--red)">${totalAdvHotel?'$'+totalAdvHotel.toLocaleString():'—'}</div></div></div>
   ${tourItems.map(item=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-weight:600">${item.label}</span><span style="font-weight:600;color:var(--blue)">$${item.subtotal.toLocaleString()}</span></div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>人數</th><th>聯絡</th><th>電話</th><th style="text-align:right">應收</th><th></th></tr></thead><tbody>${item.bks.map(b=>`<tr><td style="font-weight:600">${b.name}</td><td>${b.count}人</td><td>${chBadge(b.channel)}</td><td style="font-size:12px">${b.phone||'-'}</td><td style="text-align:right;font-weight:600">$${(b.count*b.perPax).toLocaleString()}</td><td><button class="btn btn-sm btn-success" onclick="toggleBk('${b.id}','balancePaid',true)"><i class="ti ti-check"></i> 已收</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}
-  ${pvItems.map(item=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">${item.label}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--blue)">$${item.subtotal.toLocaleString()}</span><button class="btn btn-sm btn-success" onclick="togglePv('${item.id}','balancePaid',true)"><i class="ti ti-check"></i> 已收</button></div></div></div>`).join('')}`;
+  ${pvItems.map(item=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">${item.advHotel?`<div><span style="font-weight:600">${item.label}</span><div style="font-size:12px;color:var(--amber-d);margin-top:3px"><i class="ti ti-building"></i> 代墊房費 <strong>$${item.advHotel.toLocaleString()}</strong>${item.advHotel===Math.round(item.advHotel)?'':' <span style="font-size:10px;color:var(--text3)">(估算)</span>'}</div></div>`:`<span style="font-weight:600">${item.label}</span>`}<div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;color:var(--blue)">$${item.subtotal.toLocaleString()}</span><button class="btn btn-sm btn-success" onclick="togglePv('${item.id}','balancePaid',true)"><i class="ti ti-check"></i> 已收</button></div></div></div>`).join('')}`;
 }
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
