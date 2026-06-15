@@ -1751,8 +1751,13 @@ function printPriv(id){
       <div class="p-field"><label>電話</label><span>${p.phone||'-'}</span></div>
       <div class="p-field"><label>聯絡方式</label><span>${ch||'-'}${p.contact?' ('+p.contact+')':''}</span></div>
     </div>
-    <div style="margin-top:10px"><label style="font-size:12px;color:#888;display:block;margin-bottom:2px">尾款</label><span class="p-balance">$${bal.toLocaleString()}</span></div>
+    <div style="margin-top:10px"><label style="font-size:12px;color:#888;display:block;margin-bottom:2px">客收尾款</label><span class="p-balance">$${bal.toLocaleString()}</span></div>
   </div>
+  ${p.pickup||p.dropoff?`<div class="p-section" style="background:#EEF6FF;border:1px solid #B3D4F5;border-radius:8px;padding:10px 14px">
+    <div class="p-label" style="color:#185FA5">接送機資訊</div>
+    ${p.pickup?`<div style="margin-bottom:6px"><span style="font-weight:600">✈️ 接機</span>　${p.pickupTime||''}　${p.pickupFlight||''}${p.pickupNote?' ／ '+p.pickupNote:''}</div>`:''}
+    ${p.dropoff?`<div><span style="font-weight:600">🛫 送機</span>　${p.dropoffTime||''}　${p.dropoffFlight||''}${p.dropoffNote?' ／ '+p.dropoffNote:''}</div>`:''}
+  </div>`:''}
   ${hotelHtml}
   ${itinHtml}
   <div style="margin-top:32px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#aaa;text-align:right">列印時間：${new Date().toLocaleString('zh-TW')}</div>
@@ -2851,8 +2856,28 @@ function renderFinance(){
     })()}
     <div style="font-size:11px;font-weight:600;color:#0C447C;margin-bottom:6px;margin-top:14px;letter-spacing:1px">▌ 分析</div>
     ${(()=>{
-      const advHotelTotal=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivAdvanceHotel(p),0);
-      return advHotelTotal?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--amber-l);border:1px solid #FAC775;border-radius:8px;margin-bottom:8px;font-size:13px;color:var(--amber-d)"><i class="ti ti-building" style="flex-shrink:0"></i><span>本期代墊房費（尾款未收）<strong style="margin-left:6px;font-size:15px">$${advHotelTotal.toLocaleString()}</strong></span></div>`:'';
+      const advPrivs=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivAdvanceHotel(p)>0);
+      const advHotelTotal=advPrivs.reduce((s,p)=>s+calcPrivAdvanceHotel(p),0);
+      if(!advHotelTotal)return'';
+      const detailRows=advPrivs.map(p=>{
+        const amt=calcPrivAdvanceHotel(p);
+        const unpaidNights=(p.nightlyHotels||[]).filter(n=>n.booked&&(n.paymentType||'company')==='company'&&n.hotelPaid&&!p.balancePaid);
+        const hotelNames=[...new Set(unpaidNights.map(n=>{const h=hotels.find(x=>x.id===n.hotelId);return h?h.name:'-';}))].join('、');
+        return`<tr><td style="font-size:12px;font-weight:600">${p.name}</td><td style="font-size:12px">${p.start||'-'}</td><td style="font-size:12px;color:var(--text2)">${hotelNames||'-'}</td><td style="text-align:right;font-weight:600;color:var(--red)">$${amt.toLocaleString()}</td></tr>`;
+      }).join('');
+      return`<div style="margin-bottom:8px">
+        <div onclick="toggleFinSection('adv-hotel')" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--amber-l);border:1px solid #FAC775;border-radius:8px;cursor:pointer;user-select:none;font-size:13px;color:var(--amber-d)">
+          <span><i class="ti ti-building"></i> 本期代墊房費（尾款未收）<strong style="margin-left:6px;font-size:15px">$${advHotelTotal.toLocaleString()}</strong></span>
+          <span id="arr-adv-hotel" style="font-size:13px">▾</span>
+        </div>
+        <div id="fin-section-adv-hotel" class="fin-section">
+          <div class="tbl-wrap" style="margin-top:4px"><table class="xtable">
+            <thead><tr><th>團名</th><th>出發日</th><th>酒店</th><th style="text-align:right">代墊金額</th></tr></thead>
+            <tbody>${detailRows}</tbody>
+            <tfoot><tr><td colspan="3">合計</td><td style="text-align:right;color:var(--red);font-weight:600">$${advHotelTotal.toLocaleString()}</td></tr></tfoot>
+          </table></div>
+        </div>
+      </div>`;
     })()}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
       ${finCard('profit-analysis','毛利分析',giProfit+piProfit,(giProfit+piProfit)>=0?'green':'red','ti-chart-bar')}
@@ -3164,12 +3189,16 @@ function renderDriverPage(){
           ${badge}
         </div>
         ${gearHtml}
+        ${p.pickup||p.dropoff?`<div style="margin-bottom:8px;padding:8px 10px;background:#EEF6FF;border:1px solid #B3D4F5;border-radius:8px;font-size:13px">
+          ${p.pickup?`<div style="margin-bottom:${p.dropoff?'4px':'0'}"><strong>✈️ 接機</strong>　${p.pickupTime||''}　${p.pickupFlight||''}${p.pickupNote?' ／ '+p.pickupNote:''}</div>`:''}
+          ${p.dropoff?`<div><strong>🛫 送機</strong>　${p.dropoffTime||''}　${p.dropoffFlight||''}${p.dropoffNote?' ／ '+p.dropoffNote:''}</div>`:''}
+        </div>`:''}
         <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:4px">
           <div><span style="color:var(--text2)">姓名：</span>${p.name||'-'}</div>
           <div><span style="color:var(--text2)">電話：</span><strong>${p.phone||'-'}</strong></div>
           <div><span style="color:var(--text2)">聯絡：</span>${p.channel||''}${p.contact?' ('+p.contact+')':''}</div>
         </div>
-        <div style="font-size:13px;margin-bottom:6px"><span style="color:var(--text2)">尾款：</span><strong style="color:var(--red)">$${bal.toLocaleString()}</strong></div>
+        <div style="font-size:13px;margin-bottom:6px"><span style="color:var(--text2)">客收尾款：</span><strong style="color:var(--red)">$${bal.toLocaleString()}</strong></div>
         ${hotelHtml}
         ${itinHtml}
         ${p.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2)">備註：${p.note}</div>`:''}
