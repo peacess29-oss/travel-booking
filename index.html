@@ -1180,7 +1180,7 @@ function renderPrivate(){
     `}
   </div>
   ${!list.length?'<div class="empty">無資料</div>':`<div class="tbl-wrap"><table class="xtable">
-    <thead><tr><th>團名</th><th>類型</th><th>出發</th><th>結束</th><th>天</th><th>人</th><th>車</th><th>酒店</th><th>晚</th><th>報價</th><th>定金</th><th>尾款</th><th class="chk">定</th><th class="chk">尾</th><th class="chk">險</th><th>派車</th><th>利潤</th><th></th></tr></thead>
+    <thead><tr><th>團名</th><th>類型</th><th>出發</th><th>結束</th><th>天</th><th>人</th><th>車</th><th style="min-width:130px">酒店</th><th>晚</th><th>報價</th><th>定金</th><th>尾款</th><th class="chk">定</th><th class="chk">尾</th><th class="chk">險</th><th>派車</th><th>利潤</th><th></th></tr></thead>
     <tbody>${list.map(p=>{
       const bal=p.price-p.deposit,cost=(p.driverCost||0)+(p.hotelCost||0)+(p.insCost||0),profit=p.price-cost;
       return`<tr style="${!p.assignedDriver?'background:rgba(160,32,32,.03)':''}">
@@ -1192,7 +1192,7 @@ function renderPrivate(){
           ${p.freeDays?.length?`<div style="font-size:11px;color:var(--text3);margin-top:2px">免車：${p.freeDays.map(d=>d.slice(5)).join('、')}</div>`:''}
         </td><td><span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}">${p.type==='car+hotel'?'車+住宿':'純包車'}</span></td>
         <td>${p.start||'-'}</td><td>${p.end||'-'}</td><td style="text-align:center">${p.days||'-'}</td><td style="text-align:center">${p.pax||'-'}</td><td style="text-align:center">${p.cars||1}</td>
-        <td style="font-size:11px">${(()=>{
+        <td style="font-size:11px;min-width:130px">${(()=>{
           if(!p.nightlyHotels?.length) return `<span style="color:var(--text2)">${p.hotelName||'-'}</span>`;
           return p.nightlyHotels.map((n,i)=>{
             const h=hotels.find(x=>x.id===n.hotelId);
@@ -1886,7 +1886,7 @@ function renderAssignSuggestions(){
 }
 
 // 套用智慧建議：指派新司機 + 衝突舊排班刪除並設回待派車（或指定外派司機）
-// 取得目前指派的日期範圍（包車團可縮短）
+async // 取得目前指派的日期範圍（包車團可縮短）
 function getAssignRange(){
   const s=document.getElementById('assign-range-start')?.value;
   const e=document.getElementById('assign-range-end')?.value;
