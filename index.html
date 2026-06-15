@@ -116,6 +116,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .pub-card{background:var(--bg);border-radius:16px;padding:28px;width:460px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.1)}
 .pub-title{font-size:20px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
 .pub-sub{font-size:13px;color:var(--text2);margin-bottom:22px}
+.fin-section{display:none}
+.fin-section.open{display:block}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -2587,8 +2589,6 @@ function renderFinance(){
     .fin-card-label{font-size:11px;color:var(--text2);margin-bottom:4px;white-space:nowrap}
     .fin-card-val{font-size:15px;font-weight:700}
     .fin-card-arrow{font-size:10px;color:var(--text2);margin-top:3px}
-    .fin-section{display:none;margin-top:6px}
-    .fin-section.open{display:block}
   </style>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
     <select id="fin-mode" onchange="renderFinance()" style="height:34px;font-size:13px"><option value="month"${mode==='month'?' selected':''}>月報</option><option value="year"${isYear?' selected':''}>年報</option></select>
@@ -2754,7 +2754,7 @@ function renderHotelStat(){
   const s=hotelStatStart,e=hotelStatEnd;
   const hsHotelEl=document.getElementById('hs-hotel');
   if(hsHotelEl)hotelStatFilter=hsHotelEl.value;
-  const hotelFilter=hotelStatFilter.trim().toLowerCase();
+  const hotelFilter=hotelStatFilter.trim();
   const inRange=d=>(!s||d>=s)&&(!e||d<=e);
 
   // ── 收集所有住宿記錄 ──
@@ -2785,7 +2785,7 @@ function renderHotelStat(){
   });
 
   const allRows=[...privRows,...groupRows]
-    .filter(r=>!hotelFilter||r.hotelName.toLowerCase().includes(hotelFilter)||r.hotelArea.toLowerCase().includes(hotelFilter))
+    .filter(r=>!hotelFilter||(r.hotelId||r.hotelName)===hotelFilter)
     .sort((a,b)=>a.date>b.date?1:-1);
   const totalRooms=allRows.reduce((s,r)=>s+r.roomCount,0);
   const totalCost=allRows.reduce((s,r)=>s+r.cost,0);
@@ -2811,6 +2811,12 @@ function renderHotelStat(){
     hotelStatEnd=y+'-'+String(m+1).padStart(2,'0')+'-'+String(last.getDate()).padStart(2,'0');
   }
 
+  // 產生有記錄的酒店選單（依目前 allRows，不過濾，讓下拉永遠顯示全部有記錄的酒店）
+  const allRowsForSel=[...privRows,...groupRows].sort((a,b)=>a.date>b.date?1:-1);
+  const hotelOptsMap={};
+  allRowsForSel.forEach(r=>{const k=r.hotelId||r.hotelName;if(!hotelOptsMap[k])hotelOptsMap[k]={name:r.hotelName,area:r.hotelArea};});
+  const hotelOpts=Object.entries(hotelOptsMap).map(([k,v])=>`<option value="${k}" ${hotelStatFilter===k?'selected':''}>${v.name}${v.area?' ('+v.area+')':''}</option>`).join('');
+
   el.innerHTML=`
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -2825,8 +2831,11 @@ function renderHotelStat(){
       <button class="btn btn-sm" onclick="setHotelStatRange('year')">年度</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:160px">
-      <i class="ti ti-search" style="color:var(--text2)"></i>
-      <input id="hs-hotel" placeholder="搜尋酒店名稱或地區…" value="${hotelStatFilter}" style="height:34px;font-size:13px;flex:1" oninput="hotelStatFilter=this.value;renderHotelStat();document.getElementById('hs-hotel').focus()">
+      <i class="ti ti-building" style="color:var(--text2)"></i>
+      <select id="hs-hotel" style="height:34px;font-size:13px;flex:1" onchange="hotelStatFilter=this.value;renderHotelStat()">
+        <option value="">— 全部酒店 —</option>
+        ${hotelOpts}
+      </select>
     </div>
   </div>
 
@@ -2845,15 +2854,15 @@ function renderHotelStat(){
       const hRooms=hd.rows.reduce((s,r)=>s+r.roomCount,0);
       const secId='hs-h-'+k.replace(/[^a-zA-Z0-9]/g,'_');
       return `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg2);cursor:pointer" onclick="toggleFinSection('${secId}')">
-          <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg2);cursor:pointer;user-select:none" onclick="toggleFinSection('${secId}')">
+          <div style="display:flex;align-items:center;gap:8px">
             <span style="font-weight:600">${hd.hotelName}</span>
-            ${hd.hotelArea?`<span style="font-size:11px;color:var(--text2);margin-left:6px">${hd.hotelArea}</span>`:''}
+            ${hd.hotelArea?`<span style="font-size:11px;color:var(--text2)">${hd.hotelArea}</span>`:''}
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <span style="font-size:12px;color:var(--text2)">${hRooms}間</span>
             <span style="font-weight:700;color:var(--red)">$${hTotal.toLocaleString()}</span>
-            <span id="arr-${secId}" style="font-size:11px;color:var(--text2)">▾</span>
+            <span id="arr-${secId}" style="font-size:13px;color:var(--text2);transition:transform .2s">▾</span>
           </div>
         </div>
         <div id="fin-section-${secId}" class="fin-section">
@@ -2883,23 +2892,6 @@ function renderHotelStat(){
         </div>
       </div>`;
     }).join('')}
-  </div>
-
-  <div class="card">
-    <div class="card-title"><i class="ti ti-calendar-event"></i> 依時間統計</div>
-    <div class="tbl-wrap"><table class="xtable">
-      <thead><tr><th>日期</th><th>酒店</th><th>來源</th><th>團名/客人</th><th>房型</th><th style="text-align:center">間數</th><th style="text-align:right">費用</th></tr></thead>
-      <tbody>${allRows.map(r=>`<tr>
-        <td>${r.date}</td>
-        <td style="font-weight:600">${r.hotelName}${r.hotelArea?` <span style="font-size:10px;color:var(--text2)">${r.hotelArea}</span>`:''}</td>
-        <td><span class="badge ${r.source==='包車'?'badge-blue':'badge-green'}">${r.source}</span></td>
-        <td style="font-size:12px">${r.label}${r.guestName?' ／ '+r.guestName:''}</td>
-        <td style="font-size:12px">${r.roomType}</td>
-        <td style="text-align:center">${r.roomCount}</td>
-        <td style="text-align:right;color:var(--red);font-weight:600">$${r.cost.toLocaleString()}</td>
-      </tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="5">合計</td><td style="text-align:center">${totalRooms}</td><td style="text-align:right;color:var(--red)">$${totalCost.toLocaleString()}</td></tr></tfoot>
-    </table></div>
   </div>`}`;
 }
 
