@@ -693,8 +693,8 @@ function initDriverListeners(drvId){
   setSS('syncing','連線中');
   db.collection('driverRecs').where('driverId','==',drvId)
     .onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
-  db.collection('dispatches').where('driverId','==',drvId)
-    .onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // dispatches 全部讀取（量小），顯示層再過濾自己的，確保包車團指派也能看到
+  db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 }
 function refresh(){
