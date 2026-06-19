@@ -800,18 +800,23 @@ function loginDriver(){
   showPage('p-driver');
 }
 function logout(){
+  const wasDriver=curRole==='driver';
   curRole='';curDriverId='';
-  // [修正] 登出時一律同時清除兩個 key，避免殘留
   localStorage.removeItem('adminDeviceTrusted_v1');
   localStorage.removeItem('driverDeviceTrusted_v1');
-  // [修正] 重置 listenersInited，讓下次登入可以重新訂閱
-  // 注意：因 Firestore listeners 無法取消（此架構未保存 unsubscribe），
-  // 用重整頁面的方式確保乾淨狀態
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').style.display='none';
   document.getElementById('login-pwd').value='';
   document.getElementById('login-err').style.display='none';
+  document.getElementById('admin-pwd-wrap').style.display='none';
   listenersInited=false;
+  // 司機登出 → 自動捲到司機登入區並 focus 密碼欄
+  if(wasDriver){
+    setTimeout(()=>{
+      const drvSec=document.getElementById('login-pwd');
+      if(drvSec){drvSec.scrollIntoView({behavior:'smooth',block:'center'});drvSec.focus();}
+    },100);
+  }
 }
 function buildNav(role){
   const nav=document.getElementById('main-nav');
