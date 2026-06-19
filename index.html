@@ -686,15 +686,23 @@ function initListeners(){
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;refresh();});
   db.collection('meta').doc('costSettings').onSnapshot(s=>{if(s.exists)costSettings={...costSettings,...s.data()};});
 }
-// [司機隔離] 司機登入時只訂閱自己的資料，不下載業務資料
+// [司機隔離] 司機登入時只訂閱必要資料
 function initDriverListeners(drvId){
   if(listenersInited)return;
   listenersInited=true;
   setSS('syncing','連線中');
+  // 自己的收支紀錄
   db.collection('driverRecs').where('driverId','==',drvId)
     .onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
-  // dispatches 全部讀取（量小），顯示層再過濾自己的，確保包車團指派也能看到
+  // 派車（全部讀，顯示層過濾）— 包車團指派欄位不固定，不能用 where 過濾
   db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 司機資料（renderDriverPage 需要用自己的 name/id 比對）
+  db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 包車團資料（顯示行程詳情需要）
+  db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 酒店資料（顯示住宿安排需要）
+  db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 車牌選單
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 }
 function refresh(){
