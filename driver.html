@@ -90,13 +90,8 @@ function doLogin(){
   const errEl=document.getElementById('err-msg');
   errEl.style.display='none';
 
-  if(!loaded){
+  if(!loaded||!drivers.length){
     errEl.textContent='⏳ 資料尚未載入，請稍後再試';
-    errEl.style.display='block';
-    return;
-  }
-  if(!drivers.length){
-    errEl.textContent='⚠️ 目前無司機資料，請確認 Firestore 內有 drivers 集合';
     errEl.style.display='block';
     return;
   }

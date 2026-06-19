@@ -686,6 +686,17 @@ function initListeners(){
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;refresh();});
   db.collection('meta').doc('costSettings').onSnapshot(s=>{if(s.exists)costSettings={...costSettings,...s.data()};});
 }
+// [司機隔離] 司機登入時只訂閱自己的資料，不下載業務資料
+function initDriverListeners(drvId){
+  if(listenersInited)return;
+  listenersInited=true;
+  setSS('syncing','連線中');
+  db.collection('driverRecs').where('driverId','==',drvId)
+    .onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
+  db.collection('dispatches').where('driverId','==',drvId)
+    .onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
+}
 function refresh(){
   if(curPage==='p-group')renderGroup();
   if(curPage==='p-private')renderPrivate();
@@ -705,15 +716,19 @@ function populateLoginSel(){
   sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
 
-// [修正] 管理員密碼改從 Firestore meta 讀取，不再硬編碼在前端
-// 若 meta/config 不存在則 fallback 到預設值（首次部署時使用）
-let ADMIN_PASSWORD='jay888';
-// 嘗試從 Firestore 讀取管理員密碼，失敗時 fallback 預設值，不阻塞登入
-try{
-  db.collection('meta').doc('config').get()
-    .then(s=>{if(s.exists&&s.data().adminPwd)ADMIN_PASSWORD=s.data().adminPwd;})
-    .catch(()=>{}); // Firestore 未就緒時靜默忽略
-}catch(e){}
+// 管理員密碼從 Firestore meta/adminPassword 讀取，原始碼不存任何密碼
+let ADMIN_PASSWORD=null; // null = 尚未從 Firestore 載入
+let adminPwdLoaded=false;
+
+// 頁面載入時立即非同步抓密碼，存入記憶體，不寫入任何 JS 變數名稱讓人猜
+db.collection('meta').doc('adminPassword').get()
+  .then(s=>{
+    if(s.exists && s.data().pwd){
+      ADMIN_PASSWORD=s.data().pwd;
+    }
+    adminPwdLoaded=true;
+  })
+  .catch(()=>{adminPwdLoaded=true;}); // Firestore 失敗時標記已嘗試，登入時再提示
 
 var ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
 
@@ -723,12 +738,13 @@ function adminLogin(){
     if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
     loginAs('admin');return;
   }
-  // 展開密碼輸入框（不需 Firebase）
   const wrap=document.getElementById('admin-pwd-wrap');
   if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}
 }
 function adminPwdConfirm(){
   if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
+  if(!adminPwdLoaded){alert('連線中，請稍候再試');return;}
+  if(!ADMIN_PASSWORD){alert('無法取得驗證資料，請重新整理頁面');return;}
   const pwd=document.getElementById('admin-pwd-input').value;
   if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}
   localStorage.setItem(ADMIN_DEVICE_KEY,'1');
@@ -772,7 +788,7 @@ function loginDriver(){
   document.getElementById('app').style.display='block';
   document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
   buildNav('driver');
-  initListeners();
+  initDriverListeners(drvId);
   showPage('p-driver');
 }
 function logout(){
@@ -4080,7 +4096,7 @@ if(window.location.hash==='#booking'){
         document.getElementById('login-screen').style.display='none';
         document.getElementById('app').style.display='block';
         document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-        buildNav('driver');initListeners();showPage('p-driver');
+        buildNav('driver');initDriverListeners(driverData.id);showPage('p-driver');
       }
     });
   } else { initDefaultDrivers(); }
@@ -4104,7 +4120,7 @@ if(window.location.hash==='#booking'){
             document.getElementById('login-screen').style.display='none';
             document.getElementById('app').style.display='block';
             document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-            buildNav('driver');initListeners();showPage('p-driver');
+            buildNav('driver');initDriverListeners(drv.id);showPage('p-driver');
           }
         }catch(e){localStorage.removeItem('driverDeviceTrusted_v1');}
       });
