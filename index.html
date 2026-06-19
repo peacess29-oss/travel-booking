@@ -140,6 +140,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       <div class="mb10"><label>司機登入</label><select id="login-drv-sel" style="height:36px"></select></div>
       <div class="mb10"><label>密碼</label><input type="password" id="login-pwd" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter')loginDriver()"></div>
       <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" id="login-remember" style="width:15px;height:15px"> 記住此設備，下次自動登入
+      </label>
       <button class="btn btn-success" style="width:100%;justify-content:center" onclick="loginDriver()"><i class="ti ti-steering-wheel"></i> 司機登入</button>
       <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text2)">司機可使用 <a href="driver.html" style="color:var(--blue)">專屬司機頁面</a> 登入（獨立網址）</div>
     </div>
@@ -173,7 +176,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div class="topbar-brand" id="app-brand"><i class="ti ti-bus" style="color:var(--blue)"></i><span id="app-title">旅遊業務管理系統</span></div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="sync-pill"><div class="sync-dot syncing" id="sync-dot"></div><span id="sync-msg">連線中</span></div>
-      <button class="btn btn-sm" onclick="logout()"><i class="ti ti-logout"></i> 登出</button>
+      <span id="topbar-logout-btns">
+        <button class="btn btn-sm" onclick="logout()" id="btn-logout-normal"><i class="ti ti-logout"></i> 登出</button>
+      </span>
     </div>
   </div>
   <div class="nav" id="main-nav"></div>
@@ -187,6 +192,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
   <div id="p-customers" class="page"></div>
+</div>
+
+<!-- ═══ 司機首次設定密碼 Modal ═══ -->
+<div class="overlay" id="m-setpwd" style="z-index:300">
+  <div class="modal" style="width:380px">
+    <div class="mh"><span class="mh-title">🔐 設定登入密碼</span></div>
+    <div class="info-box" style="margin-bottom:12px"><i class="ti ti-info-circle"></i> 您是第一次登入，請先設定專屬密碼</div>
+    <div class="mb10"><label>新密碼 *</label><input type="password" id="setpwd-new" placeholder="請輸入新密碼" style="height:36px" onkeydown="if(event.key==='Enter')document.getElementById('setpwd-confirm').focus()"></div>
+    <div class="mb10"><label>確認密碼 *</label><input type="password" id="setpwd-confirm" placeholder="再輸入一次" style="height:36px" onkeydown="if(event.key==='Enter')submitSetPwd()"></div>
+    <div id="setpwd-err" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none"><i class="ti ti-alert-circle"></i> <span id="setpwd-err-msg"></span></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="submitSetPwd()"><i class="ti ti-check"></i> 確認設定</button>
+  </div>
 </div>
 
 <!-- ═══ MODALS ═══ -->
@@ -514,6 +531,7 @@ let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses
 let curPage='p-group',curRole='',curDriverId='',eIds={};
 let pvSearchQ='';
 let balMonth='';
+let drvStatMonth=new Date().toISOString().slice(0,7); // 司機統計預設當月
 let hotelStatStart='',hotelStatEnd='',hotelStatFilter='';
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
@@ -788,35 +806,76 @@ function loginDriver(){
   const drvId=document.getElementById('login-drv-sel').value;
   const pwd=document.getElementById('login-pwd').value;
   const drv=drivers.find(d=>d.id===drvId);
-  if(!drv||drv.password!==pwd){document.getElementById('login-err').style.display='block';return;}
-  localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drvId,name:drv.name}));
-  curRole='driver';curDriverId=drvId;
+  if(!drv){document.getElementById('login-err').style.display='block';return;}
+  // 密碼為空 → 首次登入，任意密碼都接受（讓司機自行設定）
+  if(!drv.password){
+    // 暫存待設定的司機 id，跳出設定密碼 Modal
+    curDriverId=drvId;
+    document.getElementById('login-err').style.display='none';
+    document.getElementById('setpwd-new').value='';
+    document.getElementById('setpwd-confirm').value='';
+    document.getElementById('setpwd-err').style.display='none';
+    document.getElementById('m-setpwd').classList.add('open');
+    setTimeout(()=>document.getElementById('setpwd-new').focus(),100);
+    return;
+  }
+  if(String(drv.password)!==String(pwd)){document.getElementById('login-err').style.display='block';return;}
+  enterDriverApp(drv);
+}
+function enterDriverApp(drv, remember){
+  // remember=true → 綁定設備；undefined → 由勾選框決定；false → 不綁定
+  const chk = document.getElementById('login-remember');
+  const shouldRemember = (remember === true) || (remember === undefined && chk && chk.checked);
+  if(shouldRemember){
+    localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drv.id,name:drv.name}));
+  }
+  curRole='driver';curDriverId=drv.id;
   document.getElementById('login-err').style.display='none';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
   buildNav('driver');
-  initDriverListeners(drvId);
+  initDriverListeners(drv.id);
   showPage('p-driver');
 }
-function logout(){
+async function submitSetPwd(){
+  const np=document.getElementById('setpwd-new').value.trim();
+  const cp=document.getElementById('setpwd-confirm').value.trim();
+  const errEl=document.getElementById('setpwd-err');
+  const errMsg=document.getElementById('setpwd-err-msg');
+  errEl.style.display='none';
+  if(!np){errMsg.textContent='請輸入新密碼';errEl.style.display='block';return;}
+  if(np.length<4){errMsg.textContent='密碼至少需要 4 個字元';errEl.style.display='block';return;}
+  if(np!==cp){errMsg.textContent='兩次輸入的密碼不一致';errEl.style.display='block';return;}
+  try{
+    await db.collection('drivers').doc(curDriverId).update({password:np});
+    // 同步本地 drivers 陣列
+    const idx=drivers.findIndex(d=>d.id===curDriverId);
+    if(idx>=0) drivers[idx].password=np;
+    document.getElementById('m-setpwd').classList.remove('open');
+    const drv=drivers.find(d=>d.id===curDriverId);
+    if(drv) enterDriverApp(drv);
+  }catch(e){
+    errMsg.textContent='儲存失敗，請重新整理頁面再試';
+    errEl.style.display='block';
+  }
+}
+function logout(unbind){
   const wasDriver=curRole==='driver';
   curRole='';curDriverId='';
   localStorage.removeItem('adminDeviceTrusted_v1');
-  localStorage.removeItem('driverDeviceTrusted_v1');
+  if(unbind) localStorage.removeItem('driverDeviceTrusted_v1');
+  listenersInited=false;
+  // 司機登出 → 直接跳回專屬司機頁面
+  if(wasDriver){
+    window.location.href='driver.html';
+    return;
+  }
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').style.display='none';
   document.getElementById('login-pwd').value='';
   document.getElementById('login-err').style.display='none';
   document.getElementById('admin-pwd-wrap').style.display='none';
-  listenersInited=false;
-  // 司機登出 → 自動捲到司機登入區並 focus 密碼欄
-  if(wasDriver){
-    setTimeout(()=>{
-      const drvSec=document.getElementById('login-pwd');
-      if(drvSec){drvSec.scrollIntoView({behavior:'smooth',block:'center'});drvSec.focus();}
-    },100);
-  }
 }
 function buildNav(role){
   const nav=document.getElementById('main-nav');
@@ -832,6 +891,12 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
   } else {
     nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver',this)"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
+    // 司機 topbar 登出按鈕：一般登出（保留綁定）+ 解除綁定
+    const isBound = !!localStorage.getItem('driverDeviceTrusted_v1');
+    document.getElementById('topbar-logout-btns').innerHTML = isBound
+      ? `<button class="btn btn-sm" onclick="logout()" title="登出但保留自動登入"><i class="ti ti-logout"></i> 登出</button>
+         <button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="if(confirm('解除綁定後下次需重新輸入密碼，確定嗎？'))logout(true)" title="解除設備綁定"><i class="ti ti-device-mobile-off"></i> 解除綁定</button>`
+      : `<button class="btn btn-sm" onclick="logout()"><i class="ti ti-logout"></i> 登出</button>`;
   }
 }
 // [修正] showPage 改接收明確的 tabEl 參數，不再依賴隱式全域 event
@@ -3297,40 +3362,91 @@ function renderDriverPage(){
   const fuelRecs=myRecs.filter(r=>r.type==='fuel'&&r.mileage).sort((a,b)=>a.mileage-b.mileage);
   let avgKmL='—';if(fuelRecs.length>=2){const km=fuelRecs[fuelRecs.length-1].mileage-fuelRecs[0].mileage;const l=fuelRecs.slice(1).reduce((s,r)=>s+(r.fuelLiters||0),0);if(l>0)avgKmL=(km/l).toFixed(1)+' km/L';}
   const carMileage={};myRecs.filter(r=>r.mileage&&r.car).forEach(r=>{if(!carMileage[r.car]||r.mileage>carMileage[r.car])carMileage[r.car]=r.mileage;});
+  // ── 統計：依 drvStatMonth 計算 ──
+  const statRecs=myRecs.filter(r=>r.date&&r.date.startsWith(drvStatMonth));
+  const statIncome =statRecs.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+  const statTips   =statRecs.filter(r=>r.type==='tips').reduce((s,r)=>s+r.amount,0);
+  const statExtra  =statRecs.filter(r=>r.type==='extra').reduce((s,r)=>s+r.amount,0);
+  const statExp    =statRecs.filter(r=>r.type!=='income'&&r.type!=='tips'&&r.type!=='extra').reduce((s,r)=>s+r.amount,0);
+  const fuelRecsM  =statRecs.filter(r=>r.type==='fuel'&&r.mileage).sort((a,b)=>a.mileage-b.mileage);
+  let avgKmLM='—';
+  if(fuelRecsM.length>=2){const km=fuelRecsM[fuelRecsM.length-1].mileage-fuelRecsM[0].mileage;const l=fuelRecsM.slice(1).reduce((s,r)=>s+(r.fuelLiters||0),0);if(l>0)avgKmLM=(km/l).toFixed(1)+' km/L';}
+
+  // ── 篩選記錄列表 ──
   const filterType=document.getElementById('dr-filter-type')?.value||'all';
-  const filterCar=document.getElementById('dr-filter-car')?.value||'all';
-  const filterMonth=document.getElementById('dr-filter-month')?.value||'';
-  let filtered=myRecs;
+  const filterCar =document.getElementById('dr-filter-car')?.value||'all';
+  let filtered=myRecs.filter(r=>r.date&&r.date.startsWith(drvStatMonth));
   if(filterType!=='all')filtered=filtered.filter(r=>r.type===filterType);
-  if(filterCar!=='all')filtered=filtered.filter(r=>r.car===filterCar);
-  if(filterMonth)filtered=filtered.filter(r=>r.date&&r.date.startsWith(filterMonth));
-  el.innerHTML=`
-  <div class="card" style="margin-bottom:12px">
+  if(filterCar!=='all') filtered=filtered.filter(r=>r.car===filterCar);
+
+  // 月份切換器 html
+  const [sy,sm]=drvStatMonth.split('-').map(Number);
+  const prevM=sm===1?`${sy-1}-12`:`${sy}-${String(sm-1).padStart(2,'0')}`;
+  const nextM=sm===12?`${sy+1}-01`:`${sy}-${String(sm+1).padStart(2,'0')}`;
+  const nowM =new Date().toISOString().slice(0,7);
+  const monthNavHtml=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button class="btn btn-sm" onclick="drvStatMonth='${prevM}';renderDriverPage()"><i class="ti ti-chevron-left"></i></button>
+      <span style="font-weight:700;font-size:15px;min-width:80px;text-align:center">${sy} 年 ${sm} 月</span>
+      <button class="btn btn-sm" onclick="drvStatMonth='${nextM}';renderDriverPage()"><i class="ti ti-chevron-right"></i></button>
+      ${drvStatMonth!==nowM?`<button class="btn btn-sm" onclick="drvStatMonth='${nowM}';renderDriverPage()">回本月</button>`:''}
+    </div>`;
+
+  // 快速輸入按鈕 html
+  const quickInputHtml=`
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px"><i class="ti ti-bolt"></i> 快速新增記錄</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">收入</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-sm" style="background:var(--green);color:var(--green-l);border-color:var(--green);font-size:13px;padding:7px 14px" onclick="openRec('','income')"><i class="ti ti-cash"></i> 客收</button>
+        <button class="btn btn-sm" style="background:var(--green);color:var(--green-l);border-color:var(--green);font-size:13px;padding:7px 14px" onclick="openRec('','extra')"><i class="ti ti-coin"></i> 外收</button>
+        <button class="btn btn-sm" style="background:var(--green);color:var(--green-l);border-color:var(--green);font-size:13px;padding:7px 14px" onclick="openRec('','tips')"><i class="ti ti-gift"></i> 小費</button>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">支出</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','fuel')"><i class="ti ti-gas-station"></i> 加油</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','parking')"><i class="ti ti-parking"></i> 停車</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','toll')"><i class="ti ti-road"></i> 過路</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','maint')"><i class="ti ti-tool"></i> 保養</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','inspection')"><i class="ti ti-clipboard-check"></i> 驗車</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','other')"><i class="ti ti-dots"></i> 其他</button>
+      </div>
+    </div>`;
+
+  el.innerHTML=
+    quickInputHtml+
+  `<div class="card" style="margin-bottom:12px">
     <div style="font-size:15px;font-weight:700;margin-bottom:12px"><i class="ti ti-calendar-event" style="color:var(--blue)"></i> 我的行程</div>
     ${scheduleHtml}
   </div>
-  <div class="card">
-    <div style="font-size:15px;font-weight:700;margin-bottom:10px"><i class="ti ti-steering-wheel"></i> ${drv.name} — 我的記錄</div>
-    <div class="stat-row" style="grid-template-columns:repeat(3,1fr)">
-      <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green)">$${myIncome.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">支出合計</div><div class="stat-val" style="color:var(--red)">$${myExp.toLocaleString()}</div></div>
-      <div class="stat-card"><div class="stat-label">平均油耗</div><div class="stat-val" style="font-size:15px">${avgKmL}</div></div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px"><i class="ti ti-chart-bar" style="color:var(--blue)"></i> 記錄統計</div>
+    ${monthNavHtml}
+    <div class="stat-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px">
+      <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green);font-size:16px">$${statIncome.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">小費合計</div><div class="stat-val" style="color:var(--green);font-size:16px">$${statTips.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">外收合計</div><div class="stat-val" style="color:var(--green);font-size:16px">$${statExtra.toLocaleString()}</div></div>
     </div>
-    ${Object.keys(carMileage).length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">最新里程：${Object.entries(carMileage).map(([c,m])=>`${c}: ${m.toLocaleString()} km`).join(' ／ ')}</div>`:''}
-    <button class="btn btn-primary btn-sm" onclick="openRec()"><i class="ti ti-plus"></i> 新增記錄</button>
+    <div class="stat-row" style="grid-template-columns:repeat(2,1fr)">
+      <div class="stat-card"><div class="stat-label">支出合計</div><div class="stat-val" style="color:var(--red);font-size:16px">$${statExp.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">平均油耗</div><div class="stat-val" style="font-size:14px">${avgKmLM}</div></div>
+    </div>
+    ${Object.keys(carMileage).length?`<div style="font-size:12px;color:var(--text2);margin-top:8px">最新里程：${Object.entries(carMileage).map(([c,m])=>`${c}: ${m.toLocaleString()} km`).join(' ／ ')}</div>`:''}
   </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <select id="dr-filter-type" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部</option>${Object.entries(TYPE_N).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
-    <select id="dr-filter-car" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部車輛</option>${carsList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
-    <input id="dr-filter-month" type="month" onchange="renderDriverPage()" style="height:34px;font-size:12px;width:135px">
-  </div>
-  ${!filtered.length?'<div class="empty">尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=(r.type==='income'||r.type==='extra'||r.type==='tips');const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');return`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)'}">${TYPE_N[r.type]||r.type}${mn}</span></td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${isIncome?'var(--green)':'var(--red)'}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`}).join('')}</tbody></table></div>`}`;
+  <div class="card">
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px"><i class="ti ti-list"></i> 記錄列表</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <select id="dr-filter-type" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部類別</option>${Object.entries(TYPE_N).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+      <select id="dr-filter-car" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部車輛</option>${carsList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
+    </div>
+    ${!filtered.length?'<div class="empty">本月尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=(r.type==='income'||r.type==='extra'||r.type==='tips');const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');const rowHtml='<tr><td>'+r.date+'</td><td style="font-size:11px">'+(r.car||'-')+'</td><td><span class="badge" style="'+(isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)') +'">'+String(TYPE_N[r.type]||r.type)+mn+'</span></td><td style="font-size:11px;color:var(--text2)">'+(detail||'-')+'</td><td style="font-size:11px">'+(r.mileage?r.mileage.toLocaleString()+' km':'-')+'</td><td style="text-align:right;font-weight:600;color:'+(isIncome?'var(--green)':'var(--red)')+'">$'+(r.amount||0).toLocaleString()+'</td><td><button class="btn btn-sm" onclick="openRec('+JSON.stringify(r.id)+')"><i class="ti ti-edit"></i></button></td></tr>';return rowHtml;}).join('')}</tbody></table></div>`}
+  </div>`;
 }
 function getLastKm(carId,excId=''){const recs=driverRecs.filter(r=>r.car===carId&&r.mileage&&r.id!==excId).sort((a,b)=>b.mileage-a.mileage);return recs.length?recs[0].mileage:0;}
-function openRec(id=''){
+function openRec(id='',defaultType=''){
   eIds.rec=id||null;const r=id?driverRecs.find(x=>x.id===id):null;
   document.getElementById('mr-title').textContent=id?'編輯記錄':'新增記錄';document.getElementById('btn-del-rec').style.display=id?'inline-flex':'none';
-  document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||'income';document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';
+  document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||(defaultType||'income');document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';
   // 新增記錄時預設常用車輛；編輯時保留原本選的車輛
   const drv0=drivers.find(d=>d.id===curDriverId);
   // 優先序：1. 編輯時原本的車 2. 設定的常用車輛 3. 最近一筆記錄的車
@@ -3791,7 +3907,7 @@ function exportCustomersExcel(){
 function renderSettings(){
   const el=document.getElementById('p-settings');
   el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
-    ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>常用車輛</th><th>月薪</th><th>每趟</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td style="font-size:12px">${d.preferredCar?'<span class="badge badge-blue">'+d.preferredCar+'</span>':'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
+    ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>常用車輛</th><th>月薪</th><th>每趟</th><th>備註</th><th>密碼狀態</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td style="font-size:12px">${d.preferredCar?'<span class="badge badge-blue">'+d.preferredCar+'</span>':'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td>${d.password?'<span class="badge badge-green"><i class="ti ti-lock"></i> 已設定</span>':'<span class="badge badge-amber"><i class="ti ti-lock-open"></i> 未設定</span>'}<button class="btn btn-sm btn-danger" style="margin-left:6px;padding:2px 7px;font-size:11px" onclick="resetDriverPwd('${d.id}','${d.name}')"><i class="ti ti-refresh"></i> 重置</button></td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
   </div>
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','external')"><i class="ti ti-plus"></i> 新增</button></div>
     ${!drivers.filter(d=>d.type==='external').length?'<div class="empty" style="padding:0.5rem;font-size:13px">尚無外派司機資料</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>每天費用</th><th>地區</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='external').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString()+'/天':'-'}</td><td style="font-size:12px">${d.area||'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
@@ -4050,6 +4166,14 @@ async function saveDriver(){
   cm('driver');
 }
 async function delDriver(){if(!confirm('確定刪除？'))return;await db.collection('drivers').doc(eIds.driver).delete();cm('driver');}
+async function resetDriverPwd(id,name){
+  if(!confirm('確定重置「'+name+'」的密碼？\n重置後司機下次登入時可自行設定新密碼。'))return;
+  await db.collection('drivers').doc(id).update({password:''});
+  const idx=drivers.findIndex(d=>d.id===id);
+  if(idx>=0) drivers[idx].password='';
+  renderSettings();
+  alert(name+' 的密碼已重置，司機下次登入時可自行設定。');
+}
 
 function openHotel(id=''){
   eIds.hotel=id||null;const h=id?hotels.find(x=>x.id===id):null;
