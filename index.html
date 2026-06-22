@@ -499,7 +499,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <div class="overlay" id="m-rec"><div class="modal">
   <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
+  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
@@ -2835,7 +2835,7 @@ function renderFinance(){
   // 支出分類
   const expBycat={};
   me.forEach(e=>{const k=e.category||'misc';expBycat[k]=(expBycat[k]||0)+e.amount;});
-  de.forEach(r=>{const map={fuel:'fuel',parking:'parking',toll:'toll',maint:'maint'};const k=map[r.type]||'misc';expBycat[k]=(expBycat[k]||0)+r.amount;});
+  de.forEach(r=>{const map={fuel:'fuel',parking:'parking',toll:'toll',maint:'maint',inspection:'inspection',storage:'storage'};const k=map[r.type]||'misc';expBycat[k]=(expBycat[k]||0)+r.amount;});
   fe.forEach(f=>{const map={insurance:'car_ins',license:'license',loan:'loan',ad:'ad',other:'misc'};const k=map[f.category]||'misc';expBycat[k]=(expBycat[k]||0)+f.eff;});
   // 包車團酒店成本（依出發日篩選，booked+已付款或司機現場才算支出）
   privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m)))
@@ -2913,6 +2913,8 @@ function renderFinance(){
       ${finCard('exp-parking','停車費',expBycat['parking']||0,'red','ti-parking')}
       ${finCard('exp-toll','過路費',expBycat['toll']||0,'red','ti-road')}
       ${finCard('exp-maint','保養/維修',expBycat['maint']||0,'red','ti-tool')}
+      ${finCard('exp-inspection','驗車',expBycat['inspection']||0,'red','ti-certificate')}
+      ${finCard('exp-storage','寄鋪',expBycat['storage']||0,'red','ti-home-garage')}
       ${finCard('exp-fixed','固定支出',(expBycat['car_ins']||0)+(expBycat['license']||0)+(expBycat['loan']||0),'red','ti-repeat')}
       ${finCard('exp-ad','廣告行銷',expBycat['ad']||0,'red','ti-speakerphone')}
       ${finCard('exp-misc','其他雜支',expBycat['misc']||0,'red','ti-dots')}
@@ -2927,7 +2929,9 @@ function renderFinance(){
         {id:'fuel',label:'油錢',meCats:['fuel'],deTypes:['fuel'],feCats:[]},
         {id:'parking',label:'停車費',meCats:['parking'],deTypes:['parking'],feCats:[]},
         {id:'toll',label:'過路費',meCats:['toll'],deTypes:['toll'],feCats:[]},
-        {id:'maint',label:'保養/維修',meCats:['maint'],deTypes:['maint','inspection'],feCats:[]},
+        {id:'maint',label:'保養/維修',meCats:['maint'],deTypes:['maint'],feCats:[]},
+        {id:'inspection',label:'驗車',meCats:[],deTypes:['inspection'],feCats:[]},
+        {id:'storage',label:'寄鋪',meCats:[],deTypes:['storage'],feCats:[]},
         {id:'fixed',label:'固定支出',meCats:[],deTypes:[],feCats:['insurance','license','loan']},
         {id:'ad',label:'廣告行銷',meCats:['ad'],deTypes:[],feCats:['ad']},
         {id:'misc',label:'其他雜支',meCats:['misc'],deTypes:['other'],feCats:['other']},
@@ -3295,7 +3299,7 @@ function renderBalance(){
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
+const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',other:'其他'};
 function renderDriverPage(){
   const el=document.getElementById('p-driver');
   const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
