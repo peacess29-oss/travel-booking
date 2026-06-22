@@ -34,6 +34,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
 .nav-tab:hover:not(.active){background:var(--bg2)}
 .page{display:none;max-width:1100px;margin:0 auto;padding:14px 16px 60px}
+#p-finance{max-width:1500px}
 .page.active{display:block}
 .card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
 .card-title{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
@@ -2746,6 +2747,7 @@ function exportFinanceExcel(){
     ['司機個人收入（不計入損益）','$'+tdp.toLocaleString()],
     ['　外收（個人）','$'+tdpExtra.toLocaleString()],
     ['　小費（個人）','$'+tdpTips.toLocaleString()],
+    ...Object.values(dp.reduce((acc,r)=>{const k=r.driverName||'未知';if(!acc[k])acc[k]={name:k,amt:0};acc[k].amt+=r.amount;return acc;},{})).sort((a,b)=>b.amt-a.amt).map(d=>['　　'+d.name,'$'+d.amt.toLocaleString()]),
     [],
     ['總支出','$'+te.toLocaleString()],
     ['　手動支出','$'+tme.toLocaleString()],
@@ -2900,36 +2902,6 @@ function renderFinance(){
         <tfoot><tr><td colspan="3">合計</td><td style="text-align:right;color:var(--green);font-weight:700">$${tBal.toLocaleString()}</td></tr></tfoot>
       </table></div>
     </div>
-    ${(()=>{
-      const dp=calcDriverPersonal(y,m,isYear);
-      if(!dp.length)return'';
-      const dpExtra=dp.filter(r=>r.type==='extra');
-      const dpTips=dp.filter(r=>r.type==='tips');
-      const tExtra=dpExtra.reduce((s,r)=>s+r.amount,0);
-      const tTips=dpTips.reduce((s,r)=>s+r.amount,0);
-      const tDp=tExtra+tTips;
-      const rows=[
-        ...dpExtra.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.driverName||'-'}</td><td><span class="badge" style="background:var(--green-l);color:var(--green-d)">外收</span></td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}${r.car?' ・'+r.car:''}</td><td style="text-align:right;font-weight:600;color:var(--green)">$${r.amount.toLocaleString()}</td></tr>`),
-        ...dpTips.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.driverName||'-'}</td><td><span class="badge" style="background:var(--green-l);color:var(--green-d)">小費</span></td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}${r.car?' ・'+r.car:''}</td><td style="text-align:right;font-weight:600;color:var(--green)">$${r.amount.toLocaleString()}</td></tr>`),
-      ];
-      return`<div style="font-size:11px;font-weight:600;color:var(--green-d);margin-bottom:6px;margin-top:14px;letter-spacing:1px">▌ 司機個人收入 <span style="font-size:10px;font-weight:400;color:var(--text2)">（不計入公司損益）</span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
-        <div class="fin-card fin-card-exp" onclick="toggleFinSection('drv-personal')" style="cursor:pointer;border-color:var(--green)"><div class="fin-card-label"><i class="ti ti-coin"></i> 外收（個人）</div><div class="fin-card-val" style="color:var(--green)">${tExtra===0?'—':'$'+tExtra.toLocaleString()}</div><div class="fin-card-arrow">▾</div></div>
-        <div class="fin-card fin-card-exp" onclick="toggleFinSection('drv-personal')" style="cursor:pointer;border-color:var(--green)"><div class="fin-card-label"><i class="ti ti-gift"></i> 小費（個人）</div><div class="fin-card-val" style="color:var(--green)">${tTips===0?'—':'$'+tTips.toLocaleString()}</div><div class="fin-card-arrow">▾</div></div>
-        <div class="fin-card" style="flex:2;min-width:120px;background:var(--green-l);border-color:var(--green);text-align:center">
-          <div class="fin-card-label"><i class="ti ti-user-dollar"></i> 個人收入合計</div>
-          <div class="fin-card-val" style="color:var(--green-d)">$${tDp.toLocaleString()}</div>
-          <div style="font-size:10px;color:var(--text2);margin-top:3px">外收 $${tExtra.toLocaleString()} ＋ 小費 $${tTips.toLocaleString()}</div>
-        </div>
-      </div>
-      <div id="fin-section-drv-personal" class="fin-section">
-        <div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable">
-          <thead><tr><th>日期</th><th>司機</th><th>類別</th><th>說明</th><th style="text-align:right">金額</th></tr></thead>
-          <tbody>${rows.join('')}</tbody>
-          <tfoot><tr><td colspan="4">合計</td><td style="text-align:right;color:var(--green);font-weight:700">$${tDp.toLocaleString()}</td></tr></tfoot>
-        </table></div>
-      </div>`;
-    })()}
     <div style="font-size:11px;font-weight:600;color:#A32D2D;margin-bottom:6px;margin-top:14px;letter-spacing:1px">▌ 支出</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
       ${finCard('exp-hotel','酒店費用',expBycat['hotel']||0,'red','ti-building')}
@@ -3035,6 +3007,58 @@ function renderFinance(){
       ${pi.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin:12px 0 5px">🚗 包車毛利</div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>團名</th><th>類型</th><th>已收</th><th>司機薪資</th><th>外派費用</th><th>外宿補貼</th><th>酒店</th><th>旅遊險</th><th style="text-align:right">總成本</th><th style="text-align:right">毛利</th></tr></thead><tbody>${pi.map(x=>{const profit=x.collected-x.cost;return`<tr><td style="font-weight:600">${x.name}</td><td><span class="badge ${x.type==='car+hotel'?'badge-blue':'badge-green'}">${x.type==='car+hotel'?'車+住宿':'純包車'}</span></td><td style="color:var(--green)">$${x.collected.toLocaleString()}</td><td style="color:var(--text2)">${x.ownDriverCost?'$'+x.ownDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.outDriverCost?'$'+x.outDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.nightAllowanceCost?'$'+x.nightAllowanceCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.hotelCost?'$'+x.hotelCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.insCost?'$'+x.insCost.toLocaleString():'-'}</td><td style="text-align:right;color:var(--red)">$${x.cost.toLocaleString()}</td><td style="text-align:right;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td></tr>`;}).join('')}</tbody><tfoot><tr><td colspan="2">小計</td><td style="color:var(--green)">$${pi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.ownDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.outDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.nightAllowanceCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.hotelCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.insCost||0),0).toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${pi.reduce((s,x)=>s+x.cost,0).toLocaleString()}</td><td style="text-align:right;color:${piProfit>=0?'var(--green)':'var(--red)'};font-weight:700">$${piProfit.toLocaleString()}</td></tr></tfoot></table></div>`:''}
       ${!gi.length&&!pi.length?'<div style="padding:12px;color:var(--text2);font-size:12px">本期無毛利資料</div>':''}
     </div>
+    ${(()=>{
+      const dp=calcDriverPersonal(y,m,isYear);
+      if(!dp.length)return'';
+      const tExtra=dp.filter(r=>r.type==='extra').reduce((s,r)=>s+r.amount,0);
+      const tTips =dp.filter(r=>r.type==='tips' ).reduce((s,r)=>s+r.amount,0);
+      const tDp=tExtra+tTips;
+      // 按司機分組
+      const byDriver={};
+      dp.forEach(r=>{
+        const key=r.driverName||'未知';
+        if(!byDriver[key])byDriver[key]={name:key,extra:0,tips:0,rows:[]};
+        if(r.type==='extra')byDriver[key].extra+=r.amount;
+        if(r.type==='tips') byDriver[key].tips +=r.amount;
+        byDriver[key].rows.push(r);
+      });
+      const drvList=Object.values(byDriver).sort((a,b)=>(b.extra+b.tips)-(a.extra+a.tips));
+      // 摘要卡（每位司機一張）
+      const drvCards=drvList.map(d=>`
+        <div class="fin-card" onclick="toggleFinSection('drv-p-${d.name}')" style="cursor:pointer;border-color:var(--green);min-width:130px">
+          <div class="fin-card-label"><i class="ti ti-steering-wheel"></i> ${d.name}</div>
+          <div class="fin-card-val" style="color:var(--green-d)">$${(d.extra+d.tips).toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text2);margin-top:2px">外收 $${d.extra.toLocaleString()} ／ 小費 $${d.tips.toLocaleString()}</div>
+          <div class="fin-card-arrow" id="arr-drv-p-${d.name}">▾</div>
+        </div>`).join('');
+      // 每位司機展開的明細
+      const drvSections=drvList.map(d=>{
+        const rows=d.rows.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr>
+          <td>${r.date}</td>
+          <td><span class="badge" style="background:var(--green-l);color:var(--green-d)">${r.type==='extra'?'外收':'小費'}</span></td>
+          <td style="font-size:11px;color:var(--text2)">${r.note||'-'}${r.car?' ・'+r.car:''}</td>
+          <td style="text-align:right;font-weight:600;color:var(--green)">$${r.amount.toLocaleString()}</td>
+        </tr>`).join('');
+        return`<div id="fin-section-drv-p-${d.name}" class="fin-section">
+          <div class="tbl-wrap" style="margin:4px 0 8px"><table class="xtable">
+            <thead><tr><th>日期</th><th>類別</th><th>說明</th><th style="text-align:right">金額</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr><td colspan="3">${d.name} 合計</td><td style="text-align:right;color:var(--green);font-weight:700">$${(d.extra+d.tips).toLocaleString()}</td></tr></tfoot>
+          </table></div>
+        </div>`;
+      }).join('');
+      return`
+      <div style="font-size:11px;font-weight:600;color:var(--green-d);margin-bottom:6px;margin-top:18px;letter-spacing:1px">▌ 司機個人收入 <span style="font-size:10px;font-weight:400;color:var(--text2)">（不計入公司損益）</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+        ${drvCards}
+        <div class="fin-card" style="flex:2;min-width:120px;background:var(--green-l);border-color:var(--green);text-align:center">
+          <div class="fin-card-label"><i class="ti ti-users"></i> 個人收入合計</div>
+          <div class="fin-card-val" style="color:var(--green-d)">$${tDp.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text2);margin-top:3px">外收 $${tExtra.toLocaleString()} ／ 小費 $${tTips.toLocaleString()}</div>
+        </div>
+      </div>
+      ${drvSections}`;
+    })()}
   </div>`;
 }
 function toggleFinSection(id){
