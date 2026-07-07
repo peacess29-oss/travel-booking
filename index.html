@@ -2410,6 +2410,7 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
   const outwageEl=document.getElementById('assign-outwage');
   const wage=parseInt(wageEl?.value)||0;
   const outwage=parseInt(outwageEl?.value)||0;
+  const nightAllowance=parseInt(document.getElementById('assign-night')?.value)||0;
   if(isOwn&&!wage){
     wageEl?.focus();
     alert('請填寫司機薪資（元）後再指派');
