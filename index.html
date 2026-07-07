@@ -499,7 +499,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <div class="overlay" id="m-rec"><div class="modal">
   <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="other">其他支出</option></select></div><div><label>金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
+  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><optgroup label="收入"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option></optgroup><optgroup label="支出"><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="hotel">住宿代付</option><option value="other">其他支出</option></optgroup><optgroup label="現金移轉"><option value="remit">回帳公司</option></optgroup></select></div><div><label id="rf-amt-label">金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
@@ -508,9 +508,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">當天尾款待收項目</div>
     <div id="rf-balance-items"></div>
   </div>
+  <!-- 住宿代付：選擇應現場付現的住宿晚數 -->
+  <div id="rf-hotel-sec" style="display:none;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">選擇代付的住宿（司機現場付現）</div>
+    <div id="rf-hotel-items"></div>
+    <div id="rf-hotel-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
+  </div>
   <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
   <div id="rf-km-alert" style="display:none" class="warn-box">里程數低於上次記錄，請確認</div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-rec" style="display:none" onclick="delRec()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('rec')">取消</button><button class="btn btn-primary" onclick="saveRec()">儲存</button></div></div>
+</div></div>
+
+<!-- 現金流水 -->
+<div class="overlay" id="m-cashflow"><div class="modal" style="width:640px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="cf-title"><i class="ti ti-cash"></i> 現金流水</span><button class="btn btn-sm" onclick="cm('cashflow')"><i class="ti ti-x"></i></button></div>
+  <div id="cf-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('cashflow')">關閉</button></div></div>
 </div></div>
 
 <!-- QR碼模態 -->
@@ -1424,7 +1437,14 @@ function renderPrivate(){
     }).join('')}</ul>
   </div>`:'';
 
+  // 未回帳提醒：已結束但司機手上現金尚未歸零
+  const unsettled=getUnsettledPrivs();
+  const unsettledHtml=unsettled.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
+    <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 司機尚未回帳（${unsettled.length}筆）</div>
+    <ul style="padding-left:16px;margin:0">${unsettled.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openCashFlow('${x.p.id}')"><strong>${x.p.name}</strong>　結束於 ${x.p.end}　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+  </div>`:'';
   el.innerHTML=`
+  ${unsettledHtml}
   ${hotelWarnHtml}
   <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
     <button class="nav-tab${pvTab==='active'?' active':''}" style="border-radius:0" onclick="setPvTab('active')"><i class="ti ti-car"></i> 進行中（${activePrivs.length}）</button>
@@ -1536,6 +1556,7 @@ function renderPrivate(){
         <td>${dispCell}</td>
         <td style="font-size:12px;white-space:nowrap;color:${profit>=0?'var(--green)':'var(--red)'};font-weight:600">$${profit.toLocaleString()}</td>
         <td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-2px 0 4px rgba(0,0,0,.06)">
+          <button class="btn btn-sm" style="margin-right:4px" onclick="openCashFlow('${p.id}')" title="現金流水"><i class="ti ti-cash"></i></button>
           <button class="btn btn-sm" style="margin-right:4px" onclick="printPriv('${p.id}')"><i class="ti ti-printer"></i></button>
           <button class="btn btn-sm" onclick="openPriv('${p.id}')"><i class="ti ti-edit"></i></button>
         </td>
@@ -1676,7 +1697,7 @@ function renderNightlyPicker(){
   const el=document.getElementById('pf-nightly-picker');
   const startDate=document.getElementById('pf-start').value;
   if(!nights){el.innerHTML='';document.getElementById('pf-hotel-cost').textContent='';return;}
-  while(nightlyHotels.length<nights)nightlyHotels.push({hotelId:'',r2:0,r3:0,r4:0,finalQuote:0,booked:false,returnDate:''});
+  while(nightlyHotels.length<nights)nightlyHotels.push({hotelId:'',r2:0,r3:0,r4:0,finalQuote:0,booked:false,returnDate:'',driverPaid:false,driverPaidAmount:0,driverRecId:''});
   nightlyHotels=nightlyHotels.slice(0,nights);
   // 依地區名稱排序
   const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
@@ -1708,7 +1729,7 @@ function renderNightlyPicker(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div><label style="font-size:11px">付款方式</label><select style="height:30px;font-size:12px;width:100%" onchange="setNightMeta(${i},'paymentType',this.value)"><option value="company" ${(nh.paymentType||'company')==='company'?'selected':''}>公司預付</option><option value="driver" ${nh.paymentType==='driver'?'selected':''}>司機現場付現</option></select></div>
-        <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setNightMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:'<span style="font-size:11px;color:var(--text2)">司機現場付，無需追蹤</span>'}</div>
+        <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setNightMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">✅ 司機已代付 $${(nh.driverPaidAmount||0).toLocaleString()}</span>`:'<span style="font-size:11px;color:var(--amber-d)">⏳ 等待司機現場代付</span>')}</div>
       </div>
       <div style="font-size:12px;color:var(--green-d);margin-top:4px">${nh.finalQuote?'✅ 最終報價: $'+nh.finalQuote.toLocaleString():'（若已取得最終報價請填入，試算時優先採用）'}</div>`:''}
     </div>`;
@@ -2635,19 +2656,121 @@ function calcPrivAdvanceHotel(p){
   },0);
 }
 // 計算包車團實際酒店支出（booked + 已付款或司機現場）
+// 司機現場付現的晚數：改用司機實際代付金額(driverPaidAmount)，尚未代付則先不列入成本，避免用報價高估/低估
 function calcPrivHotelExpense(p){
   if(!p.nightlyHotels?.length)return 0;
   const startDate=p.start;
   return p.nightlyHotels.reduce((s,nh,i)=>{
     if(!nh.booked)return s;
-    const isPaid=(nh.paymentType||'company')==='driver'||nh.hotelPaid;
-    if(!isPaid)return s;
+    const isDriverPay=(nh.paymentType||'company')==='driver';
+    if(isDriverPay){
+      if(!nh.driverPaid)return s;
+      return s+(nh.driverPaidAmount||0);
+    }
+    if(!nh.hotelPaid)return s;
     if(nh.finalQuote>0)return s+nh.finalQuote;
     const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return s;
     let nightDate='';
     if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
     return s+getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0);
   },0);
+}
+// 計算包車團某夜住宿的「報價」金額（不論公司或司機付，用來跟實付比對）
+function calcNightQuote(p,nh,i){
+  if(nh.finalQuote>0)return nh.finalQuote;
+  const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return 0;
+  let nightDate='';
+  if(p.start){const d=new Date(p.start);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+  return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0);
+}
+
+// ══════════════════ 現金流水（包車團）══════════════════
+// 從 busAssignedDrivers / assignedDriver 姓名比對出司機ID
+function getPrivDriverIds(p){
+  const names=new Set();
+  if(p.busAssignedDrivers) Object.values(p.busAssignedDrivers).forEach(n=>{if(n)names.add(n);});
+  if(p.assignedDriver) p.assignedDriver.split('/').forEach(n=>{if(n.trim())names.add(n.trim());});
+  const ids=[];
+  names.forEach(n=>{const d=drivers.find(x=>x.name===n);if(d&&!ids.includes(d.id))ids.push(d.id);});
+  return ids;
+}
+const CASHFLOW_EXP_TYPES=['fuel','parking','toll','maint','inspection','storage','other'];
+// 組合單一包車團的現金流水：客收(既有income記錄關聯)、回帳公司、代付支出(日期區間)、住宿代付
+function buildPrivCashFlow(p){
+  const driverIds=getPrivDriverIds(p);
+  const events=[];
+  driverRecs.filter(r=>r.type==='income'&&r.relatedPrivateIds?.includes(p.id)).forEach(r=>{
+    events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+  });
+  if(driverIds.length){
+    driverRecs.filter(r=>r.type==='remit'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+      events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+    });
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+      events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
+  }
+  (p.nightlyHotels||[]).forEach((nh,i)=>{
+    if((nh.paymentType||'company')!=='driver'||!nh.booked)return;
+    let nightDate=p.start||'';
+    if(p.start){const d=new Date(p.start);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+    const hotel=hotels.find(h=>h.id===nh.hotelId);
+    const quote=calcNightQuote(p,nh,i);
+    if(nh.driverPaid){
+      const diff=(nh.driverPaidAmount||0)-quote;
+      events.push({date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+    } else {
+      events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
+    }
+  });
+  events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+  let bal=0;
+  events.forEach(e=>{if(e.kind!=='hotel-pending'){bal+=e.amount;e.balance=bal;}else{e.balance=null;}});
+  const totalIncome=events.filter(e=>e.kind==='income').reduce((s,e)=>s+e.amount,0);
+  const totalRemit=events.filter(e=>e.kind==='remit').reduce((s,e)=>s-e.amount,0);
+  const totalExpense=events.filter(e=>e.kind==='expense'||e.kind==='hotel').reduce((s,e)=>s-e.amount,0);
+  const netProfit=totalIncome-totalExpense;
+  const isEnded=p.end&&p.end<new Date().toISOString().slice(0,10);
+  return{events,totalIncome,totalRemit,totalExpense,netProfit,cashBalance:bal,isEnded,settled:bal<=0};
+}
+function openCashFlow(id){
+  const p=privates.find(x=>x.id===id);if(!p)return;
+  document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${p.name}`;
+  renderCashFlowContent(p);
+  om('cashflow');
+}
+function renderCashFlowContent(p){
+  const cf=buildPrivCashFlow(p);
+  const statusHtml=cf.isEnded
+    ? (cf.settled?'<span style="color:var(--green);font-weight:600">✅ 已結清</span>':`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${cf.cashBalance.toLocaleString()} 未回帳</span>`)
+    : '<span style="color:var(--text2)">團次進行中</span>';
+  const rows=cf.events.map(e=>{
+    const color=e.kind==='income'?'var(--green)':(e.kind==='hotel-pending'?'var(--text3)':'var(--red)');
+    const amtStr=e.kind==='hotel-pending'?`（報價 $${e.quote.toLocaleString()}）`:`${e.amount>=0?'+':'-'}$${Math.abs(e.amount).toLocaleString()}`;
+    const diffBadge=e.diff?`<span style="color:var(--red);font-size:11px;margin-left:4px">⚠️ 報價$${e.quote.toLocaleString()}，差${e.diff>0?'+':''}$${e.diff.toLocaleString()}</span>`:'';
+    const balStr=e.balance==null?'-':`$${e.balance.toLocaleString()}`;
+    return `<tr><td style="white-space:nowrap;font-size:12px">${e.date||'-'}</td><td style="font-size:12px">${e.label}${diffBadge}</td><td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${amtStr}</td><td style="text-align:right;font-size:12px;white-space:nowrap">${balStr}</td></tr>`;
+  }).join('');
+  document.getElementById('cf-content').innerHTML=`
+    <div class="card" style="margin-bottom:12px">
+      <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+        <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green);font-size:15px">$${cf.totalIncome.toLocaleString()}</div></div>
+        <div class="stat-card"><div class="stat-label">代付支出合計</div><div class="stat-val" style="color:var(--red);font-size:15px">$${cf.totalExpense.toLocaleString()}</div></div>
+      </div>
+      <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+        <div class="stat-card"><div class="stat-label">現金淨利</div><div class="stat-val" style="font-size:15px;color:${cf.netProfit>=0?'var(--green)':'var(--red)'}">$${cf.netProfit.toLocaleString()}</div></div>
+        <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，詳見財務報表）</div>
+      <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
+    </div>
+    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
+  `;
+}
+// 未回帳提醒（後台）：已結束但現金結餘>0的包車團
+function getUnsettledPrivs(){
+  const today=new Date().toISOString().slice(0,10);
+  return privates.filter(p=>p.end&&p.end<today).map(p=>({p,cf:buildPrivCashFlow(p)})).filter(x=>x.cf.cashBalance>0);
 }
 function calcPrivDispWage(privateId){
   return dispatches.filter(d=>d.privateId===privateId)
@@ -2702,7 +2825,9 @@ function calcPI(y,m,isYear){
     cost:totalCost,pax:p.pax||0,outsource:isOut,id:p.id};
 });}
 function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
-function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
+function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
+// 回帳公司：純現金移轉，不列入公司支出，不列入公司收入，僅供現金流水呈現
+function calcRemit(y,m,isYear){return driverRecs.filter(r=>r.type==='remit'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 司機客收（公司收入：含 income，不含 extra/tips 個人收入）
 function calcDI(y,m,isYear){
   return driverRecs.filter(r=>r.type==='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
@@ -3299,7 +3424,7 @@ function renderBalance(){
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',other:'其他'};
+const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
 function renderDriverPage(){
   const el=document.getElementById('p-driver');
   const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
@@ -3478,18 +3603,34 @@ function renderDriverPage(){
         <button class="btn btn-sm" style="background:var(--green);color:var(--green-l);border-color:var(--green);font-size:13px;padding:7px 14px" onclick="openRec('','tips')"><i class="ti ti-gift"></i> 小費</button>
       </div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:6px">支出</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','fuel')"><i class="ti ti-gas-station"></i> 加油</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','parking')"><i class="ti ti-parking"></i> 停車</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','toll')"><i class="ti ti-road"></i> 過路</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','maint')"><i class="ti ti-tool"></i> 保養</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','inspection')"><i class="ti ti-clipboard-check"></i> 驗車</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','storage')"><i class="ti ti-home-garage"></i> 寄鋪</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','hotel')"><i class="ti ti-building"></i> 住宿代付</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','other')"><i class="ti ti-dots"></i> 其他</button>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">現金移轉</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:var(--blue);color:#fff;border-color:var(--blue);font-size:13px;padding:7px 14px" onclick="openRec('','remit')"><i class="ti ti-building-bank"></i> 回帳公司</button>
       </div>
     </div>`;
 
+  // 未回帳提醒：已結束但手上現金尚未歸零的包車團（持續提醒直到結清）
+  const myUnsettled=privates.filter(p=>{
+    if(!p.end||p.end>=today)return false;
+    return getPrivDriverIds(p).includes(curDriverId);
+  }).map(p=>({p,cf:buildPrivCashFlow(p)})).filter(x=>x.cf.cashBalance>0);
+  const unsettledHtml=myUnsettled.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
+    <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 請盡快回帳公司</div>
+    <ul style="padding-left:16px;margin:0">${myUnsettled.map(x=>`<li style="margin-bottom:3px"><strong>${x.p.name}</strong>（已結束）手上尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+  </div>`:'';
+
   el.innerHTML=
+    unsettledHtml+
     quickInputHtml+
   `<div class="card" style="margin-bottom:12px">
     <div style="font-size:15px;font-weight:700;margin-bottom:12px"><i class="ti ti-calendar-event" style="color:var(--blue)"></i> 我的行程</div>
@@ -3515,7 +3656,15 @@ function renderDriverPage(){
       <select id="dr-filter-type" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部類別</option>${Object.entries(TYPE_N).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
       <select id="dr-filter-car" onchange="renderDriverPage()" style="height:34px;font-size:12px"><option value="all">全部車輛</option>${carsList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
     </div>
-    ${!filtered.length?'<div class="empty">本月尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{const isIncome=(r.type==='income'||r.type==='extra'||r.type==='tips');const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');const rowHtml=`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)'}">${String(TYPE_N[r.type]||r.type)+mn}</span></td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${isIncome?'var(--green)':'var(--red)'}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`;return rowHtml;}).join('')}</tbody></table></div>`}
+    ${!filtered.length?'<div class="empty">本月尚無記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>類別</th><th>明細</th><th>里程</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${filtered.map(r=>{
+      const isIncome=(r.type==='income'||r.type==='extra'||r.type==='tips');
+      const isRemit=r.type==='remit';
+      const badgeStyle=isRemit?'background:var(--blue-l,#E3F0FF);color:var(--blue-d,#1D5FB0)':(isIncome?'background:var(--green-l);color:var(--green-d)':'background:var(--amber-l);color:var(--amber-d)');
+      const amtColor=isRemit?'var(--blue-d,#1D5FB0)':(isIncome?'var(--green)':'var(--red)');
+      const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';
+      const diffBadge=(r.type==='hotel'&&r.quoteAmount&&r.amount!==r.quoteAmount)?`<span style="color:var(--red);font-size:11px;margin-left:4px">⚠️ 金額不符（報價$${r.quoteAmount.toLocaleString()}）</span>`:'';
+      const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');
+      const rowHtml=`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${badgeStyle}">${String(TYPE_N[r.type]||r.type)+mn}</span>${diffBadge}</td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${amtColor}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`;return rowHtml;}).join('')}</tbody></table></div>`}
   </div>`;
 }
 function getLastKm(carId,excId=''){const recs=driverRecs.filter(r=>r.car===carId&&r.mileage&&r.id!==excId).sort((a,b)=>b.mileage-a.mileage);return recs.length?recs[0].mileage:0;}
@@ -3539,6 +3688,8 @@ function openRec(id='',defaultType=''){
     const t=document.getElementById('rf-type').value;
     if(t==='income'){
       renderBalanceItems(this.value);
+    } else if(t==='hotel'&&!eIds.rec){
+      renderHotelItems(this.value);
     } else {
       const noteEl=document.getElementById('rf-note');
       if(!noteEl.value.trim()||noteEl.dataset.autoFilled==='1'){
@@ -3548,7 +3699,11 @@ function openRec(id='',defaultType=''){
       }
     }
   };
+  // 住宿代付：編輯既有記錄時，帶入報價供核對差異
+  const amtEl=document.getElementById('rf-amt');
+  amtEl.dataset.quote=(r&&r.type==='hotel')?(r.quoteAmount||0):'';
   om('rec');
+  if(r&&r.type==='hotel') checkHotelDiff();
 }
 function toggleRecFields(){
   const t=document.getElementById('rf-type').value;
@@ -3556,6 +3711,8 @@ function toggleRecFields(){
   document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';
   document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';
   document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
+  document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
+  document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
   const date=document.getElementById('rf-date').value;
   const noteEl=document.getElementById('rf-note');
   const isPersonalIncome=(t==='extra'||t==='tips');
@@ -3567,6 +3724,15 @@ function toggleRecFields(){
   // 客收：顯示當天尾款待收項目
   if(t==='income'&&date){
     renderBalanceItems(date);
+  }
+  // 住宿代付：新增時列出待代付晚數；編輯時顯示唯讀資訊
+  if(t==='hotel'&&date){
+    if(eIds.rec){
+      const r=driverRecs.find(x=>x.id===eIds.rec);
+      renderHotelItemEdit(r);
+    } else {
+      renderHotelItems(date);
+    }
   }
 }
 
@@ -3637,6 +3803,89 @@ function updateIncomeAmt(){
   });
   if(total>0) document.getElementById('rf-amt').value=total;
 }
+
+// 取得某司機在指定日期、應現場代付住宿的待付晚數（尚未代付）
+function getPendingHotelItems(date){
+  if(!curDriverId||!date) return [];
+  const items=[];
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end);
+  if(!myDisps.length) return items;
+  privates.forEach(p=>{
+    if(!(p.nightlyHotels&&p.nightlyHotels.length)) return;
+    const hasDisp=myDisps.some(d=>d.privateId===p.id||d.label?.includes(p.name));
+    if(!hasDisp) return;
+    p.nightlyHotels.forEach((nh,i)=>{
+      if(!nh.booked||(nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
+      let nightDate='';
+      if(p.start){const nd=new Date(p.start);nd.setDate(nd.getDate()+i);nightDate=nd.toISOString().slice(0,10);}
+      const hotel=hotels.find(h=>h.id===nh.hotelId);
+      items.push({privateId:p.id,nightIndex:i,label:p.name+' 第'+(i+1)+'晚'+(nightDate?'（'+nightDate+'）':'')+(hotel?' - '+hotel.name:''),quote:calcNightQuote(p,nh,i)});
+    });
+  });
+  return items;
+}
+function renderHotelItems(date){
+  const el=document.getElementById('rf-hotel-items');
+  const items=getPendingHotelItems(date);
+  window._rfHotelItems=items;
+  document.getElementById('rf-hotel-diff').style.display='none';
+  document.getElementById('rf-amt').dataset.quote='';
+  if(!items.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px">此日無待代付住宿項目</div>';
+    return;
+  }
+  el.innerHTML=items.map((item,idx)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg2);border-radius:6px;margin-bottom:4px;font-size:12px">
+      <div>
+        <div style="font-weight:600">${item.label}</div>
+        <div style="color:var(--blue-d)">報價：$${item.quote.toLocaleString()}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="rf-htl-${idx}" data-idx="${idx}" style="width:14px;height:14px" onchange="selectHotelItem(${idx})">
+        <span>選取</span>
+      </label>
+    </div>`).join('');
+}
+// 住宿代付單選：勾選其中一筆時，自動取消其他（一筆記錄對應一晚）
+function selectHotelItem(idx){
+  const items=window._rfHotelItems||[];
+  items.forEach((_,i)=>{if(i!==idx){const c=document.getElementById('rf-htl-'+i);if(c)c.checked=false;}});
+  const chk=document.getElementById('rf-htl-'+idx);
+  const amtEl=document.getElementById('rf-amt');
+  if(chk&&chk.checked){
+    amtEl.value=items[idx].quote;
+    amtEl.dataset.quote=items[idx].quote;
+  } else {
+    amtEl.dataset.quote='';
+  }
+  checkHotelDiff();
+}
+// 編輯既有住宿代付記錄：顯示唯讀晚數資訊（不可重新選晚）
+function renderHotelItemEdit(r){
+  const el=document.getElementById('rf-hotel-items');
+  if(!r||!r.privateId){el.innerHTML='';return;}
+  const p=privates.find(x=>x.id===r.privateId);
+  const nh=p?.nightlyHotels?.[r.nightIndex];
+  const hotel=nh?hotels.find(h=>h.id===nh.hotelId):null;
+  let nightDate='';
+  if(p?.start&&r.nightIndex!=null){const nd=new Date(p.start);nd.setDate(nd.getDate()+r.nightIndex);nightDate=nd.toISOString().slice(0,10);}
+  el.innerHTML=`<div style="font-size:12px;padding:6px 8px;background:var(--bg2);border-radius:6px">
+    <div style="font-weight:600">${p?p.name+' 第'+(r.nightIndex+1)+'晚':'（原團次已不存在）'}${nightDate?'（'+nightDate+'）':''}${hotel?' - '+hotel.name:''}</div>
+    <div style="color:var(--blue-d)">報價：$${(r.quoteAmount||0).toLocaleString()}</div>
+  </div>`;
+}
+document.addEventListener('input',e=>{if(e.target.id==='rf-amt')checkHotelDiff();});
+function checkHotelDiff(){
+  const amtEl=document.getElementById('rf-amt');
+  const diffEl=document.getElementById('rf-hotel-diff');
+  if(document.getElementById('rf-type').value!=='hotel'){diffEl.style.display='none';return;}
+  const q=parseFloat(amtEl.dataset.quote||'');
+  const amt=parseFloat(amtEl.value)||0;
+  if(!q||amt===q){diffEl.style.display='none';return;}
+  const diff=amt-q;
+  diffEl.style.display='block';
+  diffEl.textContent='⚠️ 金額與報價不符：報價 $'+q.toLocaleString()+'，實付 $'+amt.toLocaleString()+'，差額 '+(diff>0?'+':'')+'$'+diff.toLocaleString();
+}
 // 取得某司機在指定日期的派車訂單標題（用於備註自動帶入）
 function getDispatchHint(date){
   if(!curDriverId||!date) return '';
@@ -3664,6 +3913,14 @@ async function saveRec(){
       if(!anyChecked)return alert('請至少勾選一項尾款待收項目');
     }
   }
+  // 住宿代付：新增時必須勾選一筆待代付晚數
+  let hotelSel=null;
+  if(type==='hotel'&&!eIds.rec){
+    const items=window._rfHotelItems||[];
+    const idx=items.findIndex((_,i)=>document.getElementById('rf-htl-'+i)?.checked);
+    if(idx<0)return alert('請選擇要代付的住宿晚數');
+    hotelSel=items[idx];
+  }
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
   const balEl2=document.getElementById('rf-balance-items');
@@ -3677,7 +3934,17 @@ async function saveRec(){
     });
   }
   const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds};
-  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else await db.collection('driverRecs').doc(uid()).set(data);
+  if(type==='hotel'){
+    if(hotelSel){
+      data.privateId=hotelSel.privateId;data.nightIndex=hotelSel.nightIndex;data.quoteAmount=hotelSel.quote;
+    } else if(eIds.rec){
+      // 編輯既有記錄：沿用原本關聯的晚數，只更新實付金額
+      const oldRec=driverRecs.find(x=>x.id===eIds.rec);
+      data.privateId=oldRec?.privateId||'';data.nightIndex=oldRec?.nightIndex;data.quoteAmount=oldRec?.quoteAmount||0;
+    }
+  }
+  let recId=eIds.rec;
+  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else{recId=uid();await db.collection('driverRecs').doc(recId).set(data);}
   // 客收：自動標記勾選的尾款項目為已收
   if(type==='income'&&!eIds.rec){
     const balEl=document.getElementById('rf-balance-items');
@@ -3697,10 +3964,20 @@ async function saveRec(){
       }
     }
   }
+  // 住宿代付：標記對應晚數為「司機已代付」，並記錄實付金額與關聯記錄ID
+  if(type==='hotel'&&data.privateId&&data.nightIndex!=null){
+    const p=privates.find(x=>x.id===data.privateId);
+    if(p&&p.nightlyHotels&&p.nightlyHotels[data.nightIndex]){
+      const newNightly=p.nightlyHotels.map((nh,i)=>i===data.nightIndex?{...nh,driverPaid:true,driverPaidAmount:data.amount,driverRecId:recId}:nh);
+      await db.collection('privates').doc(data.privateId).update({nightlyHotels:newNightly});
+      const pi=privates.findIndex(x=>x.id===data.privateId);
+      if(pi>=0) privates[pi]={...privates[pi],nightlyHotels:newNightly};
+    }
+  }
   cm('rec');
 }
 async function delRec(){
-  if(!confirm('確定刪除此記錄？\n若此筆客收曾標記尾款已收，將同步還原為未收狀態。'))return;
+  if(!confirm('確定刪除此記錄？\n若此筆客收曾標記尾款已收，將同步還原為未收狀態；若此筆是住宿代付，該晚將還原為未代付。'))return;
   const rec=driverRecs.find(x=>x.id===eIds.rec);
   setSS('syncing','刪除中…');
   await db.collection('driverRecs').doc(eIds.rec).delete();
@@ -3718,6 +3995,16 @@ async function delRec(){
       await db.collection('privates').doc(pid).update({balancePaid:false});
       const pi=privates.findIndex(p=>p.id===pid);
       if(pi>=0) privates[pi]={...privates[pi],balancePaid:false};
+    }
+  }
+  // 還原住宿代付晚數為未付
+  if(rec?.type==='hotel'&&rec.privateId&&rec.nightIndex!=null){
+    const p=privates.find(x=>x.id===rec.privateId);
+    if(p&&p.nightlyHotels&&p.nightlyHotels[rec.nightIndex]){
+      const newNightly=p.nightlyHotels.map((nh,i)=>i===rec.nightIndex?{...nh,driverPaid:false,driverPaidAmount:0,driverRecId:''}:nh);
+      await db.collection('privates').doc(rec.privateId).update({nightlyHotels:newNightly});
+      const pi=privates.findIndex(x=>x.id===rec.privateId);
+      if(pi>=0) privates[pi]={...privates[pi],nightlyHotels:newNightly};
     }
   }
   cm('rec');
