@@ -2826,6 +2826,11 @@ function calcPI(y,m,isYear){
     cost:totalCost,pax:p.pax||0,outsource:isOut,id:p.id};
 });}
 function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
+// 司機薪資／外派車資：來自派車總表 dispatches.wage/outwage（依出發日期篩選），先前這筆金額未被算進月支出總覽，這裡統一提供
+function calcDispCost(y,m,isYear){
+  return dispatches.filter(d=>isYear?inYear(d.start,y):inMonth(d.start,y,m))
+    .reduce((s,d)=>({wage:s.wage+(d.wage||0),outwage:s.outwage+(d.outwage||0)}),{wage:0,outwage:0});
+}
 function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 回帳公司：純現金移轉，不列入公司支出，不列入公司收入，僅供現金流水呈現
 function calcRemit(y,m,isYear){return driverRecs.filter(r=>r.type==='remit'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
@@ -2856,7 +2861,8 @@ function exportFinanceExcel(){
   const tme=me.reduce((s,e)=>s+e.amount,0),tde=de.reduce((s,r)=>s+r.amount,0),tfe=fe.reduce((s,f)=>s+f.eff,0);
   const tnight=dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0);
   const tpiHotel=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0);
-  const te=tme+tde+tfe+tnight+tpiHotel,np=ti-te;
+  const dispCost=calcDispCost(y,m,isYear);
+  const te=tme+tde+tfe+tnight+tpiHotel+dispCost.wage+dispCost.outwage,np=ti-te;
   const wb=XLSX.utils.book_new();
   const titleStr=isYear?y+'年年報':y+'年'+MONTHS[m]+'月報';
 
@@ -2927,6 +2933,12 @@ function exportFinanceExcel(){
   dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
     .sort((a,b)=>a.start>b.start?1:-1)
     .forEach(d=>expData.push([d.start,'外宿補貼',d.note||d.label||'-','',d.driverName||'',d.nightAllowance||0]));
+  dispatches.filter(d=>(d.wage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
+    .sort((a,b)=>a.start>b.start?1:-1)
+    .forEach(d=>expData.push([d.start,'司機薪資','派車：'+(d.note||d.label||'-'),d.car||'',d.driverName||'',d.wage||0]));
+  dispatches.filter(d=>(d.outwage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
+    .sort((a,b)=>a.start>b.start?1:-1)
+    .forEach(d=>expData.push([d.start,'外派費用','派車：'+(d.note||d.label||'-'),d.car||'',d.driverName||'',d.outwage||0]));
   privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivHotelExpense(p)>0).forEach(p=>expData.push([p.start||'-','酒店費用','包車團：'+p.name,'','',calcPrivHotelExpense(p)]));
   expData.push(['合計','','','','',te]);
   const ws4=XLSX.utils.aoa_to_sheet(expData);
@@ -2969,13 +2981,17 @@ function renderFinance(){
   // 外宿補貼（存在 dispatches.nightAllowance，不在 expenses 集合）
   dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
     .forEach(d=>{expBycat['night']=(expBycat['night']||0)+(d.nightAllowance||0);});
+  // 自家司機薪資／外派車資（存在 dispatches.wage/outwage，先前遺漏未算進支出總覽，這裡補上）
+  const dispCost=calcDispCost(y,m,isYear);
+  if(dispCost.wage)expBycat['salary']=(expBycat['salary']||0)+dispCost.wage;
+  if(dispCost.outwage)expBycat['outsource']=(expBycat['outsource']||0)+dispCost.outwage;
   const te=Object.values(expBycat).reduce((s,v)=>s+v,0);
   const np=ti-te,pr=ti?Math.round(np/ti*100):0;
   // 毛利
   const giProfit=gi.reduce((s,x)=>s+(x.collected-x.totalCost),0);
   const piProfit=pi.reduce((s,x)=>s+(x.collected-x.cost),0);
   // 年報月趨勢
-  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0);return{income:i,exp:e,profit:i-e};}):null;
+  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const dc=calcDispCost(y,mi,false);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0)+dc.wage+dc.outwage;return{income:i,exp:e,profit:i-e};}):null;
   const maxBar=monthly?Math.max(...monthly.map(d=>Math.max(d.income,d.exp)),1):1;
   function finCard(id,label,val,color,icon){
     return `<div class="fin-card${color==='red'?' fin-card-exp':''}" onclick="toggleFinSection('${id}')" style="cursor:pointer"><div class="fin-card-label"><i class="ti ${icon}"></i> ${label}</div><div class="fin-card-val" style="color:var(--${color})">${val===0?'—':'$'+val.toLocaleString()}</div><div class="fin-card-arrow" id="arr-${id}">▾</div></div>`;
@@ -3086,15 +3102,26 @@ function renderFinance(){
         const piNightRows=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
           return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.nightAllowance||0).toLocaleString()}</td><td></td></tr>`;
         }):[];
+        // 司機薪資／外派車資：從派車總表(dispatches.wage/outwage)抓
+        const piSalaryRows=sec.id==='salary'?dispatches.filter(d=>(d.wage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
+          return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.wage||0).toLocaleString()}</td><td></td></tr>`;
+        }):[];
+        const piOutsourceRows=sec.id==='outsource'?dispatches.filter(d=>(d.outwage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
+          return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.outwage||0).toLocaleString()}</td><td></td></tr>`;
+        }):[];
         const rows=[
           ...mr.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr><td>${e.date}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">${e.desc||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`),
           ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
           ...fr.map(f=>`<tr><td>固定</td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">${f.name}（${f.cycle==='monthly'?'每月':'每年'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td><td></td></tr>`),
           ...piHotelRows,
           ...piNightRows,
+          ...piSalaryRows,
+          ...piOutsourceRows,
         ];
         const nightTotal=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0):0;
-        const total=mr.reduce((s,e)=>s+e.amount,0)+dr.reduce((s,r)=>s+r.amount,0)+fr.reduce((s,f)=>s+f.eff,0)+(sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0):0)+nightTotal;
+        const salaryTotal=sec.id==='salary'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.wage||0),0):0;
+        const outsourceTotal=sec.id==='outsource'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.outwage||0),0):0;
+        const total=mr.reduce((s,e)=>s+e.amount,0)+dr.reduce((s,r)=>s+r.amount,0)+fr.reduce((s,f)=>s+f.eff,0)+(sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0):0)+nightTotal+salaryTotal+outsourceTotal;
         return `<div id="fin-section-exp-${sec.id}" class="fin-section">${rows.length?`<div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>司機</th><th>說明</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${rows.join('')}</tbody><tfoot><tr><td colspan="4">小計</td><td style="text-align:right;color:var(--red)">$${total.toLocaleString()}</td><td></td></tr></tfoot></table></div>`:'<div style="padding:8px;color:var(--text2);font-size:12px">本期無'+sec.label+'記錄</div>'}</div>`;
       }).join('');
     })()}
