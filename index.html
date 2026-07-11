@@ -1499,7 +1499,7 @@ function renderPrivate(){
       const days2=calcDays(p.start,p.end),cars2=p.cars||1,isOut2=p.outsource;
       const ownDriverCost=dispW.wage||(isOut2?0:((p.ownDriverDayRate||0)*days2+(p.ownDriverNightRate||0)*(p.ownDriverNights||0))*cars2);
       const outDriverCost=dispW.outwage||(isOut2?(p.driverCost||0):0);
-      const cost=ownDriverCost+outDriverCost+(dispW.nightAllowance||0)+calcPrivHotelExpense(p)+(p.insCost||0),profit=p.price-cost;
+      const cost=ownDriverCost+outDriverCost+(dispW.nightAllowance||0)+calcPrivHotelExpense(p)+calcPrivMisc(p)+(p.insCost||0),profit=p.price-cost;
       // 酒店欄
       const hotelCell=(()=>{
         if(!p.nightlyHotels?.length) return `<span style="color:var(--text2);font-size:12px">${p.hotelName||'-'}</span>`;
@@ -1559,7 +1559,7 @@ function renderPrivate(){
           <span onclick="togglePv('${p.id}','insured',${!p.insured})" style="cursor:pointer;margin:0 2px">${p.insured?'<span style="color:var(--green)">險✓</span>':'<span style="color:#EF9F27">險✗</span>'}</span>
         </td>
         <td>${dispCell}</td>
-        <td style="font-size:12px;white-space:nowrap;color:${profit>=0?'var(--green)':'var(--red)'};font-weight:600">$${profit.toLocaleString()}</td>
+        <td style="font-size:12px;white-space:nowrap;color:${profit>=0?'var(--green)':'var(--red)'};font-weight:600;cursor:pointer;text-decoration:underline dotted" onclick="openCashFlow('${p.id}')" title="點擊查看現金流水與成本明細">$${profit.toLocaleString()}</td>
         <td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-2px 0 4px rgba(0,0,0,.06)">
           <button class="btn btn-sm" style="margin-right:4px" onclick="openCashFlow('${p.id}')" title="現金流水"><i class="ti ti-cash"></i></button>
           <button class="btn btn-sm" style="margin-right:4px" onclick="printPriv('${p.id}')"><i class="ti ti-printer"></i></button>
@@ -2701,6 +2701,13 @@ function getPrivDriverIds(p){
   return ids;
 }
 const CASHFLOW_EXP_TYPES=['fuel','parking','toll','maint','inspection','storage','other'];
+// 該團行程期間內，指派司機登打的雜支總額（油錢/停車/過路/保養/驗車/寄鋪/其他），供利潤計算共用
+function calcPrivMisc(p){
+  const driverIds=getPrivDriverIds(p);
+  if(!driverIds.length||!p.start||!p.end)return 0;
+  return driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+    .reduce((s,r)=>s+(r.amount||0),0);
+}
 // 組合單一包車團的現金流水：客收(既有income記錄關聯)、回帳公司、代付支出(日期區間)、住宿代付
 function buildPrivCashFlow(p){
   const driverIds=getPrivDriverIds(p);
@@ -2745,8 +2752,60 @@ function openCashFlow(id){
   renderCashFlowContent(p);
   om('cashflow');
 }
+// 成本明細（供利潤逐項展開）：司機薪資/外派費用/外宿補貼(派車記錄)、酒店費用(每晚)、雜支(逐筆)、旅遊險
+function buildPrivCostBreakdown(p){
+  const dispRecs=dispatches.filter(d=>d.privateId===p.id);
+  const dateLabel=d=>d.start===d.end?d.start:d.start+'~'+d.end;
+  const wageRows=dispRecs.filter(d=>(d.wage||0)>0).map(d=>({date:dateLabel(d),driverName:d.driverName||'-',amount:d.wage}));
+  const outwageRows=dispRecs.filter(d=>(d.outwage||0)>0).map(d=>({date:dateLabel(d),driverName:d.driverName||'-',amount:d.outwage}));
+  const nightRows=dispRecs.filter(d=>(d.nightAllowance||0)>0).map(d=>({date:dateLabel(d),driverName:d.driverName||'-',amount:d.nightAllowance}));
+  const hotelRows=(p.nightlyHotels||[]).map((nh,i)=>{
+    if(!nh.booked)return null;
+    let nightDate=p.start||'';
+    if(p.start){const d=new Date(p.start);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+    const hotel=hotels.find(h=>h.id===nh.hotelId);
+    const isDriverPay=(nh.paymentType||'company')==='driver';
+    const quote=calcNightQuote(p,nh,i);
+    const paid=isDriverPay?!!nh.driverPaid:!!nh.hotelPaid;
+    const amount=isDriverPay?(nh.driverPaid?(nh.driverPaidAmount||0):0):(nh.hotelPaid?quote:0);
+    return{date:nightDate,label:'第'+(i+1)+'晚'+(hotel?' - '+hotel.name:'')+'（'+(isDriverPay?'司機代付':'公司預付')+(paid?'':'・尚未付款')+'）',amount};
+  }).filter(Boolean);
+  const miscRows=[];
+  const driverIds=getPrivDriverIds(p);
+  if(driverIds.length&&p.start&&p.end){
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+      .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+  }
+  const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
+  const wage={total:sum(wageRows),rows:wageRows};
+  const outwage={total:sum(outwageRows),rows:outwageRows};
+  const night={total:sum(nightRows),rows:nightRows};
+  const hotel={total:sum(hotelRows),rows:hotelRows};
+  const misc={total:sum(miscRows),rows:miscRows};
+  const ins=p.insCost||0;
+  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+ins;
+  const profit=(p.price||0)-totalCost;
+  return{price:p.price||0,wage,outwage,night,hotel,misc,ins,totalCost,profit};
+}
+function toggleCostSec(id){
+  const el=document.getElementById('cfcost-'+id);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+  const arrow=document.getElementById('cfcost-arrow-'+id);
+  if(arrow)arrow.textContent=el.style.display==='none'?'▸':'▾';
+}
+function renderCostRow(label,total,rows,id,rowCols){
+  const rowsHtml=rows.length?rows.map(r=>`<tr><td style="font-size:11px">${r.date}</td><td style="font-size:11px">${r.label||r.driverName||''}</td><td style="text-align:right;font-size:11px;color:var(--red)">$${r.amount.toLocaleString()}</td></tr>`).join(''):'<tr><td colspan="3" style="font-size:11px;color:var(--text2);padding:6px">無明細記錄</td></tr>';
+  return `<div style="border-bottom:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;cursor:pointer" onclick="toggleCostSec('${id}')">
+      <span style="font-size:13px"><span id="cfcost-arrow-${id}" style="display:inline-block;width:12px">▸</span>${label}</span>
+      <span style="font-weight:600;color:var(--red)">$${total.toLocaleString()}</span>
+    </div>
+    <div id="cfcost-${id}" style="display:none;padding:0 4px 8px 20px"><table class="xtable" style="width:100%"><tbody>${rowsHtml}</tbody></table></div>
+  </div>`;
+}
 function renderCashFlowContent(p){
   const cf=buildPrivCashFlow(p);
+  const cb=buildPrivCostBreakdown(p);
   const statusHtml=cf.isEnded
     ? (cf.settled?'<span style="color:var(--green);font-weight:600">✅ 已結清</span>':`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${cf.cashBalance.toLocaleString()} 未回帳</span>`)
     : '<span style="color:var(--text2)">團次進行中</span>';
@@ -2767,8 +2826,25 @@ function renderCashFlowContent(p){
         <div class="stat-card"><div class="stat-label">現金淨利</div><div class="stat-val" style="font-size:15px;color:${cf.netProfit>=0?'var(--green)':'var(--red)'}">$${cf.netProfit.toLocaleString()}</div></div>
         <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，詳見財務報表）</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）</div>
       <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
+        <div style="font-size:13px">團報價 <span style="font-weight:600">$${cb.price.toLocaleString()}</span></div>
+      </div>
+      ${renderCostRow('司機薪資',cb.wage.total,cb.wage.rows,'wage')}
+      ${renderCostRow('外派費用',cb.outwage.total,cb.outwage.rows,'outwage')}
+      ${renderCostRow('外宿補貼',cb.night.total,cb.night.rows,'night')}
+      ${renderCostRow('酒店費用',cb.hotel.total,cb.hotel.rows,'hotel')}
+      ${renderCostRow('雜支（油錢/停車/寄鋪等）',cb.misc.total,cb.misc.rows,'misc')}
+      <div style="display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--border)"><span style="font-size:13px">旅遊險</span><span style="font-weight:600;color:var(--red)">$${cb.ins.toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:10px 4px 2px"><span style="font-size:13px;font-weight:600">總成本</span><span style="font-weight:700;color:var(--red)">$${cb.totalCost.toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:4px">
+        <span style="font-size:14px;font-weight:700">毛利</span>
+        <span style="font-size:16px;font-weight:800;color:${cb.profit>=0?'var(--green)':'var(--red)'}">$${cb.profit.toLocaleString()}</span>
+      </div>
     </div>
     ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
   `;
@@ -2823,11 +2899,12 @@ function calcPI(y,m,isYear){
   const ownDriverCost=dispW.wage||(isOut?0:((p.ownDriverDayRate||0)*days+(p.ownDriverNightRate||0)*(p.ownDriverNights||0))*cars);
   const outDriverCost=dispW.outwage||(isOut?(p.driverCost||0):0);
   const nightAllowanceCost=dispW.nightAllowance||0;
-  const hotelCost=p.hotelCost||0;
+  const hotelCost=calcPrivHotelExpense(p);
+  const miscCost=calcPrivMisc(p);
   const insCost=p.insCost||0;
-  const totalCost=ownDriverCost+outDriverCost+nightAllowanceCost+hotelCost+insCost;
+  const totalCost=ownDriverCost+outDriverCost+nightAllowanceCost+hotelCost+miscCost+insCost;
   return{name:p.name,type:p.type,price:p.price,deposit:p.deposit,collected,
-    ownDriverCost,outDriverCost,nightAllowanceCost,hotelCost,insCost,
+    ownDriverCost,outDriverCost,nightAllowanceCost,hotelCost,miscCost,insCost,
     cost:totalCost,pax:p.pax||0,outsource:isOut,id:p.id};
 });}
 function calcME(y,m,isYear){return expenses.filter(e=>isYear?inYear(e.date,y):inMonth(e.date,y,m));}
@@ -2910,22 +2987,23 @@ function exportFinanceExcel(){
 
   // ── 工作表3：包車收入明細 ──
   if(pi.length){
-    const piData=[['團名','類型','報價','已收','自家薪資','外派費用','外宿補貼','住宿成本','旅遊險','總成本','毛利']];
+    const piData=[['團名','類型','報價','已收','自家薪資','外派費用','外宿補貼','住宿成本','雜支','旅遊險','總成本','毛利']];
     pi.forEach(x=>piData.push([
       x.name,x.type==='car+hotel'?'車+住宿':'純包車',
       x.price,x.collected,
-      x.ownDriverCost||0,x.outDriverCost||0,x.nightAllowanceCost||0,x.hotelCost||0,x.insCost||0,
+      x.ownDriverCost||0,x.outDriverCost||0,x.nightAllowanceCost||0,x.hotelCost||0,x.miscCost||0,x.insCost||0,
       x.cost,x.collected-x.cost
     ]));
     piData.push(['合計','',
       pi.reduce((s,x)=>s+x.price,0),pi.reduce((s,x)=>s+x.collected,0),
       pi.reduce((s,x)=>s+(x.ownDriverCost||0),0),pi.reduce((s,x)=>s+(x.outDriverCost||0),0),
       pi.reduce((s,x)=>s+(x.nightAllowanceCost||0),0),pi.reduce((s,x)=>s+(x.hotelCost||0),0),
+      pi.reduce((s,x)=>s+(x.miscCost||0),0),
       pi.reduce((s,x)=>s+(x.insCost||0),0),
       pi.reduce((s,x)=>s+x.cost,0),pi.reduce((s,x)=>s+x.collected-x.cost,0)
     ]);
     const ws3=XLSX.utils.aoa_to_sheet(piData);
-    ws3['!cols']=[{wch:16},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:10},{wch:10}];
+    ws3['!cols']=[{wch:16},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:10},{wch:10}];
     XLSX.utils.book_append_sheet(wb,ws3,'包車收入明細');
   }
 
@@ -3166,7 +3244,7 @@ function renderFinance(){
     <div id="fin-section-profit-analysis" class="fin-section">
       ${gi.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin:10px 0 5px">🚌 拼團毛利</div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>已收</th><th>司機薪資</th><th>外派車資</th><th>旅遊險</th><th>住宿</th><th>附加費用</th><th style="text-align:right">總成本</th><th style="text-align:right">毛利</th></tr></thead><tbody>${gi.map(x=>{const profit=x.collected-x.totalCost;const extDetail=x.extras?.filter(e=>e.mode!=='room').length?x.extras.filter(e=>e.mode!=='room').map(e=>e.name+(e.mode==='table'?'(桌費)':'(每人)')+' $'+e.price).join('、'):'';return`<tr><td style="font-weight:600">${x.name}</td><td style="color:var(--green)">$${x.collected.toLocaleString()}</td><td style="color:var(--text2)">${x.wage?'$'+x.wage.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.outwage?'$'+x.outwage.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.insCost?'$'+x.insCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.roomCost?'$'+x.roomCost.toLocaleString():'-'}</td><td style="color:var(--text2)" title="${extDetail}">${x.extraCost?'$'+x.extraCost.toLocaleString():'-'}</td><td style="text-align:right;color:var(--red)">$${x.totalCost.toLocaleString()}</td><td style="text-align:right;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td></tr>`;}).join('')}</tbody><tfoot><tr><td>小計</td><td style="color:var(--green)">$${gi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+(x.wage||0),0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+(x.outwage||0),0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+(x.insCost||0),0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+(x.roomCost||0),0).toLocaleString()}</td><td>$${gi.reduce((s,x)=>s+(x.extraCost||0),0).toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${gi.reduce((s,x)=>s+x.totalCost,0).toLocaleString()}</td><td style="text-align:right;color:${giProfit>=0?'var(--green)':'var(--red)'};font-weight:700">$${giProfit.toLocaleString()}</td></tr></tfoot></table></div>`:''}
 
-      ${pi.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin:12px 0 5px">🚗 包車毛利</div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>團名</th><th>類型</th><th>已收</th><th>司機薪資</th><th>外派費用</th><th>外宿補貼</th><th>酒店</th><th>旅遊險</th><th style="text-align:right">總成本</th><th style="text-align:right">毛利</th></tr></thead><tbody>${pi.map(x=>{const profit=x.collected-x.cost;return`<tr><td style="font-weight:600">${x.name}</td><td><span class="badge ${x.type==='car+hotel'?'badge-blue':'badge-green'}">${x.type==='car+hotel'?'車+住宿':'純包車'}</span></td><td style="color:var(--green)">$${x.collected.toLocaleString()}</td><td style="color:var(--text2)">${x.ownDriverCost?'$'+x.ownDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.outDriverCost?'$'+x.outDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.nightAllowanceCost?'$'+x.nightAllowanceCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.hotelCost?'$'+x.hotelCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.insCost?'$'+x.insCost.toLocaleString():'-'}</td><td style="text-align:right;color:var(--red)">$${x.cost.toLocaleString()}</td><td style="text-align:right;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toLocaleString()}</td></tr>`;}).join('')}</tbody><tfoot><tr><td colspan="2">小計</td><td style="color:var(--green)">$${pi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.ownDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.outDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.nightAllowanceCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.hotelCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.insCost||0),0).toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${pi.reduce((s,x)=>s+x.cost,0).toLocaleString()}</td><td style="text-align:right;color:${piProfit>=0?'var(--green)':'var(--red)'};font-weight:700">$${piProfit.toLocaleString()}</td></tr></tfoot></table></div>`:''}
+      ${pi.length?`<div style="font-size:12px;font-weight:600;color:var(--text2);margin:12px 0 5px">🚗 包車毛利</div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>團名</th><th>類型</th><th>已收</th><th>司機薪資</th><th>外派費用</th><th>外宿補貼</th><th>酒店</th><th>雜支</th><th>旅遊險</th><th style="text-align:right">總成本</th><th style="text-align:right">毛利</th></tr></thead><tbody>${pi.map(x=>{const profit=x.collected-x.cost;return`<tr><td style="font-weight:600">${x.name}</td><td><span class="badge ${x.type==='car+hotel'?'badge-blue':'badge-green'}">${x.type==='car+hotel'?'車+住宿':'純包車'}</span></td><td style="color:var(--green)">$${x.collected.toLocaleString()}</td><td style="color:var(--text2)">${x.ownDriverCost?'$'+x.ownDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.outDriverCost?'$'+x.outDriverCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.nightAllowanceCost?'$'+x.nightAllowanceCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.hotelCost?'$'+x.hotelCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.miscCost?'$'+x.miscCost.toLocaleString():'-'}</td><td style="color:var(--text2)">${x.insCost?'$'+x.insCost.toLocaleString():'-'}</td><td style="text-align:right;color:var(--red)">$${x.cost.toLocaleString()}</td><td style="text-align:right;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'};cursor:pointer;text-decoration:underline dotted" onclick="openCashFlow('${x.id}')" title="點擊查看現金流水與成本明細">$${profit.toLocaleString()}</td></tr>`;}).join('')}</tbody><tfoot><tr><td colspan="2">小計</td><td style="color:var(--green)">$${pi.reduce((s,x)=>s+x.collected,0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.ownDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.outDriverCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.nightAllowanceCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.hotelCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.miscCost||0),0).toLocaleString()}</td><td>$${pi.reduce((s,x)=>s+(x.insCost||0),0).toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${pi.reduce((s,x)=>s+x.cost,0).toLocaleString()}</td><td style="text-align:right;color:${piProfit>=0?'var(--green)':'var(--red)'};font-weight:700">$${piProfit.toLocaleString()}</td></tr></tfoot></table></div>`:''}
       ${!gi.length&&!pi.length?'<div style="padding:12px;color:var(--text2);font-size:12px">本期無毛利資料</div>':''}
     </div>
     ${(()=>{
