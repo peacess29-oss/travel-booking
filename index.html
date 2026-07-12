@@ -1324,7 +1324,7 @@ function renderTourNightlyTemplate(){
 function setTourNightHotel(i,hid){window._tourNightly[i].hotelId=hid;renderTourNightlyTemplate();}
 function setTourNightRoom(i,k,v){window._tourNightly[i][k]=parseInt(v)||0;}
 async function delTour(){
-  if(!confirm('確定刪除此行程？\n該行程所有報名記錄及相關派車記錄也將一併刪除。'))return;
+  if(!confirm('確定刪除此行程？\n該行程所有報名記錄及相關派車記錄也將一併刪除。\n⚠️ 司機記錄在這個行程上的客收/住宿代付、以及住宿排程，也會一併永久刪除，無法復原。'))return;
   setSS('syncing','刪除中…');
   const tourId=eIds.tour;
   const t=tours.find(x=>x.id===tourId);
@@ -1340,6 +1340,16 @@ async function delTour(){
     )
   );
   for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
+  // 刪除連結的司機記錄：客收(relatedBookingIds)、住宿代付(groupTourId)
+  const relBookIds=new Set(bookings.filter(b=>b.tourId===tourId).map(b=>b.id));
+  const relRecs=driverRecs.filter(r=>
+    (r.relatedBookingIds?.some(id=>relBookIds.has(id)))||
+    (r.groupTourId===tourId||r.groupTourId?.startsWith(tourId+'_'))
+  );
+  for(const r of relRecs) await db.collection('driverRecs').doc(r.id).delete();
+  // 刪除此行程的住宿排程
+  const relNightly=groupNightlies.filter(g=>g.tourId===tourId);
+  for(const g of relNightly) await db.collection('groupNightly').doc(g.id).delete();
   // 刪除所有報名
   const relBooks=bookings.filter(b=>b.tourId===tourId);
   for(const b of relBooks) await db.collection('bookings').doc(b.id).delete();
@@ -1948,7 +1958,7 @@ function printPriv(id){
   w.document.close();
 }
 async function delPriv(){
-  if(!confirm('確定刪除此包車團？\n對應的派車記錄也將一併刪除。'))return;
+  if(!confirm('確定刪除此包車團？\n對應的派車記錄也將一併刪除。\n⚠️ 司機記錄在這團上的客收/住宿代付，也會一併永久刪除，無法復原。'))return;
   setSS('syncing','刪除中…');
   const p=privates.find(x=>x.id===eIds.priv);
   // 刪除對應派車記錄（比對 label 包含團名，且日期吻合）
@@ -1957,6 +1967,11 @@ async function delPriv(){
       d.label?.includes(p.name)&&d.start===p.start
     );
     for(const d of relDisps) await db.collection('dispatches').doc(d.id).delete();
+    // 刪除連結的司機記錄：客收(relatedPrivateIds)、住宿代付(privateId)
+    const relRecs=driverRecs.filter(r=>
+      (r.relatedPrivateIds?.includes(p.id))||r.privateId===p.id
+    );
+    for(const r of relRecs) await db.collection('driverRecs').doc(r.id).delete();
   }
   await db.collection('privates').doc(eIds.priv).delete();
   cm('priv');
