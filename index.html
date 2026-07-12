@@ -1025,7 +1025,15 @@ function renderGroup(){
   });
   doneRecords.sort((a,b)=>b.d>a.d?1:-1); // 最新的在前
 
+  // 未回帳提醒：已結束但司機手上現金尚未歸零的出團
+  const unsettledG=getUnsettledGroups();
+  const unsettledGHtml=unsettledG.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
+    <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 司機尚未回帳（${unsettledG.length}筆）</div>
+    <ul style="padding-left:16px;margin:0">${unsettledG.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openGroupCashFlow('${x.t.id}','${x.date}',${x.busIdx})"><strong>${x.t.name}</strong>（${x.date} ${String.fromCharCode(65+x.busIdx)}車）　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+  </div>`:'';
+
   el.innerHTML=`
+  ${unsettledGHtml}
   <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border)">
     <button class="nav-tab${gfTab==='active'?' active':''}" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 拼團行程（${tours.length}）</button>
     <button class="nav-tab${gfTab==='records'?' active':''}" onclick="setGfTab('records')"><i class="ti ti-history"></i> 出團記錄（${doneRecords.length}）</button>
@@ -1129,6 +1137,7 @@ function renderDateTable(t,d){
           </span>
         </div>
         ${(t.days||1)>1?`<button class="btn btn-sm" onclick="openGroupNightly('${t.id}','${d}',${bus.busIdx})"><i class="ti ti-building"></i> 住宿排程</button>`:''}
+        <button class="btn btn-sm" onclick="openGroupCashFlow('${t.id}','${d}',${bus.busIdx})"><i class="ti ti-cash"></i> 現金流水</button>
       </div>
       <table class="xtable" style="border:none">
         <thead><tr>
@@ -2856,32 +2865,39 @@ function renderCostRow(label,total,rows,id,rowCols){
     <div id="cfcost-${id}" style="display:none;padding:0 4px 8px 20px"><table class="xtable" style="width:100%"><tbody>${rowsHtml}</tbody></table></div>
   </div>`;
 }
-function renderCashFlowContent(p){
-  const cf=buildPrivCashFlow(p);
-  const cb=buildPrivCostBreakdown(p);
-  const statusHtml=cf.isEnded
-    ? (cf.settled?'<span style="color:var(--green);font-weight:600">✅ 已結清</span>':`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${cf.cashBalance.toLocaleString()} 未回帳</span>`)
-    : '<span style="color:var(--text2)">團次進行中</span>';
-  const rows=cf.events.map(e=>{
+// 現金流水明細列渲染（包車團/拼團共用）
+function cashFlowRowsHtml(events){
+  return events.map(e=>{
     const color=e.kind==='income'?'var(--green)':(e.kind==='hotel-pending'?'var(--text3)':'var(--red)');
     const amtStr=e.kind==='hotel-pending'?`（報價 $${e.quote.toLocaleString()}）`:`${e.amount>=0?'+':'-'}$${Math.abs(e.amount).toLocaleString()}`;
     const diffBadge=e.diff?`<span style="color:var(--red);font-size:11px;margin-left:4px">⚠️ 報價$${e.quote.toLocaleString()}，差${e.diff>0?'+':''}$${e.diff.toLocaleString()}</span>`:'';
     const balStr=e.balance==null?'-':`$${e.balance.toLocaleString()}`;
     return `<tr><td style="white-space:nowrap;font-size:12px">${e.date||'-'}</td><td style="font-size:12px">${e.label}${diffBadge}</td><td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${amtStr}</td><td style="text-align:right;font-size:12px;white-space:nowrap">${balStr}</td></tr>`;
   }).join('');
-  document.getElementById('cf-content').innerHTML=`
-    <div class="card" style="margin-bottom:12px">
-      <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-        <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green);font-size:15px">$${cf.totalIncome.toLocaleString()}</div></div>
-        <div class="stat-card"><div class="stat-label">代付支出合計</div><div class="stat-val" style="color:var(--red);font-size:15px">$${cf.totalExpense.toLocaleString()}</div></div>
-      </div>
-      <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-        <div class="stat-card"><div class="stat-label">現金淨利</div><div class="stat-val" style="font-size:15px;color:${cf.netProfit>=0?'var(--green)':'var(--red)'}">$${cf.netProfit.toLocaleString()}</div></div>
-        <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
-      </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）</div>
-      <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
+}
+// 現金流水總覽卡片（包車團/拼團共用）
+function cashFlowOverviewHtml(cf,extraNote){
+  const statusHtml=cf.isEnded
+    ? (cf.settled?'<span style="color:var(--green);font-weight:600">✅ 已結清</span>':`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${cf.cashBalance.toLocaleString()} 未回帳</span>`)
+    : '<span style="color:var(--text2)">團次進行中</span>';
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+      <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green);font-size:15px">$${cf.totalIncome.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">代付支出合計</div><div class="stat-val" style="color:var(--red);font-size:15px">$${cf.totalExpense.toLocaleString()}</div></div>
     </div>
+    <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+      <div class="stat-card"><div class="stat-label">現金淨利</div><div class="stat-val" style="font-size:15px;color:${cf.netProfit>=0?'var(--green)':'var(--red)'}">$${cf.netProfit.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${extraNote||'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本）'}</div>
+    <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
+  </div>`;
+}
+function renderCashFlowContent(p){
+  const cf=buildPrivCashFlow(p);
+  const cb=buildPrivCostBreakdown(p);
+  document.getElementById('cf-content').innerHTML=`
+    ${cashFlowOverviewHtml(cf,'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）')}
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
@@ -2899,13 +2915,33 @@ function renderCashFlowContent(p){
         <span style="font-size:16px;font-weight:800;color:${cb.profit>=0?'var(--green)':'var(--red)'}">$${cb.profit.toLocaleString()}</span>
       </div>
     </div>
-    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
+    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${cashFlowRowsHtml(cf.events)}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
   `;
 }
 // 未回帳提醒（後台）：已結束但現金結餘>0的包車團
 function getUnsettledPrivs(){
   const today=new Date().toISOString().slice(0,10);
   return privates.filter(p=>p.end&&p.end<today).map(p=>({p,cf:buildPrivCashFlow(p)})).filter(x=>x.cf.cashBalance>0);
+}
+// 未回帳提醒（拼團）：已結束但司機手上現金尚未歸零的出團（某天某車）
+function getUnsettledGroups(){
+  const today=new Date().toISOString().slice(0,10);
+  const results=[];
+  const seen=new Set();
+  dispatches.filter(d=>d.groupTourId&&d.end&&d.end<today).forEach(d=>{
+    if(seen.has(d.groupTourId))return;
+    seen.add(d.groupTourId);
+    let tId=d.groupTourId.split('_')[0];
+    let t=tours.find(x=>x.id===tId);
+    if(!t)t=tours.find(x=>d.label&&x.name&&d.label.includes(x.name));
+    if(!t)return;
+    const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+    const busIdx=busMatch?parseInt(busMatch[1]):0;
+    const date=d.start;
+    const cf=buildGroupCashFlow(t.id,date,busIdx);
+    if(cf.cashBalance>0)results.push({t,date,busIdx,cf});
+  });
+  return results;
 }
 function calcPrivDispWage(privateId){
   return dispatches.filter(d=>d.privateId===privateId)
@@ -2995,6 +3031,65 @@ function calcGroupHotelExpense(tourId,date,busIdx){
     if(isDriverPay)return nh.driverPaid?s+(nh.driverPaidAmount||0):s;
     return nh.hotelPaid?s+calcGroupNightQuote(gn,nh,i):s;
   },0);
+}
+// 該次出團（某天某車）對應的派車記錄
+function getGroupDispatch(tourId,date,busIdx){
+  const id=groupNightlyId(tourId,date,busIdx);
+  return dispatches.find(d=>d.groupTourId===id)||null;
+}
+// 拼團現金流水：客收(既有income記錄，依此車乘客報名關聯)、回帳公司、代付支出(依司機ID+行程日期區間)、住宿代付
+function buildGroupCashFlow(tourId,date,busIdx){
+  const t=tours.find(x=>x.id===tourId);
+  const disp=getGroupDispatch(tourId,date,busIdx);
+  const driverId=disp?.driverId||'';
+  const rangeStart=date,rangeEnd=disp?.end||date;
+  const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+  const buses=buildBuses(dateBks,t?.busMax||8,tourId,date);
+  const myBus=buses.find(b=>b.busIdx===busIdx);
+  const bookingIds=(myBus?.bookings||[]).map(b=>b.id);
+  const events=[];
+  driverRecs.filter(r=>r.type==='income'&&r.relatedBookingIds?.some(id=>bookingIds.includes(id))).forEach(r=>{
+    events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+  });
+  if(driverId){
+    driverRecs.filter(r=>r.type==='remit'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+      events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+    });
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+      events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
+  }
+  const gn=getGroupNightly(tourId,date,busIdx);
+  (gn?.nightlyHotels||[]).forEach((nh,i)=>{
+    if((nh.paymentType||'company')!=='driver'||!nh.booked)return;
+    const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
+    const hotel=hotels.find(h=>h.id===nh.hotelId);
+    const quote=calcGroupNightQuote(gn,nh,i);
+    if(nh.driverPaid){
+      const diff=(nh.driverPaidAmount||0)-quote;
+      events.push({date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+    } else {
+      events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
+    }
+  });
+  events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+  let bal=0;
+  events.forEach(e=>{if(e.kind!=='hotel-pending'){bal+=e.amount;e.balance=bal;}else{e.balance=null;}});
+  const totalIncome=events.filter(e=>e.kind==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExpense=events.filter(e=>e.kind==='expense'||e.kind==='hotel').reduce((s,e)=>s-e.amount,0);
+  const netProfit=totalIncome-totalExpense;
+  const isEnded=!!rangeEnd&&rangeEnd<new Date().toISOString().slice(0,10);
+  return{t,disp,driverId,busIdx,date,events,totalIncome,totalExpense,netProfit,cashBalance:bal,isEnded,settled:bal<=0};
+}
+function openGroupCashFlow(tourId,date,busIdx){
+  const t=tours.find(x=>x.id===tourId);if(!t)return;
+  const cf=buildGroupCashFlow(tourId,date,busIdx);
+  document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
+  document.getElementById('cf-content').innerHTML=`
+    ${cashFlowOverviewHtml(cf)}
+    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${cashFlowRowsHtml(cf.events)}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
+  `;
+  om('cashflow');
 }
 function calcGI(y,m,isYear){return tours.map(t=>{
   const allBks=bookings.filter(b=>b.tourId===t.id);
@@ -3952,9 +4047,10 @@ function renderDriverPage(){
     if(!p.end||p.end>=today)return false;
     return getPrivDriverIds(p).includes(curDriverId);
   }).map(p=>({p,cf:buildPrivCashFlow(p)})).filter(x=>x.cf.cashBalance>0);
-  const unsettledHtml=myUnsettled.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
+  const myUnsettledG=getUnsettledGroups().filter(x=>x.cf.driverId===curDriverId);
+  const unsettledHtml=(myUnsettled.length||myUnsettledG.length)?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
     <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 請盡快回帳公司</div>
-    <ul style="padding-left:16px;margin:0">${myUnsettled.map(x=>`<li style="margin-bottom:3px"><strong>${x.p.name}</strong>（已結束）手上尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+    <ul style="padding-left:16px;margin:0">${myUnsettled.map(x=>`<li style="margin-bottom:3px"><strong>${x.p.name}</strong>（已結束）手上尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}${myUnsettledG.map(x=>`<li style="margin-bottom:3px"><strong>${x.t.name}</strong>（${x.date} ${String.fromCharCode(65+x.busIdx)}車・已結束）手上尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
   </div>`:'';
 
   el.innerHTML=
