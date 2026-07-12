@@ -1261,8 +1261,8 @@ function calcTourExtraCost(tour,pax){
   if(!tour?.extras?.length)return 0;
   return tour.extras.reduce((s,e)=>{
     if(!e.price)return s;
+    if(e.mode==='room')return s; // 住宿類型另外用酒店費用機制計算，這裡不重複計入，避免雙重扣成本
     if(e.mode==='table') return s+Math.ceil(pax/(e.tableSize||8))*e.price;
-    if(e.mode==='room') return s+Math.ceil(pax/(e.roomSize||2))*e.price;
     return s+pax*e.price;
   },0);
 }
@@ -3081,12 +3081,84 @@ function buildGroupCashFlow(tourId,date,busIdx){
   const isEnded=!!rangeEnd&&rangeEnd<new Date().toISOString().slice(0,10);
   return{t,disp,driverId,busIdx,date,events,totalIncome,totalExpense,netProfit,cashBalance:bal,isEnded,settled:bal<=0};
 }
+// 拼團成本明細（某天某車）：司機薪資/外派費用/外宿補貼(此車派車記錄)、酒店費用(住宿排程或舊版估算)、雜支、附加費用(依人數比例分攤)、旅遊險
+function buildGroupCostBreakdown(tourId,date,busIdx){
+  const t=tours.find(x=>x.id===tourId);if(!t)return null;
+  const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+  const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
+  const myBus=buses.find(b=>b.busIdx===busIdx);
+  const bks=myBus?.bookings||[];
+  const price=bks.reduce((s,b)=>s+b.count*getPrice(t,b.date,'price'),0);
+  const disp=getGroupDispatch(tourId,date,busIdx);
+  const dLabel=disp?(disp.start===disp.end?disp.start:disp.start+'~'+disp.end):date;
+  const wageRows=disp&&disp.wage?[{date:dLabel,driverName:disp.driverName||'-',amount:disp.wage}]:[];
+  const outwageRows=disp&&disp.outwage?[{date:dLabel,driverName:disp.driverName||'-',amount:disp.outwage}]:[];
+  const nightRows=disp&&disp.nightAllowance?[{date:dLabel,driverName:disp.driverName||'-',amount:disp.nightAllowance}]:[];
+  const insRows=bks.filter(b=>b.insured&&b.insCost).map(b=>({date,label:b.name+'（'+b.count+'人）',amount:b.insCost}));
+  const dayPax=dateBks.reduce((s,b)=>s+b.count,0);
+  const busPax=bks.reduce((s,b)=>s+b.count,0);
+  const extraTotal=Math.round(calcTourExtraCost(t,dayPax)*(dayPax?busPax/dayPax:0));
+  const extraRows=extraTotal?[{date,label:t.name+'（此車'+busPax+'人，依當天總人數比例分攤）',amount:extraTotal}]:[];
+  const gn=getGroupNightly(tourId,date,busIdx);
+  let hotelTotal,hotelRows;
+  if(gn){
+    hotelRows=(gn.nightlyHotels||[]).map((nh,i)=>{
+      if(!nh.booked)return null;
+      const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
+      const hotel=hotels.find(h=>h.id===nh.hotelId);
+      const isDriverPay=(nh.paymentType||'company')==='driver';
+      const quote=calcGroupNightQuote(gn,nh,i);
+      const paid=isDriverPay?!!nh.driverPaid:!!nh.hotelPaid;
+      const amount=isDriverPay?(nh.driverPaid?(nh.driverPaidAmount||0):0):(nh.hotelPaid?quote:0);
+      return{date:nightDate,label:'第'+(i+1)+'晚'+(hotel?' - '+hotel.name:'')+'（'+(isDriverPay?'司機代付':'公司預付')+(paid?'':'・尚未付款')+'）',amount};
+    }).filter(Boolean);
+  } else {
+    const roomTotalDay=dateBks.reduce((s,b)=>s+(b.roomCost||0),0);
+    const roomTotal=buses.length>1?Math.round(roomTotalDay/buses.length):roomTotalDay;
+    hotelRows=roomTotal?[{date,label:'（舊版報名估算，尚未建立住宿排程）',amount:roomTotal}]:[];
+  }
+  const miscRows=[];
+  if(disp?.driverId){
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
+      .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+  }
+  const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
+  const wage={total:sum(wageRows),rows:wageRows};
+  const outwage={total:sum(outwageRows),rows:outwageRows};
+  const night={total:sum(nightRows),rows:nightRows};
+  const hotel={total:sum(hotelRows),rows:hotelRows};
+  const misc={total:sum(miscRows),rows:miscRows};
+  const extra={total:sum(extraRows),rows:extraRows};
+  const ins={total:sum(insRows),rows:insRows};
+  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+extra.total+ins.total;
+  const profit=price-totalCost;
+  return{price,wage,outwage,night,hotel,misc,extra,ins,totalCost,profit};
+}
 function openGroupCashFlow(tourId,date,busIdx){
   const t=tours.find(x=>x.id===tourId);if(!t)return;
   const cf=buildGroupCashFlow(tourId,date,busIdx);
+  const cb=buildGroupCostBreakdown(tourId,date,busIdx);
   document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
   document.getElementById('cf-content').innerHTML=`
-    ${cashFlowOverviewHtml(cf)}
+    ${cashFlowOverviewHtml(cf,'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）')}
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
+        <div style="font-size:13px">此車報價 <span style="font-weight:600">$${cb.price.toLocaleString()}</span></div>
+      </div>
+      ${renderCostRow('司機薪資',cb.wage.total,cb.wage.rows,'g-wage')}
+      ${renderCostRow('外派費用',cb.outwage.total,cb.outwage.rows,'g-outwage')}
+      ${renderCostRow('外宿補貼',cb.night.total,cb.night.rows,'g-night')}
+      ${renderCostRow('酒店費用',cb.hotel.total,cb.hotel.rows,'g-hotel')}
+      ${renderCostRow('雜支（油錢/停車/寄鋪等）',cb.misc.total,cb.misc.rows,'g-misc')}
+      ${renderCostRow('附加費用',cb.extra.total,cb.extra.rows,'g-extra')}
+      ${renderCostRow('旅遊險',cb.ins.total,cb.ins.rows,'g-ins')}
+      <div style="display:flex;justify-content:space-between;padding:10px 4px 2px"><span style="font-size:13px;font-weight:600">總成本</span><span style="font-weight:700;color:var(--red)">$${cb.totalCost.toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:4px">
+        <span style="font-size:14px;font-weight:700">毛利</span>
+        <span style="font-size:16px;font-weight:800;color:${cb.profit>=0?'var(--green)':'var(--red)'}">$${cb.profit.toLocaleString()}</span>
+      </div>
+    </div>
     ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${cashFlowRowsHtml(cf.events)}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
   `;
   om('cashflow');
