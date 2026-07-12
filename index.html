@@ -3060,6 +3060,20 @@ function calcDispCost(y,m,isYear){
 function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 手動輸入的住宿代付（沒有連結任何包車團/拼團排程），需另外加總，否則會漏算
 function calcManualHotelExpense(y,m,isYear){return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).reduce((s,r)=>s+(r.amount||0),0);}
+// 拼團住宿成本（依出發日期篩選，涵蓋所有行程；有新版排程用實際成本，沒有則回退舊版roomCost估算）
+function calcAllGroupHotelExpense(y,m,isYear){
+  const tourDatePairs=[...new Set(bookings.filter(b=>isYear?inYear(b.date,y):inMonth(b.date,y,m)).map(b=>b.tourId+'|'+b.date))];
+  return tourDatePairs.reduce((s,key)=>{
+    const idx=key.lastIndexOf('|');
+    const tourId=key.slice(0,idx),date=key.slice(idx+1);
+    const t=tours.find(x=>x.id===tourId);if(!t)return s;
+    const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+    const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
+    const hasNewData=buses.some(bus=>!!getGroupNightly(tourId,date,bus.busIdx));
+    if(hasNewData)return s+buses.reduce((ss,bus)=>ss+calcGroupHotelExpense(tourId,date,bus.busIdx),0);
+    return s+dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);
+  },0);
+}
 // 回帳公司：純現金移轉，不列入公司支出，不列入公司收入，僅供現金流水呈現
 function calcRemit(y,m,isYear){return driverRecs.filter(r=>r.type==='remit'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 司機客收（公司收入：含 income，不含 extra/tips 個人收入）
@@ -3088,7 +3102,7 @@ function exportFinanceExcel(){
   const ti=gi.reduce((s,x)=>s+x.collected,0)+pi.reduce((s,x)=>s+x.collected,0)+tdi;
   const tme=me.reduce((s,e)=>s+e.amount,0),tde=de.reduce((s,r)=>s+r.amount,0),tfe=fe.reduce((s,f)=>s+f.eff,0);
   const tnight=dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0);
-  const tpiHotel=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear);
+  const tpiHotel=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear)+calcAllGroupHotelExpense(y,m,isYear);
   const dispCost=calcDispCost(y,m,isYear);
   const te=tme+tde+tfe+tnight+tpiHotel+dispCost.wage+dispCost.outwage,np=ti-te;
   const wb=XLSX.utils.book_new();
@@ -3210,6 +3224,9 @@ function renderFinance(){
   // 手動輸入、未連結任何排程的住宿代付（例如清單抓不到項目時，司機直接輸入酒店名稱記帳）
   const manualHotel=calcManualHotelExpense(y,m,isYear);
   if(manualHotel)expBycat['hotel']=(expBycat['hotel']||0)+manualHotel;
+  // 拼團住宿成本（依出發日期篩選，涵蓋所有多天行程）
+  const groupHotel=calcAllGroupHotelExpense(y,m,isYear);
+  if(groupHotel)expBycat['hotel']=(expBycat['hotel']||0)+groupHotel;
   // 外宿補貼（存在 dispatches.nightAllowance，不在 expenses 集合）
   dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
     .forEach(d=>{expBycat['night']=(expBycat['night']||0)+(d.nightAllowance||0);});
@@ -3223,7 +3240,7 @@ function renderFinance(){
   const giProfit=gi.reduce((s,x)=>s+(x.collected-x.totalCost),0);
   const piProfit=pi.reduce((s,x)=>s+(x.collected-x.cost),0);
   // 年報月趨勢
-  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const dc=calcDispCost(y,mi,false);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0)+dc.wage+dc.outwage+calcManualHotelExpense(y,mi,false);return{income:i,exp:e,profit:i-e};}):null;
+  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const dc=calcDispCost(y,mi,false);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0)+dc.wage+dc.outwage+calcManualHotelExpense(y,mi,false)+calcAllGroupHotelExpense(y,mi,false);return{income:i,exp:e,profit:i-e};}):null;
   const maxBar=monthly?Math.max(...monthly.map(d=>Math.max(d.income,d.exp)),1):1;
   function finCard(id,label,val,color,icon){
     return `<div class="fin-card${color==='red'?' fin-card-exp':''}" onclick="toggleFinSection('${id}')" style="cursor:pointer"><div class="fin-card-label"><i class="ti ${icon}"></i> ${label}</div><div class="fin-card-val" style="color:var(--${color})">${val===0?'—':'$'+val.toLocaleString()}</div><div class="fin-card-arrow" id="arr-${id}">▾</div></div>`;
@@ -3341,6 +3358,26 @@ function renderFinance(){
         const piOutsourceRows=sec.id==='outsource'?dispatches.filter(d=>(d.outwage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
           return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.outwage||0).toLocaleString()}</td><td></td></tr>`;
         }):[];
+        // 拼團住宿成本明細（依出發日+車，涵蓋所有多天行程）
+        const piGroupHotelRows=sec.id==='hotel'?(()=>{
+          const rows2=[];
+          const tourDatePairs=[...new Set(bookings.filter(b=>isYear?inYear(b.date,y):inMonth(b.date,y,m)).map(b=>b.tourId+'|'+b.date))];
+          tourDatePairs.forEach(key=>{
+            const idx=key.lastIndexOf('|');
+            const tourId=key.slice(0,idx),date=key.slice(idx+1);
+            const t=tours.find(x=>x.id===tourId);if(!t)return;
+            const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+            const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
+            buses.forEach(bus=>{
+              const gn=getGroupNightly(tourId,date,bus.busIdx);
+              let cost;
+              if(gn){cost=calcGroupHotelExpense(tourId,date,bus.busIdx);}
+              else{cost=dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);if(buses.length>1)cost=cost/buses.length;}
+              if(cost>0)rows2.push(`<tr><td>${date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">拼團：${t.name}${buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':''}</td><td style="text-align:right;color:var(--red);font-weight:600">$${cost.toLocaleString()}</td><td></td></tr>`);
+            });
+          });
+          return rows2;
+        })():[];
         // 手動輸入、未連結排程的住宿代付
         const piManualHotelRows=sec.id==='hotel'?driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).map(r=>{
           return `<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">手動輸入：${r.hotelName||r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td><td></td></tr>`;
@@ -3350,6 +3387,7 @@ function renderFinance(){
           ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
           ...fr.map(f=>`<tr><td>固定</td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">${f.name}（${f.cycle==='monthly'?'每月':'每年'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td><td></td></tr>`),
           ...piHotelRows,
+          ...piGroupHotelRows,
           ...piManualHotelRows,
           ...piNightRows,
           ...piSalaryRows,
@@ -3358,7 +3396,7 @@ function renderFinance(){
         const nightTotal=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0):0;
         const salaryTotal=sec.id==='salary'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.wage||0),0):0;
         const outsourceTotal=sec.id==='outsource'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.outwage||0),0):0;
-        const total=mr.reduce((s,e)=>s+e.amount,0)+dr.reduce((s,r)=>s+r.amount,0)+fr.reduce((s,f)=>s+f.eff,0)+(sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear):0)+nightTotal+salaryTotal+outsourceTotal;
+        const total=mr.reduce((s,e)=>s+e.amount,0)+dr.reduce((s,r)=>s+r.amount,0)+fr.reduce((s,f)=>s+f.eff,0)+(sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear)+calcAllGroupHotelExpense(y,m,isYear):0)+nightTotal+salaryTotal+outsourceTotal;
         return `<div id="fin-section-exp-${sec.id}" class="fin-section">${rows.length?`<div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>司機</th><th>說明</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${rows.join('')}</tbody><tfoot><tr><td colspan="4">小計</td><td style="text-align:right;color:var(--red)">$${total.toLocaleString()}</td><td></td></tr></tfoot></table></div>`:'<div style="padding:8px;color:var(--text2);font-size:12px">本期無'+sec.label+'記錄</div>'}</div>`;
       }).join('');
     })()}
