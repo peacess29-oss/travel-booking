@@ -2814,6 +2814,29 @@ function openCashFlow(id){
   renderCashFlowContent(p);
   om('cashflow');
 }
+// 司機視角：只看現金流水對帳單（客收/回帳/雜支/住宿代付+結餘），不含成本明細與毛利
+function openMyCashFlowPriv(privateId){
+  const p=privates.find(x=>x.id===privateId);if(!p)return;
+  if(!getPrivDriverIds(p).includes(curDriverId))return;
+  const cf=buildPrivCashFlow(p);
+  document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${p.name}`;
+  document.getElementById('cf-content').innerHTML=`
+    ${cashFlowOverviewHtml(cf)}
+    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${cashFlowRowsHtml(cf.events)}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
+  `;
+  om('cashflow');
+}
+function openMyCashFlowGroup(tourId,date,busIdx){
+  const t=tours.find(x=>x.id===tourId);if(!t)return;
+  const cf=buildGroupCashFlow(tourId,date,busIdx);
+  if(cf.driverId!==curDriverId)return;
+  document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${t.name}`;
+  document.getElementById('cf-content').innerHTML=`
+    ${cashFlowOverviewHtml(cf)}
+    ${cf.events.length?`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">結餘</th></tr></thead><tbody>${cashFlowRowsHtml(cf.events)}</tbody></table></div>`:'<div class="empty">尚無現金流水記錄</div>'}
+  `;
+  om('cashflow');
+}
 // 成本明細（供利潤逐項展開）：司機薪資/外派費用/外宿補貼(派車記錄)、酒店費用(每晚)、雜支(逐筆)、旅遊險
 function buildPrivCostBreakdown(p){
   const dispRecs=dispatches.filter(d=>d.privateId===p.id);
@@ -4018,6 +4041,7 @@ function renderDriverPage(){
         ${hotelHtml}
         ${itinHtml}
         ${p.note?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text2)"><span style="font-weight:600">備註：</span>${p.note}</div>`:''}
+        <div style="margin-top:10px"><button class="btn btn-sm" onclick="openMyCashFlowPriv('${p.id}')"><i class="ti ti-cash"></i> 現金流水</button></div>
       </div>`;
     }
     // 拼團
@@ -4034,10 +4058,11 @@ function renderDriverPage(){
       const badge=isActive?`<span class="badge badge-amber">出團中</span>`:`<span class="badge badge-green">即將出發</span>`;
       // 取該車乘客：從 groupTourId 解析 busIdx
       let passengerHtml='';
+      let busIdx=0;
       if(t){
         // groupTourId: tId + '_' + date + '_bus' + N  或  tId + '_' + date（單車舊格式）
         const busMatch=d.groupTourId.match(/_bus(\d+)$/);
-        const busIdx=busMatch?parseInt(busMatch[1]):0;
+        busIdx=busMatch?parseInt(busMatch[1]):0;
         const bks=getDateBks(t.id,dateStr);
         const buses=buildBuses(bks,t.busMax||8,t.id,dateStr);
         const myBus=buses.find(b=>b.busIdx===busIdx)||(buses.length===1?buses[0]:null);
@@ -4072,6 +4097,7 @@ function renderDriverPage(){
         </div>
         ${passengerHtml}
         ${d.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px">備註：${d.note}</div>`:''}
+        ${t?`<div style="margin-top:10px"><button class="btn btn-sm" onclick="openMyCashFlowGroup('${tId}','${dateStr}',${busIdx})"><i class="ti ti-cash"></i> 現金流水</button></div>`:''}
       </div>`;
     }
     return'';
