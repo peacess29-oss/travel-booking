@@ -3244,8 +3244,10 @@ function calcAllGroupHotelExpense(y,m,isYear){
 // 回帳公司：純現金移轉，不列入公司支出，不列入公司收入，僅供現金流水呈現
 function calcRemit(y,m,isYear){return driverRecs.filter(r=>r.type==='remit'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 司機客收（公司收入：含 income，不含 extra/tips 個人收入）
+// 司機客收記錄：只算「沒有連結任何報名/團次」的部分，避免跟拼團/包車團尾款收入(gi.balPaid/pi的balancePaid)重複計算
+// （司機收現金時勾選對應尾款項目，該筆金額已經反映在 gi/pi 的尾款收入裡；若沒有勾選任何項目，才是這裡才需要另外計入的收入）
 function calcDI(y,m,isYear){
-  return driverRecs.filter(r=>r.type==='income'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
+  return driverRecs.filter(r=>r.type==='income'&&!(r.relatedBookingIds?.length)&&!(r.relatedPrivateIds?.length)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
 }
 // 司機個人收入（外收/小費，僅顯示參考，不納入公司損益）
 function calcDriverPersonal(y,m,isYear){
