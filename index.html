@@ -214,13 +214,19 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mb10"><label>行程名稱 *</label><input id="tf-name" placeholder="合歡山一日遊"></div>
   <div class="fg2"><div><label>平日定金</label><input id="tf-dep-wd" type="number" placeholder="500"></div><div><label>假日定金</label><input id="tf-dep-wk" type="number" placeholder="600"></div></div>
   <div class="fg2"><div><label>平日全額</label><input id="tf-pr-wd" type="number" placeholder="1200"></div><div><label>假日全額</label><input id="tf-pr-wk" type="number" placeholder="1500"></div></div>
-  <div class="fg3"><div><label>幾日遊</label><input id="tf-days" type="number" value="1" min="1" placeholder="1"></div><div><label>最少成團人數</label><input id="tf-min" type="number" value="4"></div><div><label>每車上限</label><input id="tf-bus" type="number" value="8"></div></div>
+  <div class="fg3"><div><label>幾日遊</label><input id="tf-days" type="number" value="1" min="1" placeholder="1" onchange="renderTourNightlyTemplate()"></div><div><label>最少成團人數</label><input id="tf-min" type="number" value="4"></div><div><label>每車上限</label><input id="tf-bus" type="number" value="8"></div></div>
   <div class="fg2"><div><label>需投旅遊險</label><select id="tf-ins"><option value="1">是</option><option value="0">否</option></select></div><div><label>旅遊險/人（元）</label><input id="tf-insp" type="number" placeholder="100"></div></div>
   <div class="mb10"><label>說明</label><textarea id="tf-desc" style="height:48px" placeholder="行程特色…"></textarea></div>
   <div class="divider"></div>
   <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">🍱 附加費用項目（成本計算用）</div>
   <div id="tf-extras"></div>
   <button class="btn btn-sm" onclick="addTourExtra()" style="margin-bottom:8px"><i class="ti ti-plus"></i> 新增費用項目</button>
+  <div class="divider"></div>
+  <div id="tf-nightly-sec" style="display:none">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:4px">🏨 住宿範本（多天行程）</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">設定每晚預設飯店/房型，之後每次出團會自動帶入，個別出團仍可單獨調整（不影響此範本）</div>
+    <div id="tf-nightly"></div>
+  </div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-tour" style="display:none" onclick="delTour()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('tour')">取消</button><button class="btn btn-primary" onclick="saveTour()">儲存</button></div></div>
 </div></div>
 
@@ -519,6 +525,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-rec" style="display:none" onclick="delRec()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('rec')">取消</button><button class="btn btn-primary" onclick="saveRec()">儲存</button></div></div>
 </div></div>
 
+<!-- 拼團住宿排程 -->
+<div class="overlay" id="m-groupnightly"><div class="modal" style="width:640px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="gn-title"><i class="ti ti-building"></i> 住宿排程</span><button class="btn btn-sm" onclick="cm('groupnightly')"><i class="ti ti-x"></i></button></div>
+  <div id="gn-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('groupnightly')">取消</button><button class="btn btn-primary" onclick="saveGroupNightly()">儲存</button></div></div>
+</div></div>
+
 <!-- 現金流水 -->
 <div class="overlay" id="m-cashflow"><div class="modal" style="width:640px;max-width:95vw">
   <div class="mh"><span class="mh-title" id="cf-title"><i class="ti ti-cash"></i> 現金流水</span><button class="btn btn-sm" onclick="cm('cashflow')"><i class="ti ti-x"></i></button></div>
@@ -541,7 +554,7 @@ firebase.initializeApp({apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDom
 const db=firebase.firestore();
 
 // ══════════════════ STATE ══════════════════
-let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
+let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
 let curPage='p-group',curRole='',curDriverId='',eIds={};
 let pvSearchQ='';
 let balMonth='';
@@ -711,6 +724,7 @@ function initListeners(){
   db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));populateLoginSel();refresh();});
   db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('expenses').onSnapshot(s=>{expenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('driverRecs').onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('fixedExpenses').onSnapshot(s=>{fixedExpenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
@@ -734,6 +748,10 @@ function initDriverListeners(drvId){
   db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   // 酒店資料（顯示住宿安排需要）
   db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 拼團行程/報名/住宿排程（多天拼團住宿代付需要比對）
+  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   // 車牌選單
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 }
@@ -1103,11 +1121,14 @@ function renderDateTable(t,d){
     const busFormed=bus.seats>=minPax;
     const overloaded=bus.seats>busMax;
     return`<div style="margin-bottom:10px;border:2px solid ${busFormed?'var(--green)':overloaded?'var(--red)':'var(--border)'};border-radius:8px;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${busFormed?'var(--green-l)':overloaded?'var(--red-l)':'var(--amber-l)'}">
-        <span style="font-weight:700;font-size:13px">${bus.label}車</span>
-        <span style="font-size:12px;color:${busFormed?'var(--green-d)':overloaded?'var(--red-d)':'var(--amber-d)'}">
-          ${overloaded?`⚠️ 超載（${bus.seats}/${busMax}人）`:busFormed?`✓ 已成團（${bus.seats}人）`:`待成團（${bus.seats}/${minPax}人）`}
-        </span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;background:${busFormed?'var(--green-l)':overloaded?'var(--red-l)':'var(--amber-l)'}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:700;font-size:13px">${bus.label}車</span>
+          <span style="font-size:12px;color:${busFormed?'var(--green-d)':overloaded?'var(--red-d)':'var(--amber-d)'}">
+            ${overloaded?`⚠️ 超載（${bus.seats}/${busMax}人）`:busFormed?`✓ 已成團（${bus.seats}人）`:`待成團（${bus.seats}/${minPax}人）`}
+          </span>
+        </div>
+        ${(t.days||1)>1?`<button class="btn btn-sm" onclick="openGroupNightly('${t.id}','${d}',${bus.busIdx})"><i class="ti ti-building"></i> 住宿排程</button>`:''}
       </div>
       <table class="xtable" style="border:none">
         <thead><tr>
@@ -1256,13 +1277,43 @@ function openTour(id=''){
   // 附加費用項目
   window._tourExtras=(t?.extras||[]).map(e=>({...e}));
   renderTourExtras();
+  // 住宿範本
+  window._tourNightly=(t?.nightlyHotels||[]).map(nh=>({...nh}));
+  renderTourNightlyTemplate();
   om('tour');
 }
 async function saveTour(){
   const name=document.getElementById('tf-name').value.trim();if(!name)return alert('請填寫名稱');setSS('syncing','儲存中…');
-  const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim(),extras:(window._tourExtras||[]).filter(e=>e.name)};
+  const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim(),extras:(window._tourExtras||[]).filter(e=>e.name),nightlyHotels:(window._tourNightly||[]).filter(nh=>nh.hotelId)};
   if(eIds.tour)await db.collection('tours').doc(eIds.tour).update(data);else await db.collection('tours').doc(uid()).set(data);cm('tour');
 }
+// 住宿範本（多天拼團）：只存飯店/房型比例，每次實際出團另有獨立記錄追蹤訂房/付款狀態
+function renderTourNightlyTemplate(){
+  const days=parseInt(document.getElementById('tf-days').value)||1;
+  const nights=Math.max(0,days-1);
+  const sec=document.getElementById('tf-nightly-sec');
+  if(nights<=0){sec.style.display='none';return;}
+  sec.style.display='block';
+  const arr=window._tourNightly||[];
+  while(arr.length<nights)arr.push({hotelId:'',r2:0,r3:0,r4:0});
+  window._tourNightly=arr.slice(0,nights);
+  const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
+  const hotelOpts=cur=>'<option value="">— 選擇酒店 —</option>'+sortedHotels.map(h=>`<option value="${h.id}"${h.id===cur?' selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  document.getElementById('tf-nightly').innerHTML=window._tourNightly.map((nh,i)=>{
+    const hotel=hotels.find(h=>h.id===nh.hotelId);
+    return `<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚</span>
+      <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setTourNightHotel(${i},this.value)">${hotelOpts(nh.hotelId)}</select></div>
+      ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <div style="font-size:12px"><div style="color:var(--text2)">2人房 $${hotel.r2||0}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setTourNightRoom(${i},'r2',this.value)"></div>
+        <div style="font-size:12px"><div style="color:var(--text2)">3人房 $${hotel.r3||0}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setTourNightRoom(${i},'r3',this.value)"></div>
+        <div style="font-size:12px"><div style="color:var(--text2)">4人房 $${hotel.r4||0}</div><input type="number" value="${nh.r4||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setTourNightRoom(${i},'r4',this.value)"></div>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+function setTourNightHotel(i,hid){window._tourNightly[i].hotelId=hid;renderTourNightlyTemplate();}
+function setTourNightRoom(i,k,v){window._tourNightly[i][k]=parseInt(v)||0;}
 async function delTour(){
   if(!confirm('確定刪除此行程？\n該行程所有報名記錄及相關派車記錄也將一併刪除。'))return;
   setSS('syncing','刪除中…');
@@ -2858,6 +2909,91 @@ function calcPrivDispWage(privateId){
   return dispatches.filter(d=>d.privateId===privateId)
     .reduce((s,d)=>({wage:s.wage+(d.wage||0),outwage:s.outwage+(d.outwage||0),nightAllowance:s.nightAllowance+(d.nightAllowance||0)}),{wage:0,outwage:0,nightAllowance:0});
 }
+// ══════════════════ 拼團住宿排程（多天行程）══════════════════
+function groupNightlyId(tourId,date,busIdx){return tourId+'_'+date+'_bus'+busIdx;}
+function getGroupNightly(tourId,date,busIdx){return groupNightlies.find(g=>g.id===groupNightlyId(tourId,date,busIdx))||null;}
+function openGroupNightly(tourId,date,busIdx){
+  const t=tours.find(x=>x.id===tourId);if(!t)return;
+  eIds.gn={tourId,date,busIdx};
+  const existing=getGroupNightly(tourId,date,busIdx);
+  const nights=Math.max(0,(t.days||1)-1);
+  const blank=()=>({hotelId:'',r2:0,r3:0,r4:0,finalQuote:0,booked:false,paymentType:'company',hotelPaid:false,driverPaid:false,driverPaidAmount:0,driverRecId:''});
+  let arr;
+  if(existing&&existing.nightlyHotels?.length){
+    arr=existing.nightlyHotels.map(nh=>({...blank(),...nh}));
+  } else {
+    arr=(t.nightlyHotels||[]).map(nh=>({...blank(),hotelId:nh.hotelId,r2:nh.r2||0,r3:nh.r3||0,r4:nh.r4||0}));
+  }
+  while(arr.length<nights)arr.push(blank());
+  arr=arr.slice(0,nights);
+  window._gnNightly=arr;
+  document.getElementById('gn-title').innerHTML=`<i class="ti ti-building"></i> 住宿排程 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
+  renderGroupNightlyContent();
+  om('groupnightly');
+}
+function renderGroupNightlyContent(){
+  const{date}=eIds.gn;
+  const arr=window._gnNightly||[];
+  const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
+  const hotelOpts=cur=>'<option value="">— 選擇酒店 —</option>'+sortedHotels.map(h=>`<option value="${h.id}"${h.id===cur?' selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  document.getElementById('gn-content').innerHTML=arr.length?arr.map((nh,i)=>{
+    let nightDate=date;
+    if(date){const d=new Date(date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+    const hotel=hotels.find(h=>h.id===nh.hotelId);
+    const isWk=nightDate?isHol(nightDate):false;
+    const r2rate=hotel?getHotelRoomRate(hotel,nightDate,'r2'):0;
+    const r3rate=hotel?getHotelRoomRate(hotel,nightDate,'r3'):0;
+    const r4rate=hotel?getHotelRoomRate(hotel,nightDate,'r4'):0;
+    return`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
+        <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setGnHotel(${i},this.value)">${hotelOpts(nh.hotelId)}</select>
+      </div>
+      ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
+        ${r2rate?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 $${r2rate}</div><input type="number" value="${nh.r2||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r2',this.value)"></div>`:''}
+        ${r3rate?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 $${r3rate}</div><input type="number" value="${nh.r3||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r3',this.value)"></div>`:''}
+        ${r4rate?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 $${r4rate}</div><input type="number" value="${nh.r4||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r4',this.value)"></div>`:''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:4px;padding-top:6px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.booked?'checked':''} onchange="setGnMeta(${i},'booked',this.checked)" style="width:14px;height:14px"> 已訂房確認</label></div>
+        <div><label style="font-size:11px">最終報價（元）</label><input type="number" value="${nh.finalQuote||0}" placeholder="0" style="height:30px;font-size:12px" onchange="setGnMeta(${i},'finalQuote',parseInt(this.value)||0)"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div><label style="font-size:11px">付款方式</label><select style="height:30px;font-size:12px;width:100%" onchange="setGnMeta(${i},'paymentType',this.value)"><option value="company" ${(nh.paymentType||'company')==='company'?'selected':''}>公司預付</option><option value="driver" ${nh.paymentType==='driver'?'selected':''}>司機現場付現</option></select></div>
+        <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setGnMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">✅ 司機已代付 $${(nh.driverPaidAmount||0).toLocaleString()}</span>`:'<span style="font-size:11px;color:var(--amber-d)">⏳ 等待司機現場代付</span>')}</div>
+      </div>`:''}
+    </div>`;
+  }).join(''):'<div class="empty">此行程為一日遊，無需住宿排程</div>';
+}
+function setGnHotel(i,hid){window._gnNightly[i].hotelId=hid;renderGroupNightlyContent();}
+function setGnRoom(i,k,v){window._gnNightly[i][k]=parseInt(v)||0;}
+function setGnMeta(i,k,v){window._gnNightly[i][k]=v;}
+async function saveGroupNightly(){
+  const{tourId,date,busIdx}=eIds.gn;
+  const id=groupNightlyId(tourId,date,busIdx);
+  setSS('syncing','儲存中…');
+  await db.collection('groupNightly').doc(id).set({tourId,date,busIdx,nightlyHotels:window._gnNightly||[]});
+  cm('groupnightly');
+}
+// 該晚報價（司機/公司實付與報價比對用）
+function calcGroupNightQuote(gn,nh,i){
+  if(nh.finalQuote>0)return nh.finalQuote;
+  const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return 0;
+  let nightDate='';
+  if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+  return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0);
+}
+// 該次出團（某天某車）實際酒店成本：公司預付看是否已付款給酒店，司機代付看是否已實際代付
+function calcGroupHotelExpense(tourId,date,busIdx){
+  const gn=getGroupNightly(tourId,date,busIdx);
+  if(!gn||!gn.nightlyHotels)return 0;
+  return gn.nightlyHotels.reduce((s,nh,i)=>{
+    if(!nh.booked)return s;
+    const isDriverPay=(nh.paymentType||'company')==='driver';
+    if(isDriverPay)return nh.driverPaid?s+(nh.driverPaidAmount||0):s;
+    return nh.hotelPaid?s+calcGroupNightQuote(gn,nh,i):s;
+  },0);
+}
 function calcGI(y,m,isYear){return tours.map(t=>{
   const allBks=bookings.filter(b=>b.tourId===t.id);
   const depPaid=allBks.filter(b=>b.depositPaid&&(isYear?inYear(b.regdate||b.date,y):inMonth(b.regdate||b.date,y,m))).reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
@@ -2873,8 +3009,14 @@ function calcGI(y,m,isYear){return tours.map(t=>{
     const dayPax=bksInPeriod.filter(b=>b.date===date).reduce((ss,b)=>ss+b.count,0);
     return s+calcTourExtraCost(t,dayPax);
   },0);
-  // 住宿費用：從每筆報名的 roomCost 加總
-  const roomCost=bksInPeriod.reduce((s,b)=>s+(b.roomCost||0),0);
+  // 住宿費用：若該出發日已建立新版住宿排程則採用（公司預付/司機代付實付金額），否則沿用舊版報名 roomCost 估算（相容尚未使用新功能的歷史/既有出團）
+  const roomCost=dates.reduce((s,date)=>{
+    const dateBks=allBks.filter(b=>b.date===date);
+    const buses=buildBuses(dateBks,t.busMax||8,t.id,date);
+    const hasNewData=buses.some(bus=>!!getGroupNightly(t.id,date,bus.busIdx));
+    if(hasNewData)return s+buses.reduce((ss,bus)=>ss+calcGroupHotelExpense(t.id,date,bus.busIdx),0);
+    return s+dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);
+  },0);
   const totalCost=wageData.wage+wageData.outwage+insCost+extraCost+roomCost;
   return{name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bksInPeriod.reduce((s,b)=>s+b.count,0),cnt:bksInPeriod.length,wage:wageData.wage,outwage:wageData.outwage,insCost,extraCost,roomCost,totalCost,extras:t.extras||[]};
 }).filter(x=>x.collected>0||x.cnt>0);}
@@ -3387,12 +3529,37 @@ function renderHotelStat(){
     });
   });
 
-  // 2. 拼團 bookings.roomCost
+  // 2. 拼團住宿：優先採用新版「住宿排程」（依日期+車），尚未建立新資料的出團則沿用舊版報名 roomCost 估算
   const groupRows=[];
-  bookings.filter(b=>b.roomCost>0&&b.date&&inRange(b.date)).forEach(b=>{
-    const h=hotels.find(x=>x.id===b.roomHotelId);
-    const t=tours.find(x=>x.id===b.tourId);
-    groupRows.push({date:b.date,hotelId:b.roomHotelId||'',hotelName:h?.name||'（未指定）',hotelArea:h?.area||'',roomType:(b.roomType||'2')+'人房',roomCount:b.roomCount||1,cost:b.roomCost,source:'拼團',label:t?.name||'',guestName:b.name});
+  const tourDatePairs=[...new Set(bookings.map(b=>b.tourId+'|'+b.date))];
+  tourDatePairs.forEach(key=>{
+    const idx=key.lastIndexOf('|');
+    const tourId=key.slice(0,idx),date=key.slice(idx+1);
+    const t=tours.find(x=>x.id===tourId);if(!t)return;
+    const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+    const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
+    buses.forEach(bus=>{
+      const gn=getGroupNightly(tourId,date,bus.busIdx);
+      if(gn&&gn.nightlyHotels?.length){
+        gn.nightlyHotels.forEach((n,i)=>{
+          if(!n.hotelId&&!n.finalQuote&&!n.r2&&!n.r3&&!n.r4)return;
+          const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
+          if(!inRange(nightDate))return;
+          const h=hotels.find(x=>x.id===n.hotelId);
+          const r2=n.r2||0,r3=n.r3||0,r4=n.r4||0,totalRoomsN=r2+r3+r4;
+          const label=t.name+(buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':'');
+          if(r2)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'2人房',roomCount:r2,cost:r2*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r2')),source:'拼團',label});
+          if(r3)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'3人房',roomCount:r3,cost:r3*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r3')),source:'拼團',label});
+          if(r4)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'4人房',roomCount:r4,cost:r4*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r4')),source:'拼團',label});
+          if(!r2&&!r3&&!r4&&n.finalQuote)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'-',roomCount:1,cost:n.finalQuote,source:'拼團',label});
+        });
+      } else {
+        bus.bookings.filter(b=>b.roomCost>0&&b.date&&inRange(b.date)).forEach(b=>{
+          const h=hotels.find(x=>x.id===b.roomHotelId);
+          groupRows.push({date:b.date,hotelId:b.roomHotelId||'',hotelName:h?.name||'（未指定）',hotelArea:h?.area||'',roomType:(b.roomType||'2')+'人房',roomCount:b.roomCount||1,cost:b.roomCost,source:'拼團',label:t.name,guestName:b.name});
+        });
+      }
+    });
   });
 
   const allRows=[...privRows,...groupRows]
