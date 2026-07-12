@@ -3941,7 +3941,7 @@ function renderDriverPage(){
       const amtColor=isRemit?'var(--blue-d,#1D5FB0)':(isIncome?'var(--green)':'var(--red)');
       const mn=r.maintType?'('+MAINT_N[r.maintType]+')':'';
       const diffBadge=(r.type==='hotel'&&r.quoteAmount&&r.amount!==r.quoteAmount)?`<span style="color:var(--red);font-size:11px;margin-left:4px">⚠️ 金額不符（報價$${r.quoteAmount.toLocaleString()}）</span>`:'';
-      const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.note||''].filter(Boolean).join(' ');
+      const detail=[r.fuelLiters?r.fuelLiters+'L':'',r.hotelName||'',r.note||''].filter(Boolean).join(' ');
       const rowHtml=`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td><span class="badge" style="${badgeStyle}">${String(TYPE_N[r.type]||r.type)+mn}</span>${diffBadge}</td><td style="font-size:11px;color:var(--text2)">${detail||'-'}</td><td style="font-size:11px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="text-align:right;font-weight:600;color:${amtColor}">$${(r.amount||0).toLocaleString()}</td><td><button class="btn btn-sm" onclick="openRec('${r.id}')"><i class="ti ti-edit"></i></button></td></tr>`;return rowHtml;}).join('')}</tbody></table></div>`}
   </div>`;
 }
@@ -4088,6 +4088,7 @@ function getPendingHotelItems(date){
   const items=[];
   const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end);
   if(!myDisps.length) return items;
+  // 包車團
   privates.forEach(p=>{
     if(!(p.nightlyHotels&&p.nightlyHotels.length)) return;
     const hasDisp=myDisps.some(d=>d.privateId===p.id||d.label?.includes(p.name));
@@ -4097,7 +4098,23 @@ function getPendingHotelItems(date){
       let nightDate='';
       if(p.start){const nd=new Date(p.start);nd.setDate(nd.getDate()+i);nightDate=nd.toISOString().slice(0,10);}
       const hotel=hotels.find(h=>h.id===nh.hotelId);
-      items.push({privateId:p.id,nightIndex:i,label:p.name+' 第'+(i+1)+'晚'+(nightDate?'（'+nightDate+'）':'')+(hotel?' - '+hotel.name:''),quote:calcNightQuote(p,nh,i)});
+      items.push({kind:'priv',privateId:p.id,nightIndex:i,label:p.name+' 第'+(i+1)+'晚'+(nightDate?'（'+nightDate+'）':'')+(hotel?' - '+hotel.name:''),quote:calcNightQuote(p,nh,i)});
+    });
+  });
+  // 拼團（多天行程，依派車記錄的 groupTourId 比對）
+  myDisps.filter(d=>d.groupTourId).forEach(d=>{
+    const tId=d.groupTourId.split('_')[0];
+    const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+    const busIdx=busMatch?parseInt(busMatch[1]):0;
+    const gDate=d.start;
+    const t=tours.find(x=>x.id===tId);if(!t)return;
+    const gn=getGroupNightly(tId,gDate,busIdx);
+    if(!gn||!gn.nightlyHotels)return;
+    gn.nightlyHotels.forEach((nh,i)=>{
+      if(!nh.booked||(nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
+      const nd=new Date(gDate);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
+      const hotel=hotels.find(h=>h.id===nh.hotelId);
+      items.push({kind:'group',tourId:tId,gDate,busIdx,nightIndex:i,label:t.name+' 第'+(i+1)+'晚（'+nightDate+'）'+(hotel?' - '+hotel.name:''),quote:calcGroupNightQuote(gn,nh,i)});
     });
   });
   return items;
@@ -4109,7 +4126,7 @@ function renderHotelItems(date){
   document.getElementById('rf-hotel-diff').style.display='none';
   document.getElementById('rf-amt').dataset.quote='';
   if(!items.length){
-    el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px">此日無待代付住宿項目</div>';
+    el.innerHTML='<div style="margin-bottom:4px"><label style="font-size:12px;color:var(--text2)">找不到待代付的排程項目，請手動輸入酒店名稱</label><input id="rf-hotel-manual" type="text" placeholder="例如：日月潭雲品酒店" style="height:34px;font-size:13px;width:100%"></div>';
     return;
   }
   el.innerHTML=items.map((item,idx)=>`
@@ -4138,19 +4155,34 @@ function selectHotelItem(idx){
   }
   checkHotelDiff();
 }
-// 編輯既有住宿代付記錄：顯示唯讀晚數資訊（不可重新選晚）
+// 編輯既有住宿代付記錄：包車團/拼團顯示唯讀晚數資訊（不可重新選晚）；手動輸入的記錄可改酒店名稱
 function renderHotelItemEdit(r){
   const el=document.getElementById('rf-hotel-items');
-  if(!r||!r.privateId){el.innerHTML='';return;}
-  const p=privates.find(x=>x.id===r.privateId);
-  const nh=p?.nightlyHotels?.[r.nightIndex];
-  const hotel=nh?hotels.find(h=>h.id===nh.hotelId):null;
-  let nightDate='';
-  if(p?.start&&r.nightIndex!=null){const nd=new Date(p.start);nd.setDate(nd.getDate()+r.nightIndex);nightDate=nd.toISOString().slice(0,10);}
-  el.innerHTML=`<div style="font-size:12px;padding:6px 8px;background:var(--bg2);border-radius:6px">
-    <div style="font-weight:600">${p?p.name+' 第'+(r.nightIndex+1)+'晚':'（原團次已不存在）'}${nightDate?'（'+nightDate+'）':''}${hotel?' - '+hotel.name:''}</div>
-    <div style="color:var(--blue-d)">報價：$${(r.quoteAmount||0).toLocaleString()}</div>
-  </div>`;
+  if(!r){el.innerHTML='';return;}
+  if(r.privateId){
+    const p=privates.find(x=>x.id===r.privateId);
+    const nh=p?.nightlyHotels?.[r.nightIndex];
+    const hotel=nh?hotels.find(h=>h.id===nh.hotelId):null;
+    let nightDate='';
+    if(p?.start&&r.nightIndex!=null){const nd=new Date(p.start);nd.setDate(nd.getDate()+r.nightIndex);nightDate=nd.toISOString().slice(0,10);}
+    el.innerHTML=`<div style="font-size:12px;padding:6px 8px;background:var(--bg2);border-radius:6px">
+      <div style="font-weight:600">${p?p.name+' 第'+(r.nightIndex+1)+'晚':'（原團次已不存在）'}${nightDate?'（'+nightDate+'）':''}${hotel?' - '+hotel.name:''}</div>
+      <div style="color:var(--blue-d)">報價：$${(r.quoteAmount||0).toLocaleString()}</div>
+    </div>`;
+  } else if(r.groupTourId){
+    const t=tours.find(x=>x.id===r.groupTourId);
+    const gn=getGroupNightly(r.groupTourId,r.groupDate,r.groupBusIdx);
+    const nh=gn?.nightlyHotels?.[r.nightIndex];
+    const hotel=nh?hotels.find(h=>h.id===nh.hotelId):null;
+    let nightDate='';
+    if(r.groupDate&&r.nightIndex!=null){const nd=new Date(r.groupDate);nd.setDate(nd.getDate()+r.nightIndex);nightDate=nd.toISOString().slice(0,10);}
+    el.innerHTML=`<div style="font-size:12px;padding:6px 8px;background:var(--bg2);border-radius:6px">
+      <div style="font-weight:600">${t?t.name+' 第'+(r.nightIndex+1)+'晚':'（原行程已不存在）'}${nightDate?'（'+nightDate+'）':''}${hotel?' - '+hotel.name:''}</div>
+      <div style="color:var(--blue-d)">報價：$${(r.quoteAmount||0).toLocaleString()}</div>
+    </div>`;
+  } else {
+    el.innerHTML=`<div style="margin-bottom:4px"><label style="font-size:12px">酒店名稱</label><input id="rf-hotel-manual" type="text" value="${(r.hotelName||'').replace(/"/g,'&quot;')}" style="height:34px;font-size:13px;width:100%"></div>`;
+  }
 }
 document.addEventListener('input',e=>{if(e.target.id==='rf-amt')checkHotelDiff();});
 function checkHotelDiff(){
@@ -4191,13 +4223,18 @@ async function saveRec(){
       if(!anyChecked)return alert('請至少勾選一項尾款待收項目');
     }
   }
-  // 住宿代付：新增時必須勾選一筆待代付晚數
-  let hotelSel=null;
+  // 住宿代付：有待選晚數時必須勾選一筆；沒有待選晚數時，改為要求手動輸入酒店名稱
+  let hotelSel=null,hotelManualName='';
   if(type==='hotel'&&!eIds.rec){
     const items=window._rfHotelItems||[];
-    const idx=items.findIndex((_,i)=>document.getElementById('rf-htl-'+i)?.checked);
-    if(idx<0)return alert('請選擇要代付的住宿晚數');
-    hotelSel=items[idx];
+    if(items.length){
+      const idx=items.findIndex((_,i)=>document.getElementById('rf-htl-'+i)?.checked);
+      if(idx<0)return alert('請選擇要代付的住宿晚數');
+      hotelSel=items[idx];
+    } else {
+      hotelManualName=document.getElementById('rf-hotel-manual')?.value.trim()||'';
+      if(!hotelManualName)return alert('請輸入酒店名稱');
+    }
   }
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
@@ -4214,11 +4251,23 @@ async function saveRec(){
   const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds};
   if(type==='hotel'){
     if(hotelSel){
-      data.privateId=hotelSel.privateId;data.nightIndex=hotelSel.nightIndex;data.quoteAmount=hotelSel.quote;
+      if(hotelSel.kind==='group'){
+        data.groupTourId=hotelSel.tourId;data.groupDate=hotelSel.gDate;data.groupBusIdx=hotelSel.busIdx;data.nightIndex=hotelSel.nightIndex;data.quoteAmount=hotelSel.quote;
+      } else {
+        data.privateId=hotelSel.privateId;data.nightIndex=hotelSel.nightIndex;data.quoteAmount=hotelSel.quote;
+      }
     } else if(eIds.rec){
-      // 編輯既有記錄：沿用原本關聯的晚數，只更新實付金額
+      // 編輯既有記錄：沿用原本關聯（包車團/拼團/手動輸入皆同），只更新實付金額或酒店名稱
       const oldRec=driverRecs.find(x=>x.id===eIds.rec);
-      data.privateId=oldRec?.privateId||'';data.nightIndex=oldRec?.nightIndex;data.quoteAmount=oldRec?.quoteAmount||0;
+      data.privateId=oldRec?.privateId||'';
+      data.groupTourId=oldRec?.groupTourId||'';data.groupDate=oldRec?.groupDate||'';data.groupBusIdx=oldRec?.groupBusIdx;
+      data.nightIndex=oldRec?.nightIndex;data.quoteAmount=oldRec?.quoteAmount||0;
+      if(!oldRec?.privateId&&!oldRec?.groupTourId){
+        data.hotelName=document.getElementById('rf-hotel-manual')?.value.trim()||oldRec?.hotelName||'';
+      }
+    } else {
+      // 手動輸入，不綁定任何排程晚數
+      data.hotelName=hotelManualName;data.quoteAmount=0;
     }
   }
   let recId=eIds.rec;
@@ -4252,6 +4301,16 @@ async function saveRec(){
       if(pi>=0) privates[pi]={...privates[pi],nightlyHotels:newNightly};
     }
   }
+  if(type==='hotel'&&data.groupTourId&&data.nightIndex!=null){
+    const gnId=groupNightlyId(data.groupTourId,data.groupDate,data.groupBusIdx);
+    const gn=getGroupNightly(data.groupTourId,data.groupDate,data.groupBusIdx);
+    if(gn&&gn.nightlyHotels&&gn.nightlyHotels[data.nightIndex]){
+      const newNightly=gn.nightlyHotels.map((nh,i)=>i===data.nightIndex?{...nh,driverPaid:true,driverPaidAmount:data.amount,driverRecId:recId}:nh);
+      await db.collection('groupNightly').doc(gnId).update({nightlyHotels:newNightly});
+      const gi=groupNightlies.findIndex(x=>x.id===gnId);
+      if(gi>=0) groupNightlies[gi]={...groupNightlies[gi],nightlyHotels:newNightly};
+    }
+  }
   cm('rec');
 }
 async function delRec(){
@@ -4283,6 +4342,16 @@ async function delRec(){
       await db.collection('privates').doc(rec.privateId).update({nightlyHotels:newNightly});
       const pi=privates.findIndex(x=>x.id===rec.privateId);
       if(pi>=0) privates[pi]={...privates[pi],nightlyHotels:newNightly};
+    }
+  }
+  if(rec?.type==='hotel'&&rec.groupTourId&&rec.nightIndex!=null){
+    const gnId=groupNightlyId(rec.groupTourId,rec.groupDate,rec.groupBusIdx);
+    const gn=getGroupNightly(rec.groupTourId,rec.groupDate,rec.groupBusIdx);
+    if(gn&&gn.nightlyHotels&&gn.nightlyHotels[rec.nightIndex]){
+      const newNightly=gn.nightlyHotels.map((nh,i)=>i===rec.nightIndex?{...nh,driverPaid:false,driverPaidAmount:0,driverRecId:''}:nh);
+      await db.collection('groupNightly').doc(gnId).update({nightlyHotels:newNightly});
+      const gi=groupNightlies.findIndex(x=>x.id===gnId);
+      if(gi>=0) groupNightlies[gi]={...groupNightlies[gi],nightlyHotels:newNightly};
     }
   }
   cm('rec');
