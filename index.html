@@ -3246,6 +3246,30 @@ function calcRemit(y,m,isYear){return driverRecs.filter(r=>r.type==='remit'&&(is
 // 司機客收（公司收入：含 income，不含 extra/tips 個人收入）
 // 司機客收記錄：只算「沒有連結任何報名/團次」的部分，避免跟拼團/包車團尾款收入(gi.balPaid/pi的balancePaid)重複計算
 // （司機收現金時勾選對應尾款項目，該筆金額已經反映在 gi/pi 的尾款收入裡；若沒有勾選任何項目，才是這裡才需要另外計入的收入）
+// 拼團定金/尾款收入明細：依「出發日＋行程」逐筆列出（一團一筆），供財務總覽展開列表使用
+function buildGroupIncomeRows(y,m,isYear,field){
+  const rows=[];
+  tours.forEach(t=>{
+    const bks=bookings.filter(b=>b.tourId===t.id);
+    const dates=[...new Set(bks.map(b=>b.date))];
+    dates.forEach(date=>{
+      const dateBks=bks.filter(b=>b.date===date);
+      let paidBks,amount;
+      if(field==='deposit'){
+        paidBks=dateBks.filter(b=>b.depositPaid&&(isYear?inYear(b.regdate||b.date,y):inMonth(b.regdate||b.date,y,m)));
+        amount=paidBks.reduce((s,b)=>s+b.count*getPrice(t,b.date,'deposit'),0);
+      } else {
+        paidBks=dateBks.filter(b=>b.balancePaid&&(isYear?inYear(b.date,y):inMonth(b.date,y,m)));
+        amount=paidBks.reduce((s,b)=>s+b.count*(getPrice(t,b.date,'price')-getPrice(t,b.date,'deposit')),0);
+      }
+      if(!paidBks.length)return;
+      const pax=paidBks.reduce((s,b)=>s+b.count,0);
+      rows.push({date,name:t.name,cnt:paidBks.length,pax,amount});
+    });
+  });
+  rows.sort((a,b)=>a.date>b.date?1:-1);
+  return rows;
+}
 function calcDI(y,m,isYear){
   return driverRecs.filter(r=>r.type==='income'&&!(r.relatedBookingIds?.length)&&!(r.relatedPrivateIds?.length)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
 }
@@ -3443,7 +3467,7 @@ function renderFinance(){
       <div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable">
         <thead><tr><th>來源</th><th>行程/團名</th><th>組/人</th><th style="text-align:right">定金</th></tr></thead>
         <tbody>
-          ${gi.filter(x=>x.depPaid>0).map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.name}</td><td>${x.cnt}組 ${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.depPaid.toLocaleString()}</td></tr>`).join('')}
+          ${buildGroupIncomeRows(y,m,isYear,'deposit').map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.date} ${x.name}</td><td>${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td></tr>`).join('')}
           ${pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);const depIn=p2?.depositPaid&&(isYear?inYear(p2.depositDate||p2.start,y):inMonth(p2.depositDate||p2.start,y,m));return depIn;}).map(x=>`<tr><td><span class="badge badge-blue">包車</span></td><td>${x.name}</td><td>${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${(privates.find(p=>p.id===x.id)?.deposit||0).toLocaleString()}</td></tr>`).join('')}
           ${(giDep===0&&piDepOnly===0)?'<tr><td colspan="4" style="text-align:center;color:var(--text2)">本期無定金收入</td></tr>':''}
         </tbody>
@@ -3454,7 +3478,7 @@ function renderFinance(){
       <div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable">
         <thead><tr><th>來源</th><th>行程/團名</th><th>說明</th><th style="text-align:right">尾款</th></tr></thead>
         <tbody>
-          ${gi.filter(x=>x.balPaid>0).map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.name}</td><td style="font-size:11px;color:var(--text2)">${x.cnt}組 ${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.balPaid.toLocaleString()}</td></tr>`).join('')}
+          ${buildGroupIncomeRows(y,m,isYear,'balance').map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.date} ${x.name}</td><td style="font-size:11px;color:var(--text2)">${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td></tr>`).join('')}
           ${pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);return p2?.balancePaid&&(isYear?inYear(p2.start,y):inMonth(p2.start,y,m));}).map(x=>`<tr><td><span class="badge badge-blue">包車</span></td><td>${x.name}</td><td style="font-size:11px;color:var(--text2)">${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${((privates.find(p=>p.id===x.id)?.price||0)-(privates.find(p=>p.id===x.id)?.deposit||0)).toLocaleString()}</td></tr>`).join('')}
           ${di.map(r=>`<tr><td><span class="badge" style="background:var(--blue-l);color:var(--blue)">司機客收</span></td><td>${r.driverName||'-'}</td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}${r.car?' ・'+r.car:''}</td><td style="text-align:right;color:var(--green);font-weight:600">$${r.amount.toLocaleString()}</td></tr>`).join('')}
           ${(giBal===0&&piBalOnly===0&&di.length===0)?'<tr><td colspan="4" style="text-align:center;color:var(--text2)">本期無尾款收入</td></tr>':''}
