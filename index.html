@@ -1776,7 +1776,7 @@ function renderNightlyPicker(){
   nightlyHotels=nightlyHotels.slice(0,nights);
   // 依地區名稱排序
   const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
-  const hotelOpts='<option value="">— 選擇酒店 —</option>'+sortedHotels.map(h=>`<option value="${h.id}">${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  const hotelOpts='<option value="">— 選擇酒店 —</option><option value="__new__">🖊️ 其他／客人指定酒店（自填新增）</option>'+sortedHotels.map(h=>`<option value="${h.id}">${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
   let rows='';
   for(let i=0;i<nights;i++){
     const nh=nightlyHotels[i];
@@ -1787,32 +1787,49 @@ function renderNightlyPicker(){
     const r2rate=hotel?getHotelRoomRate(hotel,nightDate,'r2'):0;
     const r3rate=hotel?getHotelRoomRate(hotel,nightDate,'r3'):0;
     const r4rate=hotel?getHotelRoomRate(hotel,nightDate,'r4'):0;
+    const noRateCard=hotel&&!(hotel.r2||hotel.r3||hotel.r4||hotel.r2wk||hotel.r3wk||hotel.r4wk);
     rows+=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
         <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>
       </div>
-      ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
+      ${hotel?`${noRateCard?`<div style="font-size:11px;color:var(--amber-d);background:var(--amber-l,#fff7e6);border-radius:6px;padding:6px 8px;margin-bottom:6px">🖊️ 自填酒店，無房型單價資料，請直接填寫下方「住宿總價」作為此晚成本</div>`:`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
         ${r2rate?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 $${r2rate}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r2',this.value)"> 間</div>`:''}
         ${r3rate?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 $${r3rate}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r3',this.value)"> 間</div>`:''}
         ${r4rate?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 $${r4rate}</div><input type="number" value="${nh.r4||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r4',this.value)"> 間</div>`:''}
-      </div>
+      </div>`}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">
         <div><label style="font-size:11px">酒店回傳日期</label><input type="date" value="${nh.returnDate||''}" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'returnDate',this.value)"></div>
         <div style="display:flex;align-items:center;gap:4px;padding-top:18px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.booked?'checked':''} onchange="setNightMeta(${i},'booked',this.checked)" style="width:14px;height:14px"> 已訂房確認</label></div>
-        <div><label style="font-size:11px">最終報價（元）</label><input type="number" value="${nh.finalQuote||0}" placeholder="0" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'finalQuote',parseInt(this.value)||0)"></div>
+        <div><label style="font-size:11px">${noRateCard?'住宿總價（元）*':'最終報價（元）'}</label><input type="number" value="${nh.finalQuote||0}" placeholder="0" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'finalQuote',parseInt(this.value)||0)"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div><label style="font-size:11px">付款方式</label><select style="height:30px;font-size:12px;width:100%" onchange="setNightMeta(${i},'paymentType',this.value)"><option value="company" ${(nh.paymentType||'company')==='company'?'selected':''}>公司預付</option><option value="driver" ${nh.paymentType==='driver'?'selected':''}>司機現場付現</option></select></div>
         <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setNightMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">✅ 司機已代付 $${(nh.driverPaidAmount||0).toLocaleString()}</span>`:'<span style="font-size:11px;color:var(--amber-d)">⏳ 等待司機現場代付</span>')}</div>
       </div>
-      <div style="font-size:12px;color:var(--green-d);margin-top:4px">${nh.finalQuote?'✅ 最終報價: $'+nh.finalQuote.toLocaleString():'（若已取得最終報價請填入，試算時優先採用）'}</div>`:''}
+      <div style="font-size:12px;color:${nh.finalQuote?'var(--green-d)':(noRateCard?'var(--red)':'var(--green-d)')};margin-top:4px">${nh.finalQuote?'✅ '+(noRateCard?'住宿總價':'最終報價')+': $'+nh.finalQuote.toLocaleString():(noRateCard?'⚠️ 尚未填寫住宿總價，此晚成本將計為 $0':'（若已取得最終報價請填入，試算時優先採用）')}</div>`:''}
     </div>`;
   }
   el.innerHTML=rows;
   updateNightlyTotal();
 }
-function setNightHotel(i,hid){nightlyHotels[i].hotelId=hid;renderNightlyPicker();}
+async function setNightHotel(i,hid){
+  if(hid==='__new__'){
+    const name=(prompt('請輸入酒店名稱（客人指定，非長期合作酒店）：')||'').trim();
+    if(!name){renderNightlyPicker();return;}
+    setSS('syncing','儲存中…');
+    const newId=uid();
+    const data={name,area:'',r2:0,r3:0,r4:0,r2wk:0,r3wk:0,r4wk:0,note:'自填酒店（客人指定，單次）'};
+    try{
+      await db.collection('hotels').doc(newId).set(data);
+      hotels.push({id:newId,...data});
+      nightlyHotels[i].hotelId=newId;
+    }catch(e){alert('新增酒店失敗，請稍後再試');}
+    renderNightlyPicker();
+    return;
+  }
+  nightlyHotels[i].hotelId=hid;renderNightlyPicker();
+}
 function setNightRooms(i,type,val){nightlyHotels[i][type]=parseInt(val)||0;updateNightlyTotal();}
 function setNightMeta(i,key,val){nightlyHotels[i][key]=val;if(key==='finalQuote')updateNightlyTotal();}
 function updateNightlyTotal(){
