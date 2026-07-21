@@ -2820,10 +2820,13 @@ function calcNightQuote(p,nh,i){
 // ══════════════════ 現金流水（包車團）══════════════════
 // 從 busAssignedDrivers / assignedDriver 姓名比對出司機ID
 function getPrivDriverIds(p){
+  const ids=[];
+  // 現行機制：從派車總表(dispatches)取得實際指派司機（依 privateId 連結，最準確）
+  dispatches.filter(d=>d.privateId===p.id&&d.driverId).forEach(d=>{if(!ids.includes(d.driverId))ids.push(d.driverId);});
+  // 舊機制：包車團本身欄位比對姓名（相容尚未透過派車總表指派的舊資料）
   const names=new Set();
   if(p.busAssignedDrivers) Object.values(p.busAssignedDrivers).forEach(n=>{if(n)names.add(n);});
   if(p.assignedDriver) p.assignedDriver.split('/').forEach(n=>{if(n.trim())names.add(n.trim());});
-  const ids=[];
   names.forEach(n=>{const d=drivers.find(x=>x.name===n);if(d&&!ids.includes(d.id))ids.push(d.id);});
   return ids;
 }
