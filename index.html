@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="旅遊管理">
@@ -2772,7 +2773,7 @@ function calcPrivAdvanceHotel(p){
   if(!p.nightlyHotels?.length||p.balancePaid)return 0;
   const startDate=p.start;
   return p.nightlyHotels.reduce((s,nh,i)=>{
-    if(!nh.booked||(nh.paymentType||'company')!=='company'||!nh.hotelPaid)return s;
+    if((nh.paymentType||'company')!=='company'||!nh.hotelPaid)return s;
     if(nh.finalQuote>0)return s+nh.finalQuote;
     const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return s;
     let nightDate='';
@@ -2787,7 +2788,6 @@ function calcPrivHotelExpense(p){
   if(p.nightlyHotels?.length){
     const startDate=p.start;
     total+=p.nightlyHotels.reduce((s,nh,i)=>{
-      if(!nh.booked)return s;
       const isDriverPay=(nh.paymentType||'company')==='driver';
       if(isDriverPay){
         if(!nh.driverPaid)return s;
@@ -2854,7 +2854,7 @@ function buildPrivCashFlow(p){
     });
   }
   (p.nightlyHotels||[]).forEach((nh,i)=>{
-    if((nh.paymentType||'company')!=='driver'||!nh.booked)return;
+    if((nh.paymentType||'company')!=='driver')return;
     let nightDate=p.start||'';
     if(p.start){const d=new Date(p.start);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
     const hotel=hotels.find(h=>h.id===nh.hotelId);
@@ -2919,7 +2919,7 @@ function buildPrivCostBreakdown(p){
   const outwageRows=dispRecs.filter(d=>(d.outwage||0)>0).map(d=>({date:dateLabel(d),driverName:d.driverName||'-',amount:d.outwage}));
   const nightRows=dispRecs.filter(d=>(d.nightAllowance||0)>0).map(d=>({date:dateLabel(d),driverName:d.driverName||'-',amount:d.nightAllowance}));
   const hotelRows=(p.nightlyHotels||[]).map((nh,i)=>{
-    if(!nh.booked)return null;
+    if(!nh.hotelId&&!nh.finalQuote&&!nh.r2&&!nh.r3&&!nh.r4)return null;
     let nightDate=p.start||'';
     if(p.start){const d=new Date(p.start);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
     const hotel=hotels.find(h=>h.id===nh.hotelId);
@@ -3123,7 +3123,6 @@ function calcGroupHotelExpense(tourId,date,busIdx){
   const gn=getGroupNightly(tourId,date,busIdx);
   if(!gn||!gn.nightlyHotels)return 0;
   return gn.nightlyHotels.reduce((s,nh,i)=>{
-    if(!nh.booked)return s;
     const isDriverPay=(nh.paymentType||'company')==='driver';
     if(isDriverPay)return nh.driverPaid?s+(nh.driverPaidAmount||0):s;
     return nh.hotelPaid?s+calcGroupNightQuote(gn,nh,i):s;
@@ -3158,7 +3157,7 @@ function buildGroupCashFlow(tourId,date,busIdx){
   }
   const gn=getGroupNightly(tourId,date,busIdx);
   (gn?.nightlyHotels||[]).forEach((nh,i)=>{
-    if((nh.paymentType||'company')!=='driver'||!nh.booked)return;
+    if((nh.paymentType||'company')!=='driver')return;
     const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
     const hotel=hotels.find(h=>h.id===nh.hotelId);
     const quote=calcGroupNightQuote(gn,nh,i);
@@ -3207,7 +3206,7 @@ function buildGroupCostBreakdown(tourId,date,busIdx){
   let hotelTotal,hotelRows;
   if(gnHasData){
     hotelRows=(gn.nightlyHotels||[]).map((nh,i)=>{
-      if(!nh.booked)return null;
+      if(!nh.hotelId&&!nh.finalQuote&&!nh.r2&&!nh.r3&&!nh.r4)return null;
       const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
       const hotel=hotels.find(h=>h.id===nh.hotelId);
       const isDriverPay=(nh.paymentType||'company')==='driver';
@@ -3647,7 +3646,7 @@ function renderFinance(){
             ?`<span class="badge badge-green" style="font-size:10px">尾款已收</span>`
             :(hadv>0?`<span class="badge badge-amber" style="font-size:10px">⚠️ 代墊中</span>`:'');
           // 各晚付款方式摘要
-          const paySum=(pv.nightlyHotels||[]).filter(n=>n.booked).map((n,i)=>{
+          const paySum=(pv.nightlyHotels||[]).filter(n=>n.hotelId||n.finalQuote||n.r2||n.r3||n.r4).map((n,i)=>{
             const isPay=(n.paymentType||'company')==='driver'||n.hotelPaid;
             if(!isPay)return'';
             const payLabel=(n.paymentType||'company')==='driver'?'司機付':'公司付';
@@ -4471,7 +4470,7 @@ function getPendingHotelItems(date){
     const hasDisp=myDisps.some(d=>d.privateId===p.id||d.label?.includes(p.name));
     if(!hasDisp) return;
     p.nightlyHotels.forEach((nh,i)=>{
-      if(!nh.booked||(nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
+      if((nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
       let nightDate='';
       if(p.start){const nd=new Date(p.start);nd.setDate(nd.getDate()+i);nightDate=nd.toISOString().slice(0,10);}
       const hotel=hotels.find(h=>h.id===nh.hotelId);
@@ -4488,7 +4487,7 @@ function getPendingHotelItems(date){
     const gn=getGroupNightly(tId,gDate,busIdx);
     if(!gn||!gn.nightlyHotels)return;
     gn.nightlyHotels.forEach((nh,i)=>{
-      if(!nh.booked||(nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
+      if((nh.paymentType||'company')!=='driver'||nh.driverPaid) return;
       const nd=new Date(gDate);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
       const hotel=hotels.find(h=>h.id===nh.hotelId);
       items.push({kind:'group',tourId:tId,gDate,busIdx,nightIndex:i,label:t.name+' 第'+(i+1)+'晚（'+nightDate+'）'+(hotel?' - '+hotel.name:''),quote:calcGroupNightQuote(gn,nh,i)});
