@@ -191,6 +191,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-balance" class="page"></div>
   <div id="p-hotel-stat" class="page"></div>
   <div id="p-vehicle-status" class="page"></div>
+  <div id="p-payroll" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -553,6 +554,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('vehicle-detail')">關閉</button></div></div>
 </div></div>
 
+<!-- 薪資明細 -->
+<div class="overlay" id="m-payroll-detail"><div class="modal" style="width:640px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="pd-title"><i class="ti ti-report-money"></i> 薪資明細</span><button class="btn btn-sm" onclick="cm('payroll-detail')"><i class="ti ti-x"></i></button></div>
+  <div id="pd-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('payroll-detail')">關閉</button></div></div>
+</div></div>
+
 <!-- QR碼模態 -->
 <div class="overlay" id="m-qr"><div class="modal" style="width:360px;text-align:center">
   <div class="mh"><span class="mh-title">客人報名 QR Code</span><button class="btn btn-sm" onclick="cm('qr')"><i class="ti ti-x"></i></button></div>
@@ -576,6 +584,7 @@ let drvStatMonth=new Date().toISOString().slice(0,7); // 司機統計預設當�
 let hotelStatStart='',hotelStatEnd='',hotelStatFilter='';
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
+let paySelYear=new Date().getFullYear(),paySelMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
 // [修正] initListeners 防重複執行旗標
 let listenersInited=false;
@@ -781,6 +790,7 @@ function refresh(){
   if(curPage==='p-customers')renderCustomers();
   if(curPage==='p-hotel-stat')renderHotelStat();
   if(curPage==='p-vehicle-status')renderVehicleStatus();
+  if(curPage==='p-payroll')renderPayroll();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -935,6 +945,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-balance',this)"><i class="ti ti-cash"></i> 尾款收款</button>
     <button class="nav-tab" onclick="showPage('p-hotel-stat',this)"><i class="ti ti-building"></i> 酒店統計</button>
     <button class="nav-tab" onclick="showPage('p-vehicle-status',this)"><i class="ti ti-car"></i> 車輛狀況</button>
+    <button class="nav-tab" onclick="showPage('p-payroll',this)"><i class="ti ti-report-money"></i> 薪資結算</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -963,6 +974,7 @@ function showPage(id, tabEl){
   else if(id==='p-balance')renderBalance();
   else if(id==='p-hotel-stat')renderHotelStat();
   else if(id==='p-vehicle-status')renderVehicleStatus();
+  else if(id==='p-payroll')renderPayroll();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -4133,6 +4145,58 @@ function openVehicleDetail(car,type){
     </tr>`).join('')}</tbody></table></div>
   `:'<div class="empty">尚無記錄</div>';
   om('vehicle-detail');
+}
+
+// ══════════════════ PAGE: 薪資結算（僅管理員） ══════════════════
+function setPaySel(y,m){paySelYear=y;paySelMonth=m;renderPayroll();}
+function renderPayroll(){
+  const el=document.getElementById('p-payroll');
+  if(!el)return;
+  const y=paySelYear,m=paySelMonth;
+  const ownDrivers=drivers.filter(d=>d.type==='own');
+  const rows=ownDrivers.map(d=>{
+    const trips=dispatches.filter(x=>x.driverId===d.id&&x.driverType==='own'&&inMonth(x.start,y,m));
+    const total=trips.reduce((s,x)=>s+(x.wage||0),0);
+    return{driver:d,trips,total,count:trips.length};
+  }).filter(x=>x.count>0||x.driver);
+  const grandTotal=rows.reduce((s,x)=>s+x.total,0);
+  el.innerHTML=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span class="card-title" style="margin:0"><i class="ti ti-report-money"></i> 薪資結算</span>
+      <div style="display:flex;gap:8px">
+        <select onchange="setPaySel(paySelYear,parseInt(this.value))" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>
+        <select onchange="setPaySel(parseInt(this.value),paySelMonth)" style="height:34px;font-size:13px">${[2024,2025,2026].map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">依「派車總表」裡每趟指派時填寫的司機薪資加總，只計算自家司機（不含外派）。此頁僅管理員可見。</div>
+    ${!rows.length?'<div class="empty">本月無自家司機派車薪資記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>司機</th><th style="text-align:center">趟次數</th><th style="text-align:right">本月薪資合計</th><th></th>
+    </tr></thead><tbody>${rows.map(x=>`<tr>
+      <td style="font-weight:600">${x.driver.name}</td>
+      <td style="text-align:center">${x.count}</td>
+      <td style="text-align:right;color:${x.total?'var(--red)':'var(--text3)'};font-weight:600">$${x.total.toLocaleString()}</td>
+      <td><button class="btn btn-sm" onclick="openPayrollDetail('${x.driver.id}')" ${x.count?'':'disabled'}><i class="ti ti-list"></i> 明細</button></td>
+    </tr>`).join('')}</tbody><tfoot><tr><td colspan="2">合計</td><td style="text-align:right;color:var(--red)">$${grandTotal.toLocaleString()}</td><td></td></tr></tfoot></table></div>`}
+  </div>`;
+}
+function openPayrollDetail(driverId){
+  const d=drivers.find(x=>x.id===driverId);if(!d)return;
+  const y=paySelYear,m=paySelMonth;
+  const trips=dispatches.filter(x=>x.driverId===driverId&&x.driverType==='own'&&inMonth(x.start,y,m)).sort((a,b)=>a.start>b.start?1:-1);
+  const total=trips.reduce((s,x)=>s+(x.wage||0),0);
+  document.getElementById('pd-title').innerHTML=`<i class="ti ti-report-money"></i> ${d.name} － ${y}年${MONTHS[m]} 薪資明細`;
+  document.getElementById('pd-content').innerHTML=trips.length?`
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${trips.length} 趟，合計 <span style="color:var(--red);font-weight:600">$${total.toLocaleString()}</span></div>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>日期</th><th>車輛</th><th>行程</th><th style="text-align:right">薪資</th>
+    </tr></thead><tbody>${trips.map(x=>`<tr>
+      <td>${x.start===x.end?x.start:x.start+'~'+x.end}</td>
+      <td style="font-size:12px">${x.car||'-'}</td>
+      <td style="font-size:12px">${x.label||x.note||'-'}</td>
+      <td style="text-align:right;color:var(--red);font-weight:600">$${(x.wage||0).toLocaleString()}</td>
+    </tr>`).join('')}</tbody></table></div>
+  `:'<div class="empty">本月無記錄</div>';
+  om('payroll-detail');
 }
 
 // ══════════════════ PAGE: 尾款收款 ══════════════════
