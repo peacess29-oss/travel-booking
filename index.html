@@ -190,6 +190,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-finance" class="page"></div>
   <div id="p-balance" class="page"></div>
   <div id="p-hotel-stat" class="page"></div>
+  <div id="p-vehicle-status" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -772,6 +773,7 @@ function refresh(){
   if(curPage==='p-settings')renderSettings();
   if(curPage==='p-customers')renderCustomers();
   if(curPage==='p-hotel-stat')renderHotelStat();
+  if(curPage==='p-vehicle-status')renderVehicleStatus();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -925,6 +927,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-finance',this)"><i class="ti ti-chart-bar"></i> 財務報表</button>
     <button class="nav-tab" onclick="showPage('p-balance',this)"><i class="ti ti-cash"></i> 尾款收款</button>
     <button class="nav-tab" onclick="showPage('p-hotel-stat',this)"><i class="ti ti-building"></i> 酒店統計</button>
+    <button class="nav-tab" onclick="showPage('p-vehicle-status',this)"><i class="ti ti-car"></i> 車輛狀況</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -952,6 +955,7 @@ function showPage(id, tabEl){
   else if(id==='p-finance')renderFinance();
   else if(id==='p-balance')renderBalance();
   else if(id==='p-hotel-stat')renderHotelStat();
+  else if(id==='p-vehicle-status')renderVehicleStatus();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -4045,6 +4049,61 @@ function renderHotelStat(){
       </div>`;
     }).join('')}
   </div>`}`;
+}
+
+// ══════════════════ PAGE: 車輛狀況 ══════════════════
+const MAINT_TYPE_N={oil:'機油更換',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
+function renderVehicleStatus(){
+  const el=document.getElementById('p-vehicle-status');
+  if(!el)return;
+  // 收集所有出現過的車輛（車輛管理清單 + 記錄裡出現過但清單沒有的車）
+  const carSet=new Set((carsList||[]).filter(Boolean));
+  driverRecs.forEach(r=>{if(r.car)carSet.add(r.car);});
+  const cars=[...carSet].sort((a,b)=>a.localeCompare(b,'zh-TW'));
+  if(!cars.length){
+    el.innerHTML='<div class="card"><div class="empty">尚無車輛資料，請先到「設定」新增車輛</div></div>';
+    return;
+  }
+  const rows=cars.map(car=>{
+    const recs=driverRecs.filter(r=>r.car===car);
+    const fuelRecs=recs.filter(r=>r.type==='fuel'&&r.mileage).sort((a,b)=>a.mileage-b.mileage);
+    let avgKmL='—';
+    if(fuelRecs.length>=2){
+      const km=fuelRecs[fuelRecs.length-1].mileage-fuelRecs[0].mileage;
+      const l=fuelRecs.slice(1).reduce((s,r)=>s+(r.fuelLiters||0),0);
+      if(l>0&&km>0)avgKmL=(km/l).toFixed(1)+' km/L';
+    }
+    // 目前里程：所有有填里程的記錄裡最大的一筆（假設里程隨時間遞增）
+    const allMileageRecs=recs.filter(r=>r.mileage>0);
+    const currentMileage=allMileageRecs.length?Math.max(...allMileageRecs.map(r=>r.mileage)):0;
+    // 上次保養：依日期排序取最新一筆
+    const maintRecs=recs.filter(r=>r.type==='maint').sort((a,b)=>a.date>b.date?1:-1);
+    const lastMaint=maintRecs.length?maintRecs[maintRecs.length-1]:null;
+    const maintKmSince=(lastMaint&&lastMaint.mileage&&currentMileage)?currentMileage-lastMaint.mileage:null;
+    // 上次驗車
+    const inspRecs=recs.filter(r=>r.type==='inspection').sort((a,b)=>a.date>b.date?1:-1);
+    const lastInsp=inspRecs.length?inspRecs[inspRecs.length-1]:null;
+    // 累計花費
+    const fuelTotal=recs.filter(r=>r.type==='fuel').reduce((s,r)=>s+(r.amount||0),0);
+    const maintTotal=recs.filter(r=>r.type==='maint').reduce((s,r)=>s+(r.amount||0),0);
+    return{car,currentMileage,avgKmL,lastMaint,maintKmSince,lastInsp,fuelTotal,maintTotal};
+  });
+  el.innerHTML=`<div class="card">
+    <div class="card-title"><i class="ti ti-car"></i> 車輛狀況總覽</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">數據依司機登打的加油／保養／驗車記錄自動彙整（里程需司機有填寫才會計算）</div>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>車輛</th><th>目前里程</th><th>平均油耗</th><th>上次保養</th><th>已行駛</th><th>上次驗車</th><th style="text-align:right">累計油錢</th><th style="text-align:right">累計保養</th>
+    </tr></thead><tbody>${rows.map(x=>`<tr>
+      <td style="font-weight:600">${x.car}</td>
+      <td>${x.currentMileage?x.currentMileage.toLocaleString()+' km':'-'}</td>
+      <td>${x.avgKmL}</td>
+      <td style="font-size:12px">${x.lastMaint?`${MAINT_TYPE_N[x.lastMaint.maintType]||'保養'}<br><span style="color:var(--text2)">${x.lastMaint.date}${x.lastMaint.mileage?' ・ '+x.lastMaint.mileage.toLocaleString()+'km':''}</span>`:'-'}</td>
+      <td>${x.maintKmSince!=null?x.maintKmSince.toLocaleString()+' km':'-'}</td>
+      <td style="font-size:12px">${x.lastInsp?`${x.lastInsp.date}${x.lastInsp.mileage?' ・ '+x.lastInsp.mileage.toLocaleString()+'km':''}`:'-'}</td>
+      <td style="text-align:right;color:var(--red)">${x.fuelTotal?'$'+x.fuelTotal.toLocaleString():'-'}</td>
+      <td style="text-align:right;color:var(--red)">${x.maintTotal?'$'+x.maintTotal.toLocaleString():'-'}</td>
+    </tr>`).join('')}</tbody></table></div>
+  </div>`;
 }
 
 // ══════════════════ PAGE: 尾款收款 ══════════════════
