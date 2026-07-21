@@ -2982,11 +2982,10 @@ function cashFlowOverviewHtml(cf,extraNote){
       <div class="stat-card"><div class="stat-label">客收合計</div><div class="stat-val" style="color:var(--green);font-size:15px">$${cf.totalIncome.toLocaleString()}</div></div>
       <div class="stat-card"><div class="stat-label">代付支出合計</div><div class="stat-val" style="color:var(--red);font-size:15px">$${cf.totalExpense.toLocaleString()}</div></div>
     </div>
-    <div class="stat-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-      <div class="stat-card"><div class="stat-label">現金淨利</div><div class="stat-val" style="font-size:15px;color:${cf.netProfit>=0?'var(--green)':'var(--red)'}">$${cf.netProfit.toLocaleString()}</div></div>
+    <div class="stat-row" style="grid-template-columns:1fr;margin-bottom:8px">
       <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${extraNote||'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本）'}</div>
+    ${extraNote?`<div style="font-size:12px;color:var(--text2);margin-bottom:4px">${extraNote}</div>`:''}
     <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
   </div>`;
 }
@@ -2994,7 +2993,7 @@ function renderCashFlowContent(p){
   const cf=buildPrivCashFlow(p);
   const cb=buildPrivCostBreakdown(p);
   document.getElementById('cf-content').innerHTML=`
-    ${cashFlowOverviewHtml(cf,'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）')}
+    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」')}
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
@@ -3243,7 +3242,7 @@ function openGroupCashFlow(tourId,date,busIdx){
   const cb=buildGroupCostBreakdown(tourId,date,busIdx);
   document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
   document.getElementById('cf-content').innerHTML=`
-    ${cashFlowOverviewHtml(cf,'現金淨利＝客收－代付支出（不含司機薪資／保險等固定成本，完整成本見下方「成本明細與毛利」）')}
+    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」')}
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
