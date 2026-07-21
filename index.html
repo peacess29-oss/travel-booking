@@ -341,6 +341,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">特殊需求裝備</div>
   <div class="fg3">
     <div><label>安全座椅</label><input id="pf-carseat" type="number" min="0" value="0" placeholder="0"></div>
+    <div><label>增高墊</label><input id="pf-booster" type="number" min="0" value="0" placeholder="0"></div>
     <div><label>嬰兒車</label><input id="pf-stroller" type="number" min="0" value="0" placeholder="0"></div>
     <div><label>輪椅</label><input id="pf-wheelchair" type="number" min="0" value="0" placeholder="0"></div>
   </div>
@@ -684,10 +685,11 @@ function isFormed(t,d){
 function inMonth(d,y,m){if(!d)return false;return d.startsWith(y+'-'+String(m+1).padStart(2,'0'));}
 function inYear(d,y){if(!d)return false;return d.startsWith(y+'-');}
 
-// 產生特殊需求標籤（安全座椅/嬰兒車/輪椅）
+// 產生特殊需求標籤（安全座椅/增高墊/嬰兒車/輪椅）
 function specialNeedsHtml(p,style=''){
   const tags=[];
   if(p.carSeat>0) tags.push(`<span class="badge badge-amber" style="${style}">🪑 安全座椅×${p.carSeat}</span>`);
+  if(p.booster>0) tags.push(`<span class="badge badge-amber" style="${style}">🧸 增高墊×${p.booster}</span>`);
   if(p.stroller>0) tags.push(`<span class="badge badge-blue" style="${style}">🍼 嬰兒車×${p.stroller}</span>`);
   if(p.wheelchair>0) tags.push(`<span class="badge badge-red" style="${style}">♿ 輪椅×${p.wheelchair}</span>`);
   return tags.join(' ');
@@ -1629,7 +1631,7 @@ function renderPrivate(){
             <span class="badge ${p.type==='car+hotel'?'badge-blue':'badge-green'}" style="font-size:10px">${p.type==='car+hotel'?'車+住宿':'純包車'}</span>
             <span style="font-size:11px;color:var(--text2)">${p.pax||'-'}人</span>
           </div>
-          ${(p.carSeat||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:2px">${specialNeedsHtml(p,'font-size:10px;padding:1px 4px')}</div>`:''}
+          ${(p.carSeat||0)+(p.booster||0)+(p.stroller||0)+(p.wheelchair||0)>0?`<div style="margin-top:2px">${specialNeedsHtml(p,'font-size:10px;padding:1px 4px')}</div>`:''}
           ${p.pickup?`<div style="font-size:11px;color:var(--blue-d);margin-top:1px">✈️ ${p.pickupTime||''} ${p.pickupFlight||''}</div>`:''}
           ${p.dropoff?`<div style="font-size:11px;color:var(--blue-d);margin-top:1px">🛫 ${p.dropoffTime||''} ${p.dropoffFlight||''}</div>`:''}
           ${p.freeDays?.length?`<div style="font-size:10px;color:var(--text3);margin-top:1px">免車：${p.freeDays.map(d=>d.slice(5)).join('、')}</div>`:''}
@@ -1698,6 +1700,7 @@ function openPriv(id=''){
   document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
   document.getElementById('pf-ch').value=p?.channel||'WhatsApp';document.getElementById('pf-note').value=p?.note||'';  document.getElementById('pf-itinerary').value=p?.itinerary||'';
   document.getElementById('pf-carseat').value=p?.carSeat||0;
+  document.getElementById('pf-booster').value=p?.booster||0;
   document.getElementById('pf-stroller').value=p?.stroller||0;
   document.getElementById('pf-wheelchair').value=p?.wheelchair||0;
   document.getElementById('pf-depaid').checked=!!p?.depositPaid;
@@ -1919,7 +1922,7 @@ async function savePriv(){
     dropoffTime:document.getElementById('pf-dropoff-time').value,
     dropoffFlight:document.getElementById('pf-dropoff-flight').value.trim(),
     dropoffNote:document.getElementById('pf-dropoff-note').value.trim(),
-    freeDays:(document.getElementById('pf-freedays').value||'').split(',').map(x=>x.trim()).filter(Boolean),carSeat:parseInt(document.getElementById('pf-carseat').value)||0,stroller:parseInt(document.getElementById('pf-stroller').value)||0,wheelchair:parseInt(document.getElementById('pf-wheelchair').value)||0,depositPaid:document.getElementById('pf-depaid').checked,depositDate:document.getElementById('pf-depaid').checked?(document.getElementById('pf-dep-date').value||new Date().toISOString().slice(0,10)):'',balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
+    freeDays:(document.getElementById('pf-freedays').value||'').split(',').map(x=>x.trim()).filter(Boolean),carSeat:parseInt(document.getElementById('pf-carseat').value)||0,booster:parseInt(document.getElementById('pf-booster').value)||0,stroller:parseInt(document.getElementById('pf-stroller').value)||0,wheelchair:parseInt(document.getElementById('pf-wheelchair').value)||0,depositPaid:document.getElementById('pf-depaid').checked,depositDate:document.getElementById('pf-depaid').checked?(document.getElementById('pf-dep-date').value||new Date().toISOString().slice(0,10)):'',balancePaid:document.getElementById('pf-balpaid').checked,insured:document.getElementById('pf-inspaid').checked,assignedDriver:eIds.priv?(privates.find(x=>x.id===eIds.priv)?.assignedDriver||''):'',dispatchStatus:'pending'};
   if(eIds.priv)await db.collection('privates').doc(eIds.priv).update(data);else await db.collection('privates').doc(uid()).set(data);cm('priv');
 }
 function printPriv(id){
@@ -1942,6 +1945,7 @@ function printPriv(id){
   // 特殊需求
   const gear=[];
   if(p.carSeat>0)gear.push(`安全座椅 × ${p.carSeat}`);
+  if(p.booster>0)gear.push(`增高墊 × ${p.booster}`);
   if(p.stroller>0)gear.push(`嬰兒車 × ${p.stroller}`);
   if(p.wheelchair>0)gear.push(`輪椅 × ${p.wheelchair}`);
   const gearHtml=gear.length?`<div class="p-section p-gear"><div class="p-label">特殊需求裝備</div><div>${gear.join('　')}</div></div>`:'';
@@ -4102,6 +4106,7 @@ function renderDriverPage(){
       const bal=(p.price||0)-(p.deposit||0);
       const gear=[];
       if(p.carSeat>0)gear.push(`安全座椅×${p.carSeat}`);
+      if(p.booster>0)gear.push(`增高墊×${p.booster}`);
       if(p.stroller>0)gear.push(`嬰兒車×${p.stroller}`);
       if(p.wheelchair>0)gear.push(`輪椅×${p.wheelchair}`);
       const gearHtml=gear.length?`<div style="margin:6px 0;padding:6px 10px;background:#FFF8EC;border:1px solid #FAC775;border-radius:6px;font-size:13px">⚠️ 特殊需求：${gear.join('、')}</div>`:'';
