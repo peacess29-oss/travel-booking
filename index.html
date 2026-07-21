@@ -242,13 +242,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mb10"><label>備註</label><input id="bf-note" placeholder="特殊需求"></div>
   <div id="bf-room-sec" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--blue-l);border-radius:8px;border:1px solid var(--border)">
     <div style="font-size:12px;font-weight:600;margin-bottom:6px"><i class="ti ti-bed"></i> 住宿安排（公司付飯店成本）</div>
+    <div id="bf-room-hotel-fixed" style="font-size:12px;margin-bottom:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="color:var(--text2)">酒店：</span><span id="bf-room-hotel-name" style="font-weight:600"></span>
+      <span onclick="toggleBkHotelOverride()" style="font-size:11px;color:var(--blue);cursor:pointer;text-decoration:underline">更改酒店</span>
+    </div>
+    <div id="bf-room-hotel-sel-wrap" style="display:none;margin-bottom:8px">
+      <label style="font-size:11px;color:var(--text2)">酒店（僅此客人特殊狀況使用，一般不需更改）</label>
+      <select id="bf-room-hotel" style="width:100%;height:32px;font-size:12px" onchange="updateBkRoomCost()">
+        <option value="">— 選擇酒店 —</option>
+      </select>
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-      <div style="flex:2;min-width:130px">
-        <label style="font-size:11px;color:var(--text2)">酒店</label>
-        <select id="bf-room-hotel" style="width:100%;height:32px;font-size:12px" onchange="updateBkRoomCost()">
-          <option value="">— 選擇酒店 —</option>
-        </select>
-      </div>
       <div style="flex:1;min-width:80px">
         <label style="font-size:11px;color:var(--text2)">房型</label>
         <select id="bf-room-type" style="width:100%;height:32px;font-size:12px" onchange="updateBkRoomCost()">
@@ -259,7 +263,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       </div>
       <div style="flex:1;min-width:60px">
         <label style="font-size:11px;color:var(--text2)">間數</label>
-        <input type="number" id="bf-room-count" min="1" value="1" style="width:100%;height:32px;font-size:12px" oninput="updateBkRoomCostManual()">
+        <input type="number" id="bf-room-count" min="1" value="1" style="width:100%;height:32px;font-size:12px" oninput="bkRoomCountTouched=true;updateBkRoomCostManual()">
       </div>
       <div style="flex:1;min-width:80px">
         <label style="font-size:11px;color:var(--text2)">住宿費用</label>
@@ -764,7 +768,7 @@ function refresh(){
   if(curPage==='p-driver')renderDriverPage();
   if(curPage==='p-settings')renderSettings();
   if(curPage==='p-customers')renderCustomers();
-  if(curPage==='p-customers')renderCustomers();
+  if(curPage==='p-hotel-stat')renderHotelStat();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -1362,6 +1366,7 @@ async function delTour(){
 let curBkTourId='';
 function openBook(tid,date='',bookId=''){
   curBkTourId=tid;eIds.book=bookId||null;
+  bkRoomCountTouched=!!bookId; // 編輯既有報名時不要用人數覆蓋已存的間數；新增報名才給預設建議
   const t=tours.find(x=>x.id===tid),b=bookId?bookings.find(x=>x.id===bookId):null;
   document.getElementById('mb-title').textContent=bookId?'編輯報名':'新增報名';
   document.getElementById('btn-del-book').style.display=bookId?'inline-flex':'none';
@@ -1372,6 +1377,7 @@ function openBook(tid,date='',bookId=''){
   document.getElementById('bf-contact').value=b?.contact||'';document.getElementById('bf-date').value=b?.date||date;
   document.getElementById('bf-note').value=b?.note||'';document.getElementById('bf-dep').checked=!!b?.depositPaid;document.getElementById('bf-ins').checked=!!b?.insured;
   // 住宿欄位
+  if(document.getElementById('bf-room-hotel-sel-wrap'))document.getElementById('bf-room-hotel-sel-wrap').style.display='none';
   if(document.getElementById('bf-room-cost'))document.getElementById('bf-room-cost').value=b?.roomCost||'';
   if(document.getElementById('bf-room-count'))document.getElementById('bf-room-count').value=b?.roomCount||1;
   if(document.getElementById('bf-room-type'))document.getElementById('bf-room-type').value=b?.roomType||'2';
@@ -1385,6 +1391,23 @@ function updateBkPrice(){
   document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 定金$${dep} / 全額$${pr} / 尾款$${pr-dep}`;
   updateBkRoomCost();
 }
+let bkRoomCountTouched=false;
+function getBkHotelId(){
+  const overrideWrap=document.getElementById('bf-room-hotel-sel-wrap');
+  const overrideSel=document.getElementById('bf-room-hotel');
+  if(overrideWrap&&overrideWrap.style.display!=='none'&&overrideSel?.value)return overrideSel.value;
+  const b=eIds.book?bookings.find(x=>x.id===eIds.book):null;
+  if(b&&b.roomHotelId)return b.roomHotelId; // 既有報名維持原本記錄的酒店
+  const t=tours.find(x=>x.id===curBkTourId);
+  const roomExtra=t?.extras?.find(e=>e.mode==='room');
+  return roomExtra?.hotelId||'';
+}
+function toggleBkHotelOverride(){
+  const wrap=document.getElementById('bf-room-hotel-sel-wrap');
+  if(!wrap)return;
+  wrap.style.display=wrap.style.display==='none'?'block':'none';
+  updateBkRoomCost();
+}
 function updateBkRoomCost(){
   const t=tours.find(x=>x.id===curBkTourId);
   const roomSec=document.getElementById('bf-room-sec');
@@ -1392,43 +1415,44 @@ function updateBkRoomCost(){
   const roomCostEl=document.getElementById('bf-room-cost');
   const roomCountEl=document.getElementById('bf-room-count');
   const roomTypeEl=document.getElementById('bf-room-type');
-  const roomHotelEl=document.getElementById('bf-room-hotel');
+  const roomHotelSel=document.getElementById('bf-room-hotel');
+  const roomHotelNameEl=document.getElementById('bf-room-hotel-name');
   const roomManualEl=document.getElementById('bf-room-manual');
-  if(!t||!t.extras?.some(e=>e.mode==='room')||(t.days||1)<=1){
+  const b=eIds.book?bookings.find(x=>x.id===eIds.book):null;
+  const hasExistingRoomData=!!(b&&((b.roomCost||0)>0||(b.roomCount||0)>0));
+  const roomExtra=t?.extras?.find(e=>e.mode==='room');
+  if(!t||(!roomExtra&&!hasExistingRoomData)||(t.days||1)<=1){
     if(roomSec)roomSec.style.display='none';
     return;
   }
   roomSec.style.display='block';
-  const roomExtra=t.extras.find(e=>e.mode==='room');
   const pax=parseInt(document.getElementById('bf-cnt').value)||1;
-  const isManual=roomManualEl?.checked;
-  // 填充酒店下拉（帶入預設酒店）
-  if(roomHotelEl){
+  // 新報名：房間間數預設依人數概算（一間2人房），僅作初始建議，不會持續覆蓋手動調整過的間數
+  if(!eIds.book&&!bkRoomCountTouched&&roomCountEl)roomCountEl.value=Math.max(1,Math.ceil(pax/2));
+  const hotelId=getBkHotelId();
+  const hotel=hotels.find(h=>h.id===hotelId);
+  if(roomHotelNameEl)roomHotelNameEl.textContent=hotel?(hotel.area?'['+hotel.area+'] ':'')+hotel.name:'（尚未指定酒店，請點「更改酒店」選擇）';
+  if(roomHotelSel){
     const sorted=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW'));
-    const curHotel=roomHotelEl.value||roomExtra.hotelId||'';
-    roomHotelEl.innerHTML='<option value="">— 選擇酒店 —</option>'+sorted.map(h=>`<option value="${h.id}" ${h.id===curHotel?'selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+    roomHotelSel.innerHTML='<option value="">— 選擇酒店 —</option>'+sorted.map(h=>`<option value="${h.id}" ${h.id===hotelId?'selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
   }
+  const isManual=roomManualEl?.checked;
   if(!isManual){
-    const roomSize=parseInt(roomTypeEl?.value)||roomExtra.roomSize||2;
-    const rooms=Math.ceil(pax/roomSize);
-    if(roomCountEl)roomCountEl.value=rooms;
-    const cost=rooms*roomExtra.price;
+    const roomType=roomTypeEl?.value||'2';
+    const date=document.getElementById('bf-date').value;
+    const rate=hotel?getHotelRoomRate(hotel,date,'r'+roomType):0;
+    const rooms=parseInt(roomCountEl?.value)||1;
+    const cost=rooms*rate;
     if(roomCostEl)roomCostEl.value=cost||'';
-    if(roomHint)roomHint.textContent=`自動配置：${rooms}間${roomSize}人房 × $${roomExtra.price} = $${cost}`;
+    if(roomHint)roomHint.textContent=hotel?`${rooms}間${roomType}人房 × $${rate.toLocaleString()} = $${cost.toLocaleString()}`:'⚠️ 尚未指定酒店，無法自動試算房價，請點「更改酒店」選擇，或改用手動輸入費用';
   } else {
     if(roomHint)roomHint.textContent='手動輸入住宿費用';
   }
 }
 function updateBkRoomCostManual(){
-  // 間數手動改 → 重算費用（若非手動模式）
   const roomManualEl=document.getElementById('bf-room-manual');
-  const roomCostEl=document.getElementById('bf-room-cost');
-  const roomCountEl=document.getElementById('bf-room-count');
-  const t=tours.find(x=>x.id===curBkTourId);
-  const roomExtra=t?.extras?.find(e=>e.mode==='room');
-  if(roomManualEl?.checked||!roomExtra?.price)return;
-  const rooms=parseInt(roomCountEl?.value)||1;
-  if(roomCostEl)roomCostEl.value=rooms*roomExtra.price;
+  if(roomManualEl?.checked)return; // 手動費用模式下，間數變動不重新試算費用
+  updateBkRoomCost();
 }
 async function saveBook(){
   const name=document.getElementById('bf-name').value.trim(),date=document.getElementById('bf-date').value;
@@ -1437,7 +1461,7 @@ async function saveBook(){
   const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
   if(cnt>4&&!confirm(`⚠️ 人數 ${cnt} 人超過4人，請注意需安排九人座車！\n確定繼續儲存？`))return;
   setSS('syncing','儲存中…');
-  const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false,roomCost:parseInt(document.getElementById('bf-room-cost')?.value)||0,roomCount:parseInt(document.getElementById('bf-room-count')?.value)||0,roomType:document.getElementById('bf-room-type')?.value||'2',roomHotelId:document.getElementById('bf-room-hotel')?.value||'',roomManual:!!document.getElementById('bf-room-manual')?.checked};
+  const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false,roomCost:parseInt(document.getElementById('bf-room-cost')?.value)||0,roomCount:parseInt(document.getElementById('bf-room-count')?.value)||0,roomType:document.getElementById('bf-room-type')?.value||'2',roomHotelId:getBkHotelId(),roomManual:!!document.getElementById('bf-room-manual')?.checked};
   if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
 }
 async function delBook(){
@@ -3820,10 +3844,10 @@ function renderHotelStat(){
       const h=hotels.find(x=>x.id===n.hotelId);
       const r2=n.r2||0,r3=n.r3||0,r4=n.r4||0;
       const cost=n.finalQuote||(r2*getHotelRoomRate(h,nightDate,'r2')+r3*getHotelRoomRate(h,nightDate,'r3')+r4*getHotelRoomRate(h,nightDate,'r4'))||0;
-      if(r2)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'2人房',roomCount:r2,cost:r2*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r2')),source:'包車',label:p.name});
-      if(r3)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'3人房',roomCount:r3,cost:r3*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r3')),source:'包車',label:p.name});
-      if(r4)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'4人房',roomCount:r4,cost:r4*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r4')),source:'包車',label:p.name});
-      if(!r2&&!r3&&!r4&&cost)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'-',roomCount:1,cost,source:'包車',label:p.name});
+      if(r2)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'2人房',roomCount:r2,cost:r2*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r2')),source:'包車',label:p.name,privId:p.id});
+      if(r3)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'3人房',roomCount:r3,cost:r3*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r3')),source:'包車',label:p.name,privId:p.id});
+      if(r4)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'4人房',roomCount:r4,cost:r4*(n.finalQuote?Math.round(n.finalQuote/(r2+r3+r4)):getHotelRoomRate(h,nightDate,'r4')),source:'包車',label:p.name,privId:p.id});
+      if(!r2&&!r3&&!r4&&cost)privRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'-',roomCount:1,cost,source:'包車',label:p.name,privId:p.id});
     });
   });
 
@@ -3846,15 +3870,15 @@ function renderHotelStat(){
           const h=hotels.find(x=>x.id===n.hotelId);
           const r2=n.r2||0,r3=n.r3||0,r4=n.r4||0,totalRoomsN=r2+r3+r4;
           const label=t.name+(buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':'');
-          if(r2)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'2人房',roomCount:r2,cost:r2*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r2')),source:'拼團',label});
-          if(r3)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'3人房',roomCount:r3,cost:r3*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r3')),source:'拼團',label});
-          if(r4)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'4人房',roomCount:r4,cost:r4*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r4')),source:'拼團',label});
-          if(!r2&&!r3&&!r4&&n.finalQuote)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'-',roomCount:1,cost:n.finalQuote,source:'拼團',label});
+          if(r2)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'2人房',roomCount:r2,cost:r2*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r2')),source:'拼團',label,tourId,gnDate:date,busIdx:bus.busIdx});
+          if(r3)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'3人房',roomCount:r3,cost:r3*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r3')),source:'拼團',label,tourId,gnDate:date,busIdx:bus.busIdx});
+          if(r4)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'4人房',roomCount:r4,cost:r4*(n.finalQuote?Math.round(n.finalQuote/totalRoomsN):getHotelRoomRate(h,nightDate,'r4')),source:'拼團',label,tourId,gnDate:date,busIdx:bus.busIdx});
+          if(!r2&&!r3&&!r4&&n.finalQuote)groupRows.push({date:nightDate,hotelId:n.hotelId,hotelName:h?.name||'未知',hotelArea:h?.area||'',roomType:'-',roomCount:1,cost:n.finalQuote,source:'拼團',label,tourId,gnDate:date,busIdx:bus.busIdx});
         });
       } else {
         bus.bookings.filter(b=>b.roomCost>0&&b.date&&inRange(b.date)).forEach(b=>{
           const h=hotels.find(x=>x.id===b.roomHotelId);
-          groupRows.push({date:b.date,hotelId:b.roomHotelId||'',hotelName:h?.name||'（未指定）',hotelArea:h?.area||'',roomType:(b.roomType||'2')+'人房',roomCount:b.roomCount||1,cost:b.roomCost,source:'拼團',label:t.name,guestName:b.name});
+          groupRows.push({date:b.date,hotelId:b.roomHotelId||'',hotelName:h?.name||'（未指定）',hotelArea:h?.area||'',roomType:(b.roomType||'2')+'人房',roomCount:b.roomCount||1,cost:b.roomCost,source:'拼團',label:t.name,guestName:b.name,bookTourId:tourId,bookDate:b.date,bookId:b.id});
         });
       }
     });
@@ -3954,14 +3978,17 @@ function renderHotelStat(){
             </div>
             <div class="tbl-wrap"><table class="xtable">
               <thead><tr><th>日期</th><th>來源</th><th>團名/客人</th><th>房型</th><th style="text-align:center">間數</th><th style="text-align:right">費用</th></tr></thead>
-              <tbody>${hd.rows.map(r=>`<tr>
+              <tbody>${hd.rows.map(r=>{
+                const canEdit=r.privId||r.tourId||r.bookId;
+                const jump=r.privId?`openPriv('${r.privId}')`:(r.tourId?`openGroupNightly('${r.tourId}','${r.gnDate}',${r.busIdx})`:(r.bookId?`openBook('${r.bookTourId}','${r.bookDate}','${r.bookId}')`:''));
+                return`<tr>
                 <td>${r.date}</td>
                 <td><span class="badge ${r.source==='包車'?'badge-blue':'badge-green'}">${r.source}</span></td>
-                <td style="font-size:12px">${r.label}${r.guestName?' ／ '+r.guestName:''}</td>
+                <td style="font-size:12px${canEdit?';cursor:pointer;text-decoration:underline dotted;color:var(--blue-d)':''}" ${canEdit?`onclick="${jump}" title="點擊修正這筆住宿資料"`:''}>${r.label}${r.guestName?' ／ '+r.guestName:''}${canEdit?' <i class="ti ti-edit" style="font-size:11px"></i>':''}</td>
                 <td style="font-size:12px">${r.roomType}</td>
                 <td style="text-align:center">${r.roomCount}</td>
                 <td style="text-align:right;color:var(--red);font-weight:600">$${r.cost.toLocaleString()}</td>
-              </tr>`).join('')}</tbody>
+              </tr>`;}).join('')}</tbody>
               <tfoot><tr><td colspan="4">小計</td><td style="text-align:center">${hRooms}</td><td style="text-align:right;color:var(--red)">$${hTotal.toLocaleString()}</td></tr></tfoot>
             </table></div>
           </div>
@@ -4939,6 +4966,15 @@ function renderSettings(){
     <div class="fg2"><div><label>外派司機每天費用（元）</label><input id="cs-day" type="number" value="${costSettings.driverDayRate||5000}"></div><div><label>外宿補貼每晚（元）</label><input id="cs-night" type="number" value="${costSettings.driverNightRate||1000}"></div></div>
     <button class="btn btn-primary btn-sm" onclick="saveCostSetting()"><i class="ti ti-device-floppy"></i> 儲存設定</button>
   </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-refresh"></i> 拼團住宿費用重新試算（一次性工具）</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+      將所有拼團報名的住宿費用，依「行程固定酒店」目前在酒店資料庫的房價（2/3/4人房，含平日/假日）重新計算。<br>
+      只會先列出試算結果，不會馬上寫入，確認無誤後再按「確認套用」。
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="previewRoomMigration()"><i class="ti ti-search"></i> 預覽重新試算結果</button>
+    <div id="room-migration-result" style="margin-top:10px"></div>
+  </div>
   <!-- 資料備份 -->
   <div class="card">
     <div class="card-title"><i class="ti ti-database-export"></i> 資料備份</div>
@@ -4954,6 +4990,52 @@ function renderSettings(){
   </div>`;
   // 更新上次備份狀態顯示
   setTimeout(updateBackupStatus,0);
+}
+
+// ══════════════════ 拼團住宿費用重新試算（一次性工具） ══════════════════
+function previewRoomMigration(){
+  const rows=bookings.filter(b=>(b.roomCost||0)>0||(b.roomCount||0)>0).map(b=>{
+    const t=tours.find(x=>x.id===b.tourId);
+    const roomExtra=t?.extras?.find(e=>e.mode==='room');
+    const hotelId=b.roomHotelId||roomExtra?.hotelId||'';
+    const hotel=hotels.find(h=>h.id===hotelId);
+    const roomType=b.roomType||'2';
+    const rooms=b.roomCount||1;
+    const rate=hotel?getHotelRoomRate(hotel,b.date,'r'+roomType):0;
+    const oldCost=b.roomCost||0;
+    const newCost=hotel?rooms*rate:oldCost; // 找不到對應酒店就維持原值，不強改
+    return{id:b.id,name:b.name,tourName:t?.name||'（行程已刪除）',date:b.date,hotelName:hotel?hotel.name:'（找不到對應酒店，維持原值）',roomType,rooms,oldCost,newCost,changed:!!hotel&&newCost!==oldCost};
+  });
+  window._roomMigration=rows;
+  renderRoomMigrationPreview();
+}
+function renderRoomMigrationPreview(){
+  const rows=window._roomMigration||[];
+  const el=document.getElementById('room-migration-result');
+  if(!el)return;
+  if(!rows.length){el.innerHTML='<div class="empty">目前沒有拼團住宿費用資料</div>';return;}
+  const changed=rows.filter(r=>r.changed);
+  const totalOld=changed.reduce((s,r)=>s+r.oldCost,0);
+  const totalNew=changed.reduce((s,r)=>s+r.newCost,0);
+  el.innerHTML=`
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共檢查 ${rows.length} 筆報名住宿資料，其中 <strong>${changed.length}</strong> 筆金額會變動（原總額 $${totalOld.toLocaleString()} → 新總額 $${totalNew.toLocaleString()}，差額 <span style="color:${totalNew-totalOld>=0?'var(--red)':'var(--green)'}">$${(totalNew-totalOld).toLocaleString()}</span>）</div>
+    ${changed.length?`<div class="tbl-wrap" style="max-height:320px;overflow:auto;margin-bottom:10px"><table class="xtable"><thead><tr><th>行程</th><th>日期</th><th>客人</th><th>酒店</th><th>房型</th><th style="text-align:center">間數</th><th style="text-align:right">原費用</th><th style="text-align:right">新費用</th></tr></thead><tbody>${changed.map(r=>`<tr><td style="font-size:12px">${r.tourName}</td><td style="font-size:12px">${r.date}</td><td style="font-size:12px">${r.name}</td><td style="font-size:12px">${r.hotelName}</td><td style="font-size:12px">${r.roomType}人房</td><td style="text-align:center">${r.rooms}</td><td style="text-align:right;color:var(--text2)">$${r.oldCost.toLocaleString()}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.newCost.toLocaleString()}</td></tr>`).join('')}</tbody></table></div>
+    <button class="btn btn-danger btn-sm" onclick="applyRoomMigration()"><i class="ti ti-check"></i> 確認套用以上 ${changed.length} 筆變更</button>`:'<div class="empty">沒有需要變動的資料（都已經是目前酒店房價，或找不到對應酒店維持原值）</div>'}
+  `;
+}
+async function applyRoomMigration(){
+  const changed=(window._roomMigration||[]).filter(r=>r.changed);
+  if(!changed.length)return;
+  if(!confirm(`確定要更新 ${changed.length} 筆報名的住宿費用嗎？\n此動作會直接覆蓋原本金額，建議先在「資料備份」匯出一份備份再繼續。`))return;
+  setSS('syncing','批次更新中…');
+  try{
+    for(const r of changed){
+      await db.collection('bookings').doc(r.id).update({roomCost:r.newCost});
+    }
+    document.getElementById('room-migration-result').innerHTML='<div class="empty" style="color:var(--green)">✅ 已完成套用 '+changed.length+' 筆變更</div>';
+  }catch(e){
+    alert('更新過程發生錯誤，部分資料可能未完成，請重新預覽確認狀況。');
+  }
 }
 
 // ══════════════════ 資料備份 ══════════════════
