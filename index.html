@@ -3179,8 +3179,9 @@ function buildGroupCostBreakdown(tourId,date,busIdx){
   const extraTotal=Math.round(calcTourExtraCost(t,dayPax)*(dayPax?busPax/dayPax:0));
   const extraRows=extraTotal?[{date,label:t.name+'（此車'+busPax+'人，依當天總人數比例分攤）',amount:extraTotal}]:[];
   const gn=getGroupNightly(tourId,date,busIdx);
+  const gnHasData=gn&&gn.nightlyHotels?.some(n=>n.hotelId||n.finalQuote||n.r2||n.r3||n.r4);
   let hotelTotal,hotelRows;
-  if(gn){
+  if(gnHasData){
     hotelRows=(gn.nightlyHotels||[]).map((nh,i)=>{
       if(!nh.booked)return null;
       const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
@@ -3642,8 +3643,9 @@ function renderFinance(){
             const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
             buses.forEach(bus=>{
               const gn=getGroupNightly(tourId,date,bus.busIdx);
+              const gnHasData=gn&&gn.nightlyHotels?.some(n=>n.hotelId||n.finalQuote||n.r2||n.r3||n.r4);
               let cost;
-              if(gn){cost=calcGroupHotelExpense(tourId,date,bus.busIdx);}
+              if(gnHasData){cost=calcGroupHotelExpense(tourId,date,bus.busIdx);}
               else{cost=dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);if(buses.length>1)cost=cost/buses.length;}
               if(cost>0)rows2.push(`<tr><td>${date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">拼團：${t.name}${buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':''}</td><td style="text-align:right;color:var(--red);font-weight:600">$${cost.toLocaleString()}</td><td></td></tr>`);
             });
@@ -3862,7 +3864,8 @@ function renderHotelStat(){
     const buses=buildBuses(dateBks,t.busMax||8,tourId,date);
     buses.forEach(bus=>{
       const gn=getGroupNightly(tourId,date,bus.busIdx);
-      if(gn&&gn.nightlyHotels?.length){
+      const gnHasData=gn&&gn.nightlyHotels?.some(n=>n.hotelId||n.finalQuote||n.r2||n.r3||n.r4);
+      if(gnHasData){
         gn.nightlyHotels.forEach((n,i)=>{
           if(!n.hotelId&&!n.finalQuote&&!n.r2&&!n.r3&&!n.r4)return;
           const nd=new Date(date);nd.setDate(nd.getDate()+i);const nightDate=nd.toISOString().slice(0,10);
