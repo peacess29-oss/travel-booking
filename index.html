@@ -509,7 +509,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <div class="overlay" id="m-rec"><div class="modal">
   <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><optgroup label="收入"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option></optgroup><optgroup label="支出"><option value="fuel">加油</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="hotel">住宿代付</option><option value="other">其他支出</option></optgroup><optgroup label="現金移轉"><option value="remit">回帳公司</option></optgroup></select></div><div><label id="rf-amt-label">金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
+  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><optgroup label="收入"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option></optgroup><optgroup label="支出"><option value="fuel">加油</option><option value="urea">尿素</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="hotel">住宿代付</option><option value="other">其他支出</option></optgroup><optgroup label="現金移轉"><option value="remit">回帳公司</option></optgroup></select></div><div><label id="rf-amt-label">金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
@@ -2819,7 +2819,7 @@ function getPrivDriverIds(p){
   names.forEach(n=>{const d=drivers.find(x=>x.name===n);if(d&&!ids.includes(d.id))ids.push(d.id);});
   return ids;
 }
-const CASHFLOW_EXP_TYPES=['fuel','parking','toll','maint','inspection','storage','other'];
+const CASHFLOW_EXP_TYPES=['fuel','urea','parking','toll','maint','inspection','storage','other'];
 // 該團行程期間內，指派司機登打的雜支總額（油錢/停車/過路/保養/驗車/寄鋪/其他），供利潤計算共用
 function calcPrivMisc(p){
   const driverIds=getPrivDriverIds(p);
@@ -3445,7 +3445,7 @@ function exportFinanceExcel(){
   const expData=[['日期','類別','說明','車輛','司機','金額']];
   const EXP_CAT2={salary:'司機薪資',outsource:'外派費用',hotel:'住宿成本',insurance:'旅遊險',fuel:'油錢',parking:'停車費',toll:'過路費',maint:'保養/維修',ad:'廣告行銷',misc:'其他雜支'};
   me.sort((a,b)=>a.date>b.date?1:-1).forEach(e=>expData.push([e.date,EXP_CAT2[e.category]||e.category,e.desc||'',e.car||'',e.driverName||'',e.amount]));
-  de.sort((a,b)=>a.date>b.date?1:-1).forEach(r=>expData.push([r.date,{fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養',inspection:'驗車',other:'其他'}[r.type]||r.type,'司機記錄: '+(r.note||''),r.car||'',r.driverName||'',r.amount]));
+  de.sort((a,b)=>a.date>b.date?1:-1).forEach(r=>expData.push([r.date,{fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養',inspection:'驗車',other:'其他'}[r.type]||r.type,'司機記錄: '+(r.note||''),r.car||'',r.driverName||'',r.amount]));
   fe.forEach(f=>expData.push(['固定',f.cycle==='monthly'?'每月':'每年',f.name,f.car||'','',f.eff]));
   dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)))
     .sort((a,b)=>a.start>b.start?1:-1)
@@ -3490,7 +3490,7 @@ function renderFinance(){
   // 支出分類
   const expBycat={};
   me.forEach(e=>{const k=e.category||'misc';expBycat[k]=(expBycat[k]||0)+e.amount;});
-  de.forEach(r=>{const map={fuel:'fuel',parking:'parking',toll:'toll',maint:'maint',inspection:'inspection',storage:'storage'};const k=map[r.type]||'misc';expBycat[k]=(expBycat[k]||0)+r.amount;});
+  de.forEach(r=>{const map={fuel:'fuel',urea:'urea',parking:'parking',toll:'toll',maint:'maint',inspection:'inspection',storage:'storage'};const k=map[r.type]||'misc';expBycat[k]=(expBycat[k]||0)+r.amount;});
   fe.forEach(f=>{const map={insurance:'car_ins',license:'license',loan:'loan',ad:'ad',other:'misc'};const k=map[f.category]||'misc';expBycat[k]=(expBycat[k]||0)+f.eff;});
   // 包車團酒店成本（依出發日篩選，booked+已付款或司機現場才算支出）
   privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m)))
@@ -3575,6 +3575,7 @@ function renderFinance(){
       ${finCard('exp-night','外宿補貼',expBycat['night']||0,'red','ti-moon')}
       ${finCard('exp-insurance','旅遊險',expBycat['insurance']||0,'red','ti-shield')}
       ${finCard('exp-fuel','油錢',expBycat['fuel']||0,'red','ti-gas-station')}
+      ${finCard('exp-urea','尿素',expBycat['urea']||0,'red','ti-droplet')}
       ${finCard('exp-parking','停車費',expBycat['parking']||0,'red','ti-parking')}
       ${finCard('exp-toll','過路費',expBycat['toll']||0,'red','ti-road')}
       ${finCard('exp-maint','保養/維修',expBycat['maint']||0,'red','ti-tool')}
@@ -3592,6 +3593,7 @@ function renderFinance(){
         {id:'night',label:'外宿補貼',meCats:[],deTypes:[],feCats:[]},
         {id:'insurance',label:'旅遊險',meCats:['insurance'],deTypes:[],feCats:[]},
         {id:'fuel',label:'油錢',meCats:['fuel'],deTypes:['fuel'],feCats:[]},
+        {id:'urea',label:'尿素',meCats:['urea'],deTypes:['urea'],feCats:[]},
         {id:'parking',label:'停車費',meCats:['parking'],deTypes:['parking'],feCats:[]},
         {id:'toll',label:'過路費',meCats:['toll'],deTypes:['toll'],feCats:[]},
         {id:'maint',label:'保養/維修',meCats:['maint'],deTypes:['maint'],feCats:[]},
@@ -4031,7 +4033,7 @@ function renderBalance(){
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
+const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
 function renderDriverPage(){
   const el=document.getElementById('p-driver');
   const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
@@ -4215,6 +4217,7 @@ function renderDriverPage(){
       <div style="font-size:11px;color:var(--text2);margin-bottom:6px">支出</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','fuel')"><i class="ti ti-gas-station"></i> 加油</button>
+        <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','urea')"><i class="ti ti-droplet"></i> 尿素</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','parking')"><i class="ti ti-parking"></i> 停車</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','toll')"><i class="ti ti-road"></i> 過路</button>
         <button class="btn btn-sm" style="background:var(--amber);color:var(--amber-l);border-color:var(--amber);font-size:13px;padding:7px 14px" onclick="openRec('','maint')"><i class="ti ti-tool"></i> 保養</button>
@@ -5119,7 +5122,7 @@ function exportBackupExcel(){
 
   // 工作表：司機記錄
   if(driverRecs.length){
-    const TYPE_BK={income:'客收',extra:'外收',tips:'小費',fuel:'加油',
+    const TYPE_BK={income:'客收',extra:'外收',tips:'小費',fuel:'加油',urea:'尿素',
       parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',other:'其他'};
     const ws5=XLSX.utils.json_to_sheet(driverRecs.map(r=>({
       日期:r.date,司機:r.driverName,車輛:r.car,
