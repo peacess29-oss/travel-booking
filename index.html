@@ -2783,22 +2783,30 @@ function calcPrivAdvanceHotel(p){
 // 計算包車團實際酒店支出（booked + 已付款或司機現場）
 // 司機現場付現的晚數：改用司機實際代付金額(driverPaidAmount)，尚未代付則先不列入成本，避免用報價高估/低估
 function calcPrivHotelExpense(p){
-  if(!p.nightlyHotels?.length)return 0;
-  const startDate=p.start;
-  return p.nightlyHotels.reduce((s,nh,i)=>{
-    if(!nh.booked)return s;
-    const isDriverPay=(nh.paymentType||'company')==='driver';
-    if(isDriverPay){
-      if(!nh.driverPaid)return s;
-      return s+(nh.driverPaidAmount||0);
-    }
-    if(!nh.hotelPaid)return s;
-    if(nh.finalQuote>0)return s+nh.finalQuote;
-    const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return s;
-    let nightDate='';
-    if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
-    return s+getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0);
-  },0);
+  let total=0;
+  if(p.nightlyHotels?.length){
+    const startDate=p.start;
+    total+=p.nightlyHotels.reduce((s,nh,i)=>{
+      if(!nh.booked)return s;
+      const isDriverPay=(nh.paymentType||'company')==='driver';
+      if(isDriverPay){
+        if(!nh.driverPaid)return s;
+        return s+(nh.driverPaidAmount||0);
+      }
+      if(!nh.hotelPaid)return s;
+      if(nh.finalQuote>0)return s+nh.finalQuote;
+      const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return s;
+      let nightDate='';
+      if(startDate){const d=new Date(startDate);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
+      return s+getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0);
+    },0);
+  }
+  // 手動輸入、未連結任何晚數的住宿代付（比照現金流水，用司機ID+日期區間配對，避免與已連結晚數重複計算）
+  const driverIds=getPrivDriverIds(p);
+  if(driverIds.length&&p.start&&p.end){
+    total+=driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).reduce((s,r)=>s+(r.amount||0),0);
+  }
+  return total;
 }
 // 計算包車團某夜住宿的「報價」金額（不論公司或司機付，用來跟實付比對）
 function calcNightQuote(p,nh,i){
@@ -2855,6 +2863,12 @@ function buildPrivCashFlow(p){
       events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
     }
   });
+  // 手動輸入、未連結任何行程晚數的住宿代付（比照雜支，用司機ID+日期區間配對，避免與已連結晚數重複計算）
+  if(driverIds.length){
+    driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+      events.push({date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
+    });
+  }
   events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
   let bal=0;
   events.forEach(e=>{if(e.kind!=='hotel-pending'){bal+=e.amount;e.balance=bal;}else{e.balance=null;}});
@@ -3152,6 +3166,12 @@ function buildGroupCashFlow(tourId,date,busIdx){
       events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
     }
   });
+  // 手動輸入、未連結任何行程晚數的住宿代付（比照雜支，用司機ID+日期區間配對，避免與已連結晚數重複計算）
+  if(driverId){
+    driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+      events.push({date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
+    });
+  }
   events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
   let bal=0;
   events.forEach(e=>{if(e.kind!=='hotel-pending'){bal+=e.amount;e.balance=bal;}else{e.balance=null;}});
@@ -3307,7 +3327,16 @@ function calcDispCost(y,m,isYear){
 }
 function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 手動輸入的住宿代付（沒有連結任何包車團/拼團排程），需另外加總，否則會漏算
-function calcManualHotelExpense(y,m,isYear){return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).reduce((s,r)=>s+(r.amount||0),0);}
+function calcManualHotelExpense(y,m,isYear){
+  const claimedIds=new Set();
+  privates.forEach(p=>{
+    if(!p.start||!p.end)return;
+    const dIds=getPrivDriverIds(p);
+    if(!dIds.length)return;
+    driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&dIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>claimedIds.add(r.id));
+  });
+  return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&!claimedIds.has(r.id)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).reduce((s,r)=>s+(r.amount||0),0);
+}
 // 拼團住宿成本（依出發日期篩選，涵蓋所有行程；有新版排程用實際成本，沒有則回退舊版roomCost估算）
 function calcAllGroupHotelExpense(y,m,isYear){
   const tourDatePairs=[...new Set(bookings.filter(b=>isYear?inYear(b.date,y):inMonth(b.date,y,m)).map(b=>b.tourId+'|'+b.date))];
@@ -3655,10 +3684,19 @@ function renderFinance(){
           });
           return rows2;
         })():[];
-        // 手動輸入、未連結排程的住宿代付
-        const piManualHotelRows=sec.id==='hotel'?driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).map(r=>{
-          return `<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">手動輸入：${r.hotelName||r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td><td></td></tr>`;
-        }):[];
+        // 手動輸入、未連結排程的住宿代付（排除已被某包車團依司機+日期區間認領計入 calcPrivHotelExpense 的那些，避免重複計算）
+        const piManualHotelRows=sec.id==='hotel'?(()=>{
+          const claimedIds=new Set();
+          privates.forEach(p=>{
+            if(!p.start||!p.end)return;
+            const dIds=getPrivDriverIds(p);
+            if(!dIds.length)return;
+            driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&dIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>claimedIds.add(r.id));
+          });
+          return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&!claimedIds.has(r.id)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).map(r=>{
+            return `<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">手動輸入：${r.hotelName||r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td><td></td></tr>`;
+          });
+        })():[];
         const rows=[
           ...mr.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr><td>${e.date}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">${e.desc||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`),
           ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
