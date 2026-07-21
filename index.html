@@ -1812,15 +1812,16 @@ function renderNightlyPicker(){
     const r3rate=hotel?getHotelRoomRate(hotel,nightDate,'r3'):0;
     const r4rate=hotel?getHotelRoomRate(hotel,nightDate,'r4'):0;
     const noRateCard=hotel&&!(hotel.r2||hotel.r3||hotel.r4||hotel.r2wk||hotel.r3wk||hotel.r4wk);
+    const show2=r2rate||nh.r2,show3=r3rate||nh.r3,show4=r4rate||nh.r4;
     rows+=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
         <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>
       </div>
       ${hotel?`${noRateCard?`<div style="font-size:11px;color:var(--amber-d);background:var(--amber-l,#fff7e6);border-radius:6px;padding:6px 8px;margin-bottom:6px">🖊️ 自填酒店，無房型單價資料，請直接填寫下方「住宿總價」作為此晚成本</div>`:`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
-        ${r2rate?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 $${r2rate}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r2',this.value)"> 間</div>`:''}
-        ${r3rate?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 $${r3rate}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r3',this.value)"> 間</div>`:''}
-        ${r4rate?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 $${r4rate}</div><input type="number" value="${nh.r4||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r4',this.value)"> 間</div>`:''}
+        ${show2?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 ${r2rate?'$'+r2rate:'未設房價'}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r2',this.value)"> 間</div>`:''}
+        ${show3?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 ${r3rate?'$'+r3rate:'未設房價'}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r3',this.value)"> 間</div>`:''}
+        ${show4?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 ${r4rate?'$'+r4rate:'未設房價'}</div><input type="number" value="${nh.r4||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r4',this.value)"> 間</div>`:''}
       </div>`}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">
         <div><label style="font-size:11px">酒店回傳日期</label><input type="date" value="${nh.returnDate||''}" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'returnDate',this.value)"></div>
@@ -3061,17 +3062,18 @@ function renderGroupNightlyContent(){
     const r2rate=hotel?getHotelRoomRate(hotel,nightDate,'r2'):0;
     const r3rate=hotel?getHotelRoomRate(hotel,nightDate,'r3'):0;
     const r4rate=hotel?getHotelRoomRate(hotel,nightDate,'r4'):0;
+    const show2=r2rate||nh.r2,show3=r3rate||nh.r3,show4=r4rate||nh.r4;
     return`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
         <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setGnHotel(${i},this.value)">${hotelOpts(nh.hotelId)}</select>
       </div>
       ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
-        ${r2rate?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 $${r2rate}</div><input type="number" value="${nh.r2||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r2',this.value)"></div>`:''}
-        ${r3rate?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 $${r3rate}</div><input type="number" value="${nh.r3||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r3',this.value)"></div>`:''}
-        ${r4rate?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 $${r4rate}</div><input type="number" value="${nh.r4||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r4',this.value)"></div>`:''}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        ${show2?`<div style="font-size:12px"><div style="color:var(--text2)">2人房 ${r2rate?'$'+r2rate:'未設房價'}</div><input type="number" value="${nh.r2||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r2',this.value)"></div>`:''}
+        ${show3?`<div style="font-size:12px"><div style="color:var(--text2)">3人房 ${r3rate?'$'+r3rate:'未設房價'}</div><input type="number" value="${nh.r3||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r3',this.value)"></div>`:''}
+        ${show4?`<div style="font-size:12px"><div style="color:var(--text2)">4人房 ${r4rate?'$'+r4rate:'未設房價'}</div><input type="number" value="${nh.r4||0}" min="0" style="height:30px;text-align:center;font-size:13px" onchange="setGnRoom(${i},'r4',this.value)"></div>`:''}
+      </div>`:''}
+      ${hotel?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
         <div style="display:flex;align-items:center;gap:4px;padding-top:6px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.booked?'checked':''} onchange="setGnMeta(${i},'booked',this.checked)" style="width:14px;height:14px"> 已訂房確認</label></div>
         <div><label style="font-size:11px">最終報價（元）</label><input type="number" value="${nh.finalQuote||0}" placeholder="0" style="height:30px;font-size:12px" onchange="setGnMeta(${i},'finalQuote',parseInt(this.value)||0)"></div>
       </div>
