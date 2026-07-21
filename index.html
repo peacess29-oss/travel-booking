@@ -546,6 +546,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('cashflow')">關閉</button></div></div>
 </div></div>
 
+<!-- 車輛明細 -->
+<div class="overlay" id="m-vehicle-detail"><div class="modal" style="width:640px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="vd-title"><i class="ti ti-car"></i> 車輛明細</span><button class="btn btn-sm" onclick="cm('vehicle-detail')"><i class="ti ti-x"></i></button></div>
+  <div id="vd-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('vehicle-detail')">關閉</button></div></div>
+</div></div>
+
 <!-- QR碼模態 -->
 <div class="overlay" id="m-qr"><div class="modal" style="width:360px;text-align:center">
   <div class="mh"><span class="mh-title">客人報名 QR Code</span><button class="btn btn-sm" onclick="cm('qr')"><i class="ti ti-x"></i></button></div>
@@ -4100,10 +4107,32 @@ function renderVehicleStatus(){
       <td style="font-size:12px">${x.lastMaint?`${MAINT_TYPE_N[x.lastMaint.maintType]||'保養'}<br><span style="color:var(--text2)">${x.lastMaint.date}${x.lastMaint.mileage?' ・ '+x.lastMaint.mileage.toLocaleString()+'km':''}</span>`:'-'}</td>
       <td>${x.maintKmSince!=null?x.maintKmSince.toLocaleString()+' km':'-'}</td>
       <td style="font-size:12px">${x.lastInsp?`${x.lastInsp.date}${x.lastInsp.mileage?' ・ '+x.lastInsp.mileage.toLocaleString()+'km':''}`:'-'}</td>
-      <td style="text-align:right;color:var(--red)">${x.fuelTotal?'$'+x.fuelTotal.toLocaleString():'-'}</td>
-      <td style="text-align:right;color:var(--red)">${x.maintTotal?'$'+x.maintTotal.toLocaleString():'-'}</td>
+      <td style="text-align:right;color:var(--red);cursor:pointer;text-decoration:underline dotted" onclick="openVehicleDetail('${x.car.replace(/'/g,"\\'")}','fuel')" title="點擊查看加油明細">${x.fuelTotal?'$'+x.fuelTotal.toLocaleString():'-'}</td>
+      <td style="text-align:right;color:var(--red);cursor:pointer;text-decoration:underline dotted" onclick="openVehicleDetail('${x.car.replace(/'/g,"\\'")}','maint')" title="點擊查看保養明細">${x.maintTotal?'$'+x.maintTotal.toLocaleString():'-'}</td>
     </tr>`).join('')}</tbody></table></div>
   </div>`;
+}
+// 點擊累計油錢/保養彈出明細
+function openVehicleDetail(car,type){
+  const recs=driverRecs.filter(r=>r.car===car&&r.type===type).sort((a,b)=>a.date>b.date?-1:a.date<b.date?1:0);
+  const title=type==='fuel'?'加油明細':'保養明細';
+  document.getElementById('vd-title').innerHTML=`<i class="ti ti-car"></i> ${car} － ${title}`;
+  const total=recs.reduce((s,r)=>s+(r.amount||0),0);
+  document.getElementById('vd-content').innerHTML=recs.length?`
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${recs.length} 筆，合計 <span style="color:var(--red);font-weight:600">$${total.toLocaleString()}</span></div>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>日期</th><th>司機</th>${type==='fuel'?'<th>里程</th><th>公升</th>':'<th>項目</th><th>里程</th>'}<th style="text-align:right">金額</th><th>備註</th>
+    </tr></thead><tbody>${recs.map(r=>`<tr>
+      <td>${r.date}</td>
+      <td style="font-size:12px">${r.driverName||'-'}</td>
+      ${type==='fuel'
+        ?`<td style="font-size:12px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td><td style="font-size:12px">${r.fuelLiters?r.fuelLiters+' L':'-'}</td>`
+        :`<td style="font-size:12px">${MAINT_TYPE_N[r.maintType]||'-'}</td><td style="font-size:12px">${r.mileage?r.mileage.toLocaleString()+' km':'-'}</td>`}
+      <td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td>
+      <td style="font-size:12px;color:var(--text2)">${r.note||'-'}</td>
+    </tr>`).join('')}</tbody></table></div>
+  `:'<div class="empty">尚無記錄</div>';
+  om('vehicle-detail');
 }
 
 // ══════════════════ PAGE: 尾款收款 ══════════════════
