@@ -4160,11 +4160,13 @@ function renderPayroll(){
     return{driver:d,trips,total,count:trips.length};
   }).filter(x=>x.count>0||x.driver);
   const grandTotal=rows.reduce((s,x)=>s+x.total,0);
-  const extDrivers=drivers.filter(d=>d.type==='external');
-  const extRows=extDrivers.map(d=>{
-    const trips=dispatches.filter(x=>x.driverType==='out'&&x.outsourceName===d.name&&inMonth(x.start,y,m));
+  const outNames=new Set();
+  dispatches.filter(x=>x.driverType==='out'&&inMonth(x.start,y,m)&&x.driverName).forEach(x=>outNames.add(x.driverName));
+  const extRows=[...outNames].sort((a,b)=>a.localeCompare(b,'zh-TW')).map(name=>{
+    const trips=dispatches.filter(x=>x.driverType==='out'&&x.driverName===name&&inMonth(x.start,y,m));
     const total=trips.reduce((s,x)=>s+(x.outwage||0),0);
-    return{driver:d,trips,total,count:trips.length};
+    const isRegistered=drivers.some(d=>d.type==='external'&&d.name===name);
+    return{name,trips,total,count:trips.length,isRegistered};
   });
   const extGrandTotal=extRows.reduce((s,x)=>s+x.total,0);
   el.innerHTML=`<div class="card">
@@ -4191,21 +4193,21 @@ function renderPayroll(){
     ${!extRows.length?'<div class="empty">本月無外派司機派車費用記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr>
       <th>司機</th><th style="text-align:center">趟次數</th><th style="text-align:right">本月費用合計</th><th></th>
     </tr></thead><tbody>${extRows.map(x=>`<tr>
-      <td style="font-weight:600">${x.driver.name}</td>
+      <td style="font-weight:600">${x.name}${x.isRegistered?'':' <span class="badge badge-amber" style="font-size:10px">未建檔</span>'}</td>
       <td style="text-align:center">${x.count}</td>
       <td style="text-align:right;color:${x.total?'var(--red)':'var(--text3)'};font-weight:600">$${x.total.toLocaleString()}</td>
-      <td><button class="btn btn-sm" onclick="openPayrollDetail('${x.driver.id}',true)" ${x.count?'':'disabled'}><i class="ti ti-list"></i> 明細</button></td>
+      <td><button class="btn btn-sm" onclick="openPayrollDetail('${x.name.replace(/'/g,"\\'")}',true)" ${x.count?'':'disabled'}><i class="ti ti-list"></i> 明細</button></td>
     </tr>`).join('')}</tbody><tfoot><tr><td colspan="2">合計</td><td style="text-align:right;color:var(--red)">$${extGrandTotal.toLocaleString()}</td><td></td></tr></tfoot></table></div>`}
   </div>`;
 }
-function openPayrollDetail(driverId,isExternal){
-  const d=drivers.find(x=>x.id===driverId);if(!d)return;
+function openPayrollDetail(driverIdOrName,isExternal){
   const y=paySelYear,m=paySelMonth;
+  const name=isExternal?driverIdOrName:(drivers.find(x=>x.id===driverIdOrName)?.name||'');
   const trips=isExternal
-    ?dispatches.filter(x=>x.driverType==='out'&&x.outsourceName===d.name&&inMonth(x.start,y,m)).sort((a,b)=>a.start>b.start?1:-1)
-    :dispatches.filter(x=>x.driverId===driverId&&x.driverType==='own'&&inMonth(x.start,y,m)).sort((a,b)=>a.start>b.start?1:-1);
+    ?dispatches.filter(x=>x.driverType==='out'&&x.driverName===name&&inMonth(x.start,y,m)).sort((a,b)=>a.start>b.start?1:-1)
+    :dispatches.filter(x=>x.driverId===driverIdOrName&&x.driverType==='own'&&inMonth(x.start,y,m)).sort((a,b)=>a.start>b.start?1:-1);
   const total=trips.reduce((s,x)=>s+(isExternal?(x.outwage||0):(x.wage||0)),0);
-  document.getElementById('pd-title').innerHTML=`<i class="ti ti-report-money"></i> ${d.name} － ${y}年${MONTHS[m]} ${isExternal?'外派費用':'薪資'}明細`;
+  document.getElementById('pd-title').innerHTML=`<i class="ti ti-report-money"></i> ${name} － ${y}年${MONTHS[m]} ${isExternal?'外派費用':'薪資'}明細`;
   document.getElementById('pd-content').innerHTML=trips.length?`
     <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${trips.length} 趟，合計 <span style="color:var(--red);font-weight:600">$${total.toLocaleString()}</span></div>
     <div class="tbl-wrap"><table class="xtable"><thead><tr>
