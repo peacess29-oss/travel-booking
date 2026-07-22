@@ -2189,9 +2189,9 @@ function renderDispatch(){
           return `<div class="cal-pill" style="background:var(--red-l);color:var(--red-d);cursor:pointer" onclick="event.stopPropagation();assignDriverModal('`+g.tourId+`_`+g.startDate+`_bus`+g.busIdx+`','group','`+g.name+`','`+g.startDate+`','`+g.endDate+`')" title="待派車：${g.name}${g.busLabel?' '+g.busLabel+'車':''}">⚠️${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} 待派</div>`;
         }
         // 已派車：整個區間都顯示（跨月正常）
-        return `<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer" onclick="event.stopPropagation();openDisp('`+did+`')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}</div>`;
+        return `<div class="cal-pill" style="background:var(--purple-l);color:var(--purple);cursor:pointer;position:relative;padding-right:14px" onclick="event.stopPropagation();openDisp('`+did+`')" title="${g.name}${g.busLabel?' '+g.busLabel+'車':''} ${g.driverName}">🚌${g.name.slice(0,4)}${g.busLabel?g.busLabel:''} ${g.driverName.slice(0,3)}<span onclick="event.stopPropagation();quickCancelDisp('`+did+`','`+g.name.replace(/'/g,"\\'")+`')" style="position:absolute;right:1px;top:0;font-weight:700;padding:0 3px" title="取消指派">✕</span></div>`;
       }).join('')}
-      ${dayDisps.map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}</div>`).join('')}
+      ${dayDisps.map(d=>`<div class="cal-pill ${d.driverType==='own'?'own':'out'}" style="position:relative;padding-right:14px" onclick="event.stopPropagation();openDisp('${d.id}')" title="${d.label}">${d.driverName||'?'} ${d.label}<span onclick="event.stopPropagation();quickCancelDisp('${d.id}','${(d.label||'').replace(/'/g,"\\'")}')" style="position:absolute;right:1px;top:0;font-weight:700;padding:0 3px" title="取消指派">✕</span></div>`).join('')}
       ${(()=>{
         // 包車團待派車：出發日或區間內，紅色 pill
         // 待派車：整個區間都顯示，但排除已有 dayDisps 記錄的訂單（防止重複）
@@ -2754,12 +2754,12 @@ async function saveDisp(){
   cm('disp');
   refresh(); // 立即重新渲染，行事曆、訂單表、派車記錄同步更新
 }
-async function delDisp(){
-  if(!confirm('確定刪除此派車記錄？\n對應訂單將回到「待派車」狀態。'))return;
-  const d=dispatches.find(x=>x.id===eIds.disp);
-  await db.collection('dispatches').doc(eIds.disp).delete();
+async function cancelDispatchById(dispId){
+  const d=dispatches.find(x=>x.id===dispId);
+  if(!d)return;
+  await db.collection('dispatches').doc(dispId).delete();
   // 立即更新本地陣列（拼團訂單狀態由 getAllOrders 即時計算，自動回到待派車）
-  dispatches=dispatches.filter(x=>x.id!==eIds.disp);
+  dispatches=dispatches.filter(x=>x.id!==dispId);
   // 若是包車團派車記錄，同步清除 assignedDriver，讓包車團也回到待派車
   if(d?.note?.includes('來自包車團')||d?.privateId){
     const privId4=d.privateId||(privates.find(p=>d.label&&d.label.includes(p.name))?.id);
@@ -2769,7 +2769,6 @@ async function delDisp(){
       if(matchPriv){
         const updDrv={...getPrivBusDrivers(matchPriv)};
         delete updDrv[busIdx4];
-        const allGone=Object.keys(updDrv).length===0;
         await db.collection('privates').doc(privId4).update({
           busAssignedDrivers:updDrv,
           assignedDriver:Object.values(updDrv).filter(Boolean).join('/')||'',
@@ -2780,8 +2779,20 @@ async function delDisp(){
       }
     }
   }
+}
+async function delDisp(){
+  if(!confirm('確定刪除此派車記錄？\n對應訂單將回到「待派車」狀態。'))return;
+  setSS('syncing','處理中…');
+  await cancelDispatchById(eIds.disp);
   cm('disp');
   refresh();
+}
+// 行事曆／列表上直接快速取消指派，不需開啟編輯視窗
+async function quickCancelDisp(dispId,label){
+  if(!confirm(`確定取消「${label||'此排班'}」的指派？\n訂單將回到「待派車」狀態，需要重新安排司機。`))return;
+  setSS('syncing','處理中…');
+  await cancelDispatchById(dispId);
+  renderDispatch();
 }
 
 // ══════════════════ PAGE: 財務報表 ══════════════════
