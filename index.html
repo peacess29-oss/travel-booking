@@ -2224,6 +2224,7 @@ function renderDispatch(){
   }
   const allOrders=getAllOrders();
   window._lastAllOrders=allOrders;
+  const soon=new Date();soon.setDate(soon.getDate()+5);
   const soonStr=soon.toISOString().slice(0,10);
   const urgentOrders=allOrders.filter(o=>o.start>=today&&o.start<=soonStr&&o.status==='待派車');
   const urgentHtml=urgentOrders.length?`<div class="warn-box" style="margin-bottom:12px"><i class="ti ti-bell-ringing"></i> <strong>5天內即將出團，尚未派車（${urgentOrders.length}筆）</strong><ul style="margin-top:6px;padding-left:16px">${urgentOrders.map(o=>`<li>${o.start} ${o.label}（${o.pax}人）</li>`).join('')}</ul></div>`:'';
