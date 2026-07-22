@@ -1340,8 +1340,7 @@ function renderTourNightlyTemplate(){
   const arr=window._tourNightly||[];
   while(arr.length<nights)arr.push({hotelId:'',r2:0,r3:0,r4:0,r5:0,r6:0});
   window._tourNightly=arr.slice(0,nights);
-  const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
-  const hotelOpts=cur=>'<option value="">— 選擇酒店 —</option>'+sortedHotels.map(h=>`<option value="${h.id}"${h.id===cur?' selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  const hotelOpts=cur=>buildHotelOptsHtml(cur);
   document.getElementById('tf-nightly').innerHTML=window._tourNightly.map((nh,i)=>{
     const hotel=hotels.find(h=>h.id===nh.hotelId);
     return `<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
@@ -1465,8 +1464,7 @@ function updateBkRoomCost(){
   const hotel=hotels.find(h=>h.id===hotelId);
   if(roomHotelNameEl)roomHotelNameEl.textContent=hotel?(hotel.area?'['+hotel.area+'] ':'')+hotel.name:'（尚未指定酒店，請點「更改酒店」選擇）';
   if(roomHotelSel){
-    const sorted=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW'));
-    roomHotelSel.innerHTML='<option value="">— 選擇酒店 —</option>'+sorted.map(h=>`<option value="${h.id}" ${h.id===hotelId?'selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+    roomHotelSel.innerHTML=buildHotelOptsHtml(hotelId);
   }
   const isManual=roomManualEl?.checked;
   if(!isManual){
@@ -1816,6 +1814,25 @@ function togglePriv(){document.getElementById('pf-hotel-sec').style.display=docu
 function togglePrivIns(){const chk=document.getElementById('pf-ins-chk')?.checked;const insRow=document.getElementById('pf-ins-row');if(insRow)insRow.style.display=chk?'block':'none';}
 
 let nightlyHotels=[];
+// 建立酒店下拉選單 HTML：常用酒店置頂（⭐ 分組），下方仍列出全部酒店
+function buildHotelOptsHtml(cur){
+  const sortFn=(a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW');
+  const favs=hotels.filter(h=>h.fav).sort(sortFn);
+  const all=[...hotels].sort(sortFn);
+  const opt=h=>`<option value="${h.id}"${h.id===cur?' selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`;
+  let html='<option value="">— 選擇酒店 —</option>';
+  if(favs.length)html+=`<optgroup label="⭐ 常用酒店">${favs.map(opt).join('')}</optgroup>`;
+  html+=`<optgroup label="全部酒店">${all.map(opt).join('')}</optgroup>`;
+  return html;
+}
+async function toggleHotelFav(id){
+  const h=hotels.find(x=>x.id===id);if(!h)return;
+  const newFav=!h.fav;
+  setSS('syncing','儲存中…');
+  await db.collection('hotels').doc(id).update({fav:newFav});
+  h.fav=newFav;
+  renderSettings();
+}
 function getHotelRoomRate(hotel,dateStr,roomType){
   if(!hotel)return 0;
   const isWeekend=isHol(dateStr);
@@ -1833,9 +1850,14 @@ function renderNightlyPicker(){
   if(!nights){el.innerHTML='';document.getElementById('pf-hotel-cost').textContent='';return;}
   while(nightlyHotels.length<nights)nightlyHotels.push({hotelId:'',r2:0,r3:0,r4:0,r5:0,r6:0,finalQuote:0,booked:false,returnDate:'',driverPaid:false,driverPaidAmount:0,driverRecId:''});
   nightlyHotels=nightlyHotels.slice(0,nights);
-  // 依地區名稱排序
-  const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
-  const hotelOpts='<option value="">— 選擇酒店 —</option><option value="__new__">🖊️ 其他／客人指定酒店（自填新增）</option>'+sortedHotels.map(h=>`<option value="${h.id}">${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  // 常用酒店置頂，其餘依地區名稱排序
+  const sortFn=(a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW');
+  const favHotels=hotels.filter(h=>h.fav).sort(sortFn);
+  const sortedHotels=[...hotels].sort(sortFn);
+  const optHtml=h=>`<option value="${h.id}">${h.area?'['+h.area+'] ':''}${h.name}</option>`;
+  const hotelOpts='<option value="">— 選擇酒店 —</option><option value="__new__">🖊️ 其他／客人指定酒店（自填新增）</option>'
+    +(favHotels.length?`<optgroup label="⭐ 常用酒店">${favHotels.map(optHtml).join('')}</optgroup>`:'')
+    +`<optgroup label="全部酒店">${sortedHotels.map(optHtml).join('')}</optgroup>`;
   let rows='';
   for(let i=0;i<nights;i++){
     const nh=nightlyHotels[i];
@@ -3137,8 +3159,7 @@ function openGroupNightly(tourId,date,busIdx){
 function renderGroupNightlyContent(){
   const{date}=eIds.gn;
   const arr=window._gnNightly||[];
-  const sortedHotels=[...hotels].sort((a,b)=>(a.area||'').localeCompare(b.area||'','zh-TW')||(a.name||'').localeCompare(b.name||'','zh-TW'));
-  const hotelOpts=cur=>'<option value="">— 選擇酒店 —</option>'+sortedHotels.map(h=>`<option value="${h.id}"${h.id===cur?' selected':''}>${h.area?'['+h.area+'] ':''}${h.name}</option>`).join('');
+  const hotelOpts=cur=>buildHotelOptsHtml(cur);
   document.getElementById('gn-content').innerHTML=arr.length?arr.map((nh,i)=>{
     let nightDate=date;
     if(date){const d=new Date(date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
@@ -5228,7 +5249,7 @@ function renderSettings(){
     ${!drivers.filter(d=>d.type==='external').length?'<div class="empty" style="padding:0.5rem;font-size:13px">尚無外派司機資料</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>每天費用</th><th>地區</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='external').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString()+'/天':'-'}</td><td style="font-size:12px">${d.area||'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
   </div>
   <div class="card"><div class="card-title"><i class="ti ti-building"></i> 酒店資料庫</div><button class="btn btn-primary btn-sm" onclick="openHotel()" style="margin-bottom:10px"><i class="ti ti-plus"></i> 新增酒店</button>
-    ${!hotels.length?'<div class="empty" style="padding:0.5rem">尚無酒店</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>名稱</th><th>地區</th><th>2人平/假</th><th>3人平/假</th><th>4人平/假</th><th>5人平/假</th><th>6人平/假</th><th>備註</th><th></th></tr></thead><tbody>${hotels.map(h=>`<tr><td style="font-weight:600">${h.name}</td><td>${h.area||'-'}</td><td>${h.r2?'$'+h.r2+(h.r2wk&&h.r2wk!==h.r2?'/$'+h.r2wk:''):'-'}</td><td>${h.r3?'$'+h.r3+(h.r3wk&&h.r3wk!==h.r3?'/$'+h.r3wk:''):'-'}</td><td>${h.r4?'$'+h.r4+(h.r4wk&&h.r4wk!==h.r4?'/$'+h.r4wk:''):'-'}</td><td>${h.r5?'$'+h.r5+(h.r5wk&&h.r5wk!==h.r5?'/$'+h.r5wk:''):'-'}</td><td>${h.r6?'$'+h.r6+(h.r6wk&&h.r6wk!==h.r6?'/$'+h.r6wk:''):'-'}</td><td style="font-size:11px;color:var(--text2)">${h.note||'-'}</td><td><button class="btn btn-sm" onclick="openHotel('${h.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
+    ${!hotels.length?'<div class="empty" style="padding:0.5rem">尚無酒店</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th></th><th>名稱</th><th>地區</th><th>2人平/假</th><th>3人平/假</th><th>4人平/假</th><th>5人平/假</th><th>6人平/假</th><th>備註</th><th></th></tr></thead><tbody>${[...hotels].sort((a,b)=>(b.fav?1:0)-(a.fav?1:0)).map(h=>`<tr><td style="cursor:pointer;font-size:16px" onclick="toggleHotelFav('${h.id}')" title="${h.fav?'取消常用':'設為常用'}">${h.fav?'⭐':'☆'}</td><td style="font-weight:600">${h.name}</td><td>${h.area||'-'}</td><td>${h.r2?'$'+h.r2+(h.r2wk&&h.r2wk!==h.r2?'/$'+h.r2wk:''):'-'}</td><td>${h.r3?'$'+h.r3+(h.r3wk&&h.r3wk!==h.r3?'/$'+h.r3wk:''):'-'}</td><td>${h.r4?'$'+h.r4+(h.r4wk&&h.r4wk!==h.r4?'/$'+h.r4wk:''):'-'}</td><td>${h.r5?'$'+h.r5+(h.r5wk&&h.r5wk!==h.r5?'/$'+h.r5wk:''):'-'}</td><td>${h.r6?'$'+h.r6+(h.r6wk&&h.r6wk!==h.r6?'/$'+h.r6wk:''):'-'}</td><td style="font-size:11px;color:var(--text2)">${h.note||'-'}</td><td><button class="btn btn-sm" onclick="openHotel('${h.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
   </div>
   <div class="card"><div class="card-title"><i class="ti ti-car"></i> 車輛管理</div>
     <div id="cars-list">${carsList.map((c,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input id="car-${i}" value="${c}" style="max-width:180px"><button class="btn btn-sm btn-danger" onclick="removeCar(${i})"><i class="ti ti-trash"></i></button></div>`).join('')}</div>
