@@ -2223,7 +2223,7 @@ function renderDispatch(){
     </div>`;
   }
   const allOrders=getAllOrders();
-  const soon=new Date();soon.setDate(soon.getDate()+5);
+  window._lastAllOrders=allOrders;
   const soonStr=soon.toISOString().slice(0,10);
   const urgentOrders=allOrders.filter(o=>o.start>=today&&o.start<=soonStr&&o.status==='待派車');
   const urgentHtml=urgentOrders.length?`<div class="warn-box" style="margin-bottom:12px"><i class="ti ti-bell-ringing"></i> <strong>5天內即將出團，尚未派車（${urgentOrders.length}筆）</strong><ul style="margin-top:6px;padding-left:16px">${urgentOrders.map(o=>`<li>${o.start} ${o.label}（${o.pax}人）</li>`).join('')}</ul></div>`:'';
@@ -2261,7 +2261,7 @@ function renderDispatch(){
       <td style="text-align:center">${o.pax}人${o.pax>4?'<span style="color:var(--red);font-size:10px"> ⚠️9座</span>':''}</td>
       <td style="text-align:center">${o.cars}</td>
       <td><span class="badge ${o.statusCls}">${o.status}</span></td>
-      <td><button class="btn btn-sm btn-primary" onclick="assignDriverModal('${o.id}','${o.type}','${o.label}','${o.start}','${o.end}')"><i class="ti ti-user-check"></i> 指派</button></td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="assignDriverModal('${o.id}','${o.type}','${o.label}','${o.start}','${o.end}')"><i class="ti ti-user-check"></i> 指派</button>${o.assignedDriver?`<button class="btn btn-sm btn-danger" onclick="quickCancelDispByOrderId('${o.id}')"><i class="ti ti-x"></i> 取消指派</button>`:''}</div></td>
     </tr>`).join('')}</tbody>
   </table></div>
   <div class="divider"></div>
@@ -2793,6 +2793,20 @@ async function quickCancelDisp(dispId,label){
   setSS('syncing','處理中…');
   await cancelDispatchById(dispId);
   renderDispatch();
+}
+// 從「全部訂單」列表點取消指派：先找出這筆訂單對應的派車記錄id，再取消
+function quickCancelDispByOrderId(orderId){
+  const o=(window._lastAllOrders||[]).find(x=>x.id===orderId);
+  if(!o)return;
+  let dispId=null;
+  if(o.type==='group'){
+    dispId=o.source?.disp?.id||null;
+  } else {
+    const d=dispatches.find(x=>x.privateId===o.privId&&(x.privateBusIdx??0)===(o.busIdx??0));
+    dispId=d?.id||null;
+  }
+  if(!dispId){alert('找不到對應的派車記錄，請改用行事曆上的方塊取消，或到派車記錄裡刪除');return;}
+  quickCancelDisp(dispId,o.label);
 }
 
 // ══════════════════ PAGE: 財務報表 ══════════════════
