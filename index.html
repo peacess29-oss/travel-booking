@@ -3835,6 +3835,16 @@ function renderFinance(){
         </div>
       </div>`;
     })()}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="fin-card" style="text-align:center;background:var(--green-l);border-color:var(--green)">
+        <div class="fin-card-label"><i class="ti ti-arrow-down"></i> 總收入</div>
+        <div class="fin-card-val" style="color:var(--green)">$${ti.toLocaleString()}</div>
+      </div>
+      <div class="fin-card" style="text-align:center;background:var(--red-l);border-color:#F09595">
+        <div class="fin-card-label"><i class="ti ti-arrow-up"></i> 總支出</div>
+        <div class="fin-card-val" style="color:var(--red)">$${te.toLocaleString()}</div>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
       ${finCard('profit-analysis','毛利分析',giProfit+piProfit,(giProfit+piProfit)>=0?'green':'red','ti-chart-bar')}
       <div class="fin-card" style="flex:2;min-width:140px;text-align:center;background:${np>=0?'var(--green-l)':'var(--red-l)'};border-color:${np>=0?'var(--green)':'#F09595'}">
