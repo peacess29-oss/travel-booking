@@ -4290,14 +4290,15 @@ function openPayrollDetail(driverIdOrName,isExternal){
   const total=trips.reduce((s,x)=>s+(isExternal?(x.outwage||0):(x.wage||0)),0);
   document.getElementById('pd-title').innerHTML=`<i class="ti ti-report-money"></i> ${name} － ${y}年${MONTHS[m]} ${isExternal?'外派費用':'薪資'}明細`;
   document.getElementById('pd-content').innerHTML=trips.length?`
-    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${trips.length} 趟，合計 <span style="color:var(--red);font-weight:600">$${total.toLocaleString()}</span></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">共 ${trips.length} 趟，合計 <span style="color:var(--red);font-weight:600">$${total.toLocaleString()}</span>　<span style="color:var(--text3)">（點任一列可修正該筆薪資）</span></div>
     <div class="tbl-wrap"><table class="xtable"><thead><tr>
-      <th>日期</th><th>車輛</th><th>行程</th><th style="text-align:right">${isExternal?'外派費用':'薪資'}</th>
-    </tr></thead><tbody>${trips.map(x=>`<tr>
+      <th>日期</th><th>車輛</th><th>行程</th><th style="text-align:right">${isExternal?'外派費用':'薪資'}</th><th></th>
+    </tr></thead><tbody>${trips.map(x=>`<tr style="cursor:pointer" onclick="cm('payroll-detail');openDisp('${x.id}')" title="點擊修正這筆薪資">
       <td>${x.start===x.end?x.start:x.start+'~'+x.end}</td>
       <td style="font-size:12px">${x.car||'-'}</td>
       <td style="font-size:12px">${x.label||x.note||'-'}</td>
       <td style="text-align:right;color:var(--red);font-weight:600">$${(isExternal?(x.outwage||0):(x.wage||0)).toLocaleString()}</td>
+      <td style="font-size:11px;color:var(--blue)"><i class="ti ti-edit"></i></td>
     </tr>`).join('')}</tbody></table></div>
   `:'<div class="empty">本月無記錄</div>';
   om('payroll-detail');
