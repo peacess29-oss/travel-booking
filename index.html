@@ -382,6 +382,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="fg2"><div><label>司機薪資（元）</label><input id="df-wage" type="number" placeholder="0" min="0"></div><div><label>外派車資（元）</label><input id="df-outwage" type="number" placeholder="0" min="0"></div></div>
   <div class="mb10"><label>備註</label><input id="df-note" placeholder="特殊說明"></div>
   <div id="df-conflict"></div>
+  <div id="df-pd-view"></div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-disp" style="display:none" onclick="delDisp()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('disp')">取消</button><button class="btn btn-primary" onclick="saveDisp()">確認派車</button></div></div>
 </div></div>
 
@@ -592,6 +593,7 @@ let paySelYear=new Date().getFullYear(),paySelMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
 // [修正] initListeners 防重複執行旗標
 let listenersInited=false;
+let notifyReady=false; // 避免首次載入把所有既有客上/客下資料當成新回報而狂發通知
 
 // ══════════════════ TAIWAN HOLIDAYS ══════════════════
 const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-28','2025-04-03','2025-04-04','2025-04-05','2025-05-01','2025-05-31','2025-06-01','2025-09-07','2025-10-10','2025-10-11','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-28','2026-04-04','2026-04-05','2026-05-01','2026-06-19','2026-06-20','2026-09-25','2026-09-26','2026-10-10']);
@@ -749,8 +751,24 @@ function initListeners(){
   db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
   db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));populateLoginSel();refresh();});
+  db.collection('dispatches').onSnapshot(s=>{
+    const oldMap={};dispatches.forEach(d=>oldMap[d.id]=d);
+    const newDispatches=s.docs.map(d=>({id:d.id,...d.data()}));
+    if(notifyReady&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
+      newDispatches.forEach(nd=>{
+        const od=oldMap[nd.id];
+        if(nd.pickupLoc&&(!od||!od.pickupLoc||od.pickupLoc.time!==nd.pickupLoc.time)){
+          try{new Notification('📍 司機回報客上',{body:(nd.label||nd.driverName||'派車記錄')+'　'+nd.pickupLoc.time});}catch(e){}
+        }
+        if(nd.dropoffLoc&&(!od||!od.dropoffLoc||od.dropoffLoc.time!==nd.dropoffLoc.time)){
+          try{new Notification('📍 司機回報客下',{body:(nd.label||nd.driverName||'派車記錄')+'　'+nd.dropoffLoc.time});}catch(e){}
+        }
+      });
+    }
+    dispatches=newDispatches;
+    refresh();
+    notifyReady=true;
+  });
   db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('expenses').onSnapshot(s=>{expenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
@@ -2690,7 +2708,23 @@ function openDisp(id='',dateStr=''){
   document.getElementById('df-note').value=d?.note||'';
   const dsel=document.getElementById('df-driver');dsel.innerHTML='<option value="">— 選擇 —</option>'+drivers.filter(x=>x.type==='own').map(x=>`<option value="${x.id}"${x.id===d?.driverId?' selected':''}>${x.name}</option>`).join('');
   const csel=document.getElementById('df-car');csel.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===d?.car?' selected':''}>${c}</option>`).join('');
-  toggleDrvSel();document.getElementById('df-conflict').innerHTML='';om('disp');
+  toggleDrvSel();document.getElementById('df-conflict').innerHTML='';
+  const pdEl=document.getElementById('df-pd-view');
+  if(pdEl){
+    if(d&&(d.pickupLoc||d.dropoffLoc)){
+      const mapEmbed=(loc)=>loc?`<iframe src="https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16&output=embed" style="width:100%;height:110px;border:0;border-radius:8px;margin-top:4px" loading="lazy"></iframe>`:'';
+      pdEl.innerHTML=`<div style="margin-bottom:10px;padding:10px;background:var(--bg2);border-radius:8px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">📍 司機回報的客上／客下定位</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:140px"><div style="font-size:12px">客上：${d.pickupLoc?'✅ '+d.pickupLoc.time:'尚未回報'}</div>${mapEmbed(d.pickupLoc)}</div>
+          <div style="flex:1;min-width:140px"><div style="font-size:12px">客下：${d.dropoffLoc?'✅ '+d.dropoffLoc.time:'尚未回報'}</div>${mapEmbed(d.dropoffLoc)}</div>
+        </div>
+      </div>`;
+    } else {
+      pdEl.innerHTML='';
+    }
+  }
+  om('disp');
 }
 function toggleDrvSel(){
   const isOwn=document.getElementById('df-dtype').value==='own';
@@ -4334,14 +4368,46 @@ function renderBalance(){
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
 const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
+// 客上／客下 GPS回報
+function pickupDropoffHtml(d){
+  const mapEmbed=(loc)=>loc?`<iframe src="https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16&output=embed" style="width:100%;height:120px;border:0;border-radius:8px;margin-top:6px" loading="lazy"></iframe>`:'';
+  return `<div style="margin-top:10px;padding:10px;background:var(--bg2);border-radius:8px">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:6px">客上／客下回報</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm ${d.pickupLoc?'btn-primary':''}" onclick="reportPD('${d.id}','pickup')"><i class="ti ti-map-pin"></i> ${d.pickupLoc?'✅ 已回報客上 '+(d.pickupLoc.time||''):'回報客上'}</button>
+      <button class="btn btn-sm ${d.dropoffLoc?'btn-primary':''}" onclick="reportPD('${d.id}','dropoff')"><i class="ti ti-map-pin"></i> ${d.dropoffLoc?'✅ 已回報客下 '+(d.dropoffLoc.time||''):'回報客下'}</button>
+    </div>
+    ${mapEmbed(d.pickupLoc)}
+    ${mapEmbed(d.dropoffLoc)}
+  </div>`;
+}
+async function reportPD(dispId,kind){
+  if(!navigator.geolocation){alert('此裝置/瀏覽器不支援定位功能');return;}
+  const label=kind==='pickup'?'客上':'客下';
+  if(!confirm(`確定要回報「${label}」嗎？系統會記錄目前的GPS位置與時間。`))return;
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const loc={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toTimeString().slice(0,5)};
+    setSS('syncing','儲存中…');
+    try{
+      await db.collection('dispatches').doc(dispId).update({[kind+'Loc']:loc});
+      const idx=dispatches.findIndex(x=>x.id===dispId);
+      if(idx>=0) dispatches[idx]={...dispatches[idx],[kind+'Loc']:loc};
+      renderDriverPage();
+    }catch(e){alert('回報失敗，請檢查網路連線後再試一次');}
+  },err=>{
+    alert('無法取得定位，請確認已允許瀏覽器/APP使用定位功能。('+err.message+')');
+  },{enableHighAccuracy:true,timeout:10000});
+}
 function renderDriverPage(){
   const el=document.getElementById('p-driver');
   const drv=drivers.find(d=>d.id===curDriverId);if(!drv){el.innerHTML='<div class="empty">找不到司機資料</div>';return;}
   const today=new Date().toISOString().slice(0,10);
 
-  // ── 我的行程（未來/進行中，有指派給此司機的 dispatch）──
+  // ── 我的行程（未來/進行中 + 最近14天內已結束，讓司機結束後幾天內仍能補記/查現金流水）──
+  const recentCutoff=new Date();recentCutoff.setDate(recentCutoff.getDate()-14);
+  const recentCutoffStr=recentCutoff.toISOString().slice(0,10);
   const myDisps=dispatches.filter(d=>
-    d.end>=today&&(
+    d.end>=recentCutoffStr&&(
       (d.driverType==='own'&&d.driverId===curDriverId)||
       (d.driverType==='own'&&d.driverName===drv.name)
     )
@@ -4355,7 +4421,7 @@ function renderDriverPage(){
     seenKey.add(key);return true;
   });
 
-  const scheduleHtml=myOrders.length===0?'<div class="empty" style="padding:12px">目前無即將出發的行程</div>':myOrders.map(d=>{
+  const scheduleHtml=myOrders.length===0?'<div class="empty" style="padding:12px">目前無即將出發或近期已結束的行程</div>':myOrders.map(d=>{
     // 包車團
     if(d.privateId){
       const p=privates.find(x=>x.id===d.privateId);
@@ -4384,7 +4450,7 @@ function renderDriverPage(){
       // 行程備註
       const itinHtml=p.itinerary?`<div style="margin-top:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">行程備註</div><pre style="font-family:inherit;white-space:pre-wrap;font-size:13px;margin:0;color:var(--text)">${p.itinerary}</pre></div>`:'';
       const isActive=p.start<=today&&today<=p.end;
-      const badge=isActive?`<span class="badge badge-amber">出團中</span>`:`<span class="badge badge-green">即將出發</span>`;
+      const badge=isActive?`<span class="badge badge-amber">出團中</span>`:(p.end<today?`<span class="badge" style="background:var(--bg2);color:var(--text2)">已結束</span>`:`<span class="badge badge-green">即將出發</span>`);
       return`<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
@@ -4408,6 +4474,7 @@ function renderDriverPage(){
         ${itinHtml}
         ${p.note?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text2)"><span style="font-weight:600">備註：</span>${p.note}</div>`:''}
         <div style="margin-top:10px"><button class="btn btn-sm" onclick="openMyCashFlowPriv('${p.id}')"><i class="ti ti-cash"></i> 現金流水</button></div>
+        ${pickupDropoffHtml(d)}
       </div>`;
     }
     // 拼團
@@ -4421,7 +4488,7 @@ function renderDriverPage(){
       const t=tours.find(x=>x.id===tId);
       const tName=t?t.name:d.label||'拼團';
       const isActive=d.start<=today&&today<=d.end;
-      const badge=isActive?`<span class="badge badge-amber">出團中</span>`:`<span class="badge badge-green">即將出發</span>`;
+      const badge=isActive?`<span class="badge badge-amber">出團中</span>`:(d.end<today?`<span class="badge" style="background:var(--bg2);color:var(--text2)">已結束</span>`:`<span class="badge badge-green">即將出發</span>`);
       // 取該車乘客：從 groupTourId 解析 busIdx
       let passengerHtml='';
       let busIdx=0;
@@ -4464,6 +4531,7 @@ function renderDriverPage(){
         ${passengerHtml}
         ${d.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px">備註：${d.note}</div>`:''}
         ${t?`<div style="margin-top:10px"><button class="btn btn-sm" onclick="openMyCashFlowGroup('${tId}','${dateStr}',${busIdx})"><i class="ti ti-cash"></i> 現金流水</button></div>`:''}
+        ${pickupDropoffHtml(d)}
       </div>`;
     }
     return'';
@@ -5251,6 +5319,23 @@ function exportCustomersExcel(){
   XLSX.writeFile(wb,'客人明細_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
+async function enableBrowserNotify(){
+  if(typeof Notification==='undefined'){alert('此瀏覽器不支援通知功能');return;}
+  const perm=await Notification.requestPermission();
+  renderNotifyStatus();
+  if(perm==='granted'){
+    alert('已開啟通知！保持這個網頁分頁開著（可切到背景），司機回報客上/客下時就會收到系統通知。');
+  } else {
+    alert('未授權通知。如需開啟，請至瀏覽器網址列旁的鎖頭/設定圖示手動允許此網站的通知權限。');
+  }
+}
+function renderNotifyStatus(){
+  const el=document.getElementById('notify-status');
+  if(!el)return;
+  if(typeof Notification==='undefined'){el.innerHTML='<span style="color:var(--text2)">此瀏覽器不支援通知功能</span>';return;}
+  const p=Notification.permission;
+  el.innerHTML=p==='granted'?'<span style="color:var(--green)">✅ 已開啟通知</span>':p==='denied'?'<span style="color:var(--red)">❌ 已封鎖通知，請至瀏覽器設定手動允許</span>':'<span style="color:var(--text2)">尚未開啟通知</span>';
+}
 function renderSettings(){
   const el=document.getElementById('p-settings');
   el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
@@ -5273,6 +5358,15 @@ function renderSettings(){
   <div class="card"><div class="card-title"><i class="ti ti-adjustments"></i> 成本預設值</div>
     <div class="fg2"><div><label>外派司機每天費用（元）</label><input id="cs-day" type="number" value="${costSettings.driverDayRate||5000}"></div><div><label>外宿補貼每晚（元）</label><input id="cs-night" type="number" value="${costSettings.driverNightRate||1000}"></div></div>
     <button class="btn btn-primary btn-sm" onclick="saveCostSetting()"><i class="ti ti-device-floppy"></i> 儲存設定</button>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-bell"></i> 客上／客下 瀏覽器通知</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+      開啟後，只要這個網頁分頁還開著（可切到背景、縮到最小，但不能整個關閉），司機回報「客上」或「客下」時會立即跳出瀏覽器系統通知。<br>
+      需要每台想接收通知的電腦/手機瀏覽器各自授權一次。
+    </div>
+    <div id="notify-status" style="margin-bottom:8px;font-size:13px"></div>
+    <button class="btn btn-primary btn-sm" onclick="enableBrowserNotify()"><i class="ti ti-bell-ringing"></i> 開啟通知授權</button>
   </div>
   <div class="card">
     <div class="card-title"><i class="ti ti-refresh"></i> 拼團住宿費用重新試算（一次性工具）</div>
@@ -5298,6 +5392,7 @@ function renderSettings(){
   </div>`;
   // 更新上次備份狀態顯示
   setTimeout(updateBackupStatus,0);
+  setTimeout(renderNotifyStatus,0);
 }
 
 // ══════════════════ 拼團住宿費用重新試算（一次性工具） ══════════════════
