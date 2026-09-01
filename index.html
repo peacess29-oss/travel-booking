@@ -520,7 +520,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <div class="overlay" id="m-rec"><div class="modal">
   <div class="mh"><span class="mh-title" id="mr-title">新增記錄</span><button class="btn btn-sm" onclick="cm('rec')"><i class="ti ti-x"></i></button></div>
   <div class="fg2"><div><label>日期 *</label><input id="rf-date" type="date"></div><div><label>車輛</label><select id="rf-car"><option value="">— 選擇 —</option></select></div></div>
-  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><optgroup label="收入"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option></optgroup><optgroup label="支出"><option value="fuel">加油</option><option value="urea">尿素</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="hotel">住宿代付</option><option value="other">其他支出</option></optgroup><optgroup label="現金移轉"><option value="remit">回帳公司</option></optgroup></select></div><div><label id="rf-amt-label">金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
+  <div class="fg2"><div><label>類別 *</label><select id="rf-type" onchange="toggleRecFields()"><optgroup label="收入"><option value="income">客收</option><option value="extra">外收</option><option value="tips">小費</option></optgroup><optgroup label="支出"><option value="fuel">加油</option><option value="urea">尿素</option><option value="parking">停車費</option><option value="toll">過路費</option><option value="maint">保養/維修</option><option value="inspection">驗車</option><option value="storage">寄鋪</option><option value="hotel">住宿代付</option><option value="outpay">代付外派司機薪資</option><option value="other">其他支出</option></optgroup><optgroup label="現金移轉"><option value="remit">回帳公司</option></optgroup></select></div><div><label id="rf-amt-label">金額（元）</label><input id="rf-amt" type="number" placeholder="0"></div></div>
   <div id="rf-mileage-wrap" style="display:none" class="mb10"><label>里程數（公里）*</label><input id="rf-mileage" type="number" placeholder="45230"><div style="font-size:11px;color:var(--text2);margin-top:3px">加油/驗車必填，用於計算油耗</div></div>
   <div id="rf-fuel-wrap" style="display:none" class="mb10"><label>加油量（公升）</label><input id="rf-liters" type="number" step="0.1" placeholder="40.5"><div id="rf-fuel-prev" style="font-size:12px;color:var(--blue-d);margin-top:3px"></div></div>
   <div id="rf-maint-wrap" style="display:none"><div class="fg2"><div><label>保養項目</label><select id="rf-maint"><option value="oil">機油更換</option><option value="tire">輪胎</option><option value="brake">煞車</option><option value="ac">冷氣</option><option value="battery">電瓶</option><option value="filter">濾清器</option><option value="repair">維修</option><option value="other">其他</option></select></div><div><label>里程（選填）</label><input id="rf-maint-km" type="number" placeholder="保養里程"></div></div></div>
@@ -2998,6 +2998,10 @@ function buildPrivCashFlow(p){
     driverRecs.filter(r=>r.advance&&r.advanceLinkType==='priv'&&r.advanceLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
       events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
+    // 代付外派司機薪資：只影響此司機現金流水，不重複計入公司支出（外派車資已在派車總表計過）
+    driverRecs.filter(r=>r.type==='outpay'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+      events.push({date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
   }
   (p.nightlyHotels||[]).forEach((nh,i)=>{
     if((nh.paymentType||'company')!=='driver')return;
@@ -3307,6 +3311,10 @@ function buildGroupCashFlow(tourId,date,busIdx){
     driverRecs.filter(r=>r.advance&&r.advanceLinkType==='group'&&r.advanceLinkId===thisGroupTourId&&r.driverId===driverId).forEach(r=>{
       events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
+    // 代付外派司機薪資：只影響此司機現金流水，不重複計入公司支出
+    driverRecs.filter(r=>r.type==='outpay'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+      events.push({date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
   }
   const gn=getGroupNightly(tourId,date,busIdx);
   (gn?.nightlyHotels||[]).forEach((nh,i)=>{
@@ -3480,7 +3488,7 @@ function calcDispCost(y,m,isYear){
   return dispatches.filter(d=>isYear?inYear(d.start,y):inMonth(d.start,y,m))
     .reduce((s,d)=>({wage:s.wage+(d.wage||0),outwage:s.outwage+(d.outwage||0)}),{wage:0,outwage:0});
 }
-function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
+function calcDE(y,m,isYear){return driverRecs.filter(r=>r.type!=='income'&&r.type!=='extra'&&r.type!=='tips'&&r.type!=='remit'&&r.type!=='hotel'&&r.type!=='outpay'&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));}
 // 手動輸入的住宿代付（沒有連結任何包車團/拼團排程），需另外加總，否則會漏算
 function calcManualHotelExpense(y,m,isYear){
   const claimedIds=new Set();
@@ -4393,7 +4401,7 @@ function renderBalance(){
 
 // ══════════════════ PAGE: 司機頁面 ══════════════════
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
-const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
+const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',outpay:'代付外派司機薪資',other:'其他',remit:'回帳公司'};
 // 客上／客下 GPS回報
 // ══════════════════ PAGE: 客上客下記錄（僅管理員） ══════════════════
 // ══════════════════ PAGE: 待請款清單（僅管理員） ══════════════════
