@@ -192,6 +192,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-hotel-stat" class="page"></div>
   <div id="p-vehicle-status" class="page"></div>
   <div id="p-payroll" class="page"></div>
+  <div id="p-checkin" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -813,6 +814,7 @@ function refresh(){
   if(curPage==='p-hotel-stat')renderHotelStat();
   if(curPage==='p-vehicle-status')renderVehicleStatus();
   if(curPage==='p-payroll')renderPayroll();
+  if(curPage==='p-checkin')renderCheckin();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -968,6 +970,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-hotel-stat',this)"><i class="ti ti-building"></i> 酒店統計</button>
     <button class="nav-tab" onclick="showPage('p-vehicle-status',this)"><i class="ti ti-car"></i> 車輛狀況</button>
     <button class="nav-tab" onclick="showPage('p-payroll',this)"><i class="ti ti-report-money"></i> 薪資結算</button>
+    <button class="nav-tab" onclick="showPage('p-checkin',this)"><i class="ti ti-map-pin"></i> 客上客下記錄</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -997,6 +1000,7 @@ function showPage(id, tabEl){
   else if(id==='p-hotel-stat')renderHotelStat();
   else if(id==='p-vehicle-status')renderVehicleStatus();
   else if(id==='p-payroll')renderPayroll();
+  else if(id==='p-checkin')renderCheckin();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -4369,6 +4373,42 @@ function renderBalance(){
 const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'電瓶',filter:'濾清器',repair:'維修',other:'其他'};
 const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
 // 客上／客下 GPS回報
+// ══════════════════ PAGE: 客上客下記錄（僅管理員） ══════════════════
+function renderCheckin(){
+  const el=document.getElementById('p-checkin');
+  if(!el)return;
+  const rows=dispatches.filter(d=>d.pickupLoc||d.dropoffLoc)
+    .sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+  el.innerHTML=`<div class="card">
+    <div class="card-title"><i class="ti ti-map-pin"></i> 客上客下記錄</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">彙整所有司機回報的客上／客下定位，點一列展開查看地圖。</div>
+    ${!rows.length?'<div class="empty">目前尚無任何客上/客下回報記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>日期</th><th>司機</th><th>行程</th><th>客上</th><th>客下</th>
+    </tr></thead><tbody>${rows.map((d,i)=>`
+      <tr style="cursor:pointer" onclick="toggleCheckinRow(${i})">
+        <td>${d.start===d.end?d.start:d.start+'~'+d.end}</td>
+        <td style="font-size:12px">${d.driverName||'-'}</td>
+        <td style="font-size:12px">${d.label||d.note||'-'}</td>
+        <td style="font-size:12px">${d.pickupLoc?'✅ '+d.pickupLoc.time:'<span style="color:var(--text3)">尚未回報</span>'}</td>
+        <td style="font-size:12px">${d.dropoffLoc?'✅ '+d.dropoffLoc.time:'<span style="color:var(--text3)">尚未回報</span>'}</td>
+      </tr>
+      <tr id="checkin-detail-${i}" style="display:none"><td colspan="5">${pickupDropoffMapsHtml(d)}</td></tr>
+    `).join('')}</tbody></table></div>`}
+  </div>`;
+  window._checkinRows=rows;
+}
+function pickupDropoffMapsHtml(d){
+  const mapEmbed=(loc)=>loc?`<iframe src="https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16&output=embed" style="width:100%;height:150px;border:0;border-radius:8px;margin-top:4px" loading="lazy"></iframe>`:'<div class="empty" style="padding:8px">尚未回報</div>';
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;padding:8px 0">
+    <div style="flex:1;min-width:180px"><div style="font-size:12px;font-weight:600">客上${d.pickupLoc?'（'+d.pickupLoc.time+'）':''}</div>${mapEmbed(d.pickupLoc)}</div>
+    <div style="flex:1;min-width:180px"><div style="font-size:12px;font-weight:600">客下${d.dropoffLoc?'（'+d.dropoffLoc.time+'）':''}</div>${mapEmbed(d.dropoffLoc)}</div>
+  </div>`;
+}
+function toggleCheckinRow(i){
+  const el=document.getElementById('checkin-detail-'+i);
+  if(!el)return;
+  el.style.display=el.style.display==='none'?'table-row':'none';
+}
 function pickupDropoffHtml(d){
   const mapEmbed=(loc)=>loc?`<iframe src="https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16&output=embed" style="width:100%;height:120px;border:0;border-radius:8px;margin-top:6px" loading="lazy"></iframe>`:'';
   return `<div style="margin-top:10px;padding:10px;background:var(--bg2);border-radius:8px">
