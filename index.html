@@ -194,6 +194,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-payroll" class="page"></div>
   <div id="p-checkin" class="page"></div>
   <div id="p-reimburse" class="page"></div>
+  <div id="p-reconcile" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -601,6 +602,7 @@ let hotelStatStart='',hotelStatEnd='',hotelStatFilter='';
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let finYear=new Date().getFullYear(),finMonth=new Date().getMonth();
 let paySelYear=new Date().getFullYear(),paySelMonth=new Date().getMonth();
+let reconSelYear=new Date().getFullYear(),reconSelMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
 // [修正] initListeners 防重複執行旗標
 let listenersInited=false;
@@ -826,6 +828,7 @@ function refresh(){
   if(curPage==='p-payroll')renderPayroll();
   if(curPage==='p-checkin')renderCheckin();
   if(curPage==='p-reimburse')renderReimburse();
+  if(curPage==='p-reconcile')renderReconcile();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -983,6 +986,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-payroll',this)"><i class="ti ti-report-money"></i> 薪資結算</button>
     <button class="nav-tab" onclick="showPage('p-checkin',this)"><i class="ti ti-map-pin"></i> 客上客下記錄</button>
     <button class="nav-tab" onclick="showPage('p-reimburse',this)"><i class="ti ti-receipt"></i> 待請款清單</button>
+    <button class="nav-tab" onclick="showPage('p-reconcile',this)"><i class="ti ti-scale"></i> 回帳對帳</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -1014,6 +1018,7 @@ function showPage(id, tabEl){
   else if(id==='p-payroll')renderPayroll();
   else if(id==='p-checkin')renderCheckin();
   else if(id==='p-reimburse')renderReimburse();
+  else if(id==='p-reconcile')renderReconcile();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -4405,6 +4410,73 @@ const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人�
 // 客上／客下 GPS回報
 // ══════════════════ PAGE: 客上客下記錄（僅管理員） ══════════════════
 // ══════════════════ PAGE: 待請款清單（僅管理員） ══════════════════
+// ══════════════════ PAGE: 回帳對帳（僅管理員） ══════════════════
+function setReconSel(y,m){reconSelYear=y;reconSelMonth=m;renderReconcile();}
+function renderReconcile(){
+  const el=document.getElementById('p-reconcile');
+  if(!el)return;
+  const y=reconSelYear,m=reconSelMonth;
+  const ownDrivers=drivers.filter(d=>d.type==='own');
+  const rows=ownDrivers.map(d=>{
+    const recs=driverRecs.filter(r=>r.driverId===d.id&&inMonth(r.date,y,m));
+    const collected=recs.filter(r=>r.type==='income').reduce((s,r)=>s+(r.amount||0),0);
+    const misc=recs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)).reduce((s,r)=>s+(r.amount||0),0);
+    const advance=recs.filter(r=>r.advance).reduce((s,r)=>s+(r.amount||0),0);
+    const outpay=recs.filter(r=>r.type==='outpay').reduce((s,r)=>s+(r.amount||0),0);
+    const remitRecs=recs.filter(r=>r.type==='remit');
+    const remitActual=remitRecs.reduce((s,r)=>s+(r.amount||0),0);
+    const expected=collected-misc-advance-outpay;
+    const diff=expected-remitActual;
+    return{driver:d,collected,misc,advance,outpay,expected,remitActual,diff,remitCount:remitRecs.length,hasActivity:collected||misc||advance||outpay||remitActual};
+  }).filter(x=>x.hasActivity);
+  el.innerHTML=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span class="card-title" style="margin:0"><i class="ti ti-scale"></i> 回帳對帳</span>
+      <div style="display:flex;gap:8px">
+        <select onchange="setReconSel(reconSelYear,parseInt(this.value))" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>
+        <select onchange="setReconSel(parseInt(this.value),reconSelMonth)" style="height:34px;font-size:13px">${[2024,2025,2026].map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+      應回帳 ＝ 客收 － 雜支（油錢/停車等） － 自行代墊 － 代付外派薪資。<br>
+      差額不為0代表：可能還沒回帳完（尚有現金在司機手上）、回帳金額打錯，或有記錄漏登，需要人工確認。
+    </div>
+    ${!rows.length?'<div class="empty">本月無自家司機現金相關記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>司機</th><th style="text-align:right">客收</th><th style="text-align:right">支出/代墊</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回帳</th><th style="text-align:right">差額</th><th></th>
+    </tr></thead><tbody>${rows.map(x=>`<tr>
+      <td style="font-weight:600">${x.driver.name}</td>
+      <td style="text-align:right">$${x.collected.toLocaleString()}</td>
+      <td style="text-align:right;color:var(--text2)">$${(x.misc+x.advance+x.outpay).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:600">$${x.expected.toLocaleString()}</td>
+      <td style="text-align:right">$${x.remitActual.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700;color:${x.diff===0?'var(--green)':'var(--red)'}">${x.diff===0?'✅ $0':'⚠️ $'+x.diff.toLocaleString()}</td>
+      <td><button class="btn btn-sm" onclick="openReconDetail('${x.driver.id}')"><i class="ti ti-list"></i> 明細</button></td>
+    </tr>`).join('')}</tbody></table></div>`}
+  </div>`;
+}
+function openReconDetail(driverId){
+  const d=drivers.find(x=>x.id===driverId);if(!d)return;
+  const y=reconSelYear,m=reconSelMonth;
+  const recs=driverRecs.filter(r=>r.driverId===driverId&&inMonth(r.date,y,m)&&(r.type==='income'||CASHFLOW_EXP_TYPES.includes(r.type)||r.advance||r.type==='outpay'||r.type==='remit')).sort((a,b)=>a.date>b.date?1:-1);
+  document.getElementById('pd-title').innerHTML=`<i class="ti ti-scale"></i> ${d.name} － ${y}年${MONTHS[m]} 現金明細`;
+  document.getElementById('pd-content').innerHTML=recs.length?`
+    <div class="tbl-wrap"><table class="xtable"><thead><tr>
+      <th>日期</th><th>類別</th><th>備註</th><th style="text-align:right">金額</th><th></th>
+    </tr></thead><tbody>${recs.map(r=>{
+      const isIncome=r.type==='income';
+      const sign=isIncome?'+':'-';
+      const color=isIncome?'var(--green)':(r.type==='remit'?'var(--blue)':'var(--red)');
+      return`<tr style="cursor:pointer" onclick="cm('payroll-detail');openRec('${r.id}')" title="點擊修正這筆記錄">
+        <td>${r.date}</td>
+        <td style="font-size:12px">${TYPE_N[r.type]||r.type}${r.advance?'（自行代墊）':''}</td>
+        <td style="font-size:12px;color:var(--text2)">${r.note||'-'}</td>
+        <td style="text-align:right;color:${color};font-weight:600">${sign}$${(r.amount||0).toLocaleString()}</td>
+        <td style="font-size:11px;color:var(--blue)"><i class="ti ti-edit"></i></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+  `:'<div class="empty">本月無記錄</div>';
+  om('payroll-detail');
+}
 function renderReimburse(){
   const el=document.getElementById('p-reimburse');
   if(!el)return;
