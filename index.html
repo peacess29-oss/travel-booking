@@ -193,6 +193,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-vehicle-status" class="page"></div>
   <div id="p-payroll" class="page"></div>
   <div id="p-checkin" class="page"></div>
+  <div id="p-reimburse" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -534,6 +535,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-hotel-items"></div>
     <div id="rf-hotel-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
   </div>
+  <div id="rf-advance-sec" style="display:none;margin-bottom:10px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
+      <input type="checkbox" id="rf-advance" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，要請款
+    </label>
+    <div id="rf-advance-link-wrap" style="display:none">
+      <label style="font-size:11px;color:var(--text2)">要不要連結到某一團？（連結後會自動算進那團的現金流水；不連結則列入「待請款清單」）</label>
+      <select id="rf-advance-link" style="width:100%;height:34px;font-size:13px"><option value="">— 不連結（進待請款清單）—</option></select>
+    </div>
+  </div>
   <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
   <div id="rf-km-alert" style="display:none" class="warn-box">里程數低於上次記錄，請確認</div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-rec" style="display:none" onclick="delRec()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('rec')">取消</button><button class="btn btn-primary" onclick="saveRec()">儲存</button></div></div>
@@ -815,6 +825,7 @@ function refresh(){
   if(curPage==='p-vehicle-status')renderVehicleStatus();
   if(curPage==='p-payroll')renderPayroll();
   if(curPage==='p-checkin')renderCheckin();
+  if(curPage==='p-reimburse')renderReimburse();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -971,6 +982,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-vehicle-status',this)"><i class="ti ti-car"></i> 車輛狀況</button>
     <button class="nav-tab" onclick="showPage('p-payroll',this)"><i class="ti ti-report-money"></i> 薪資結算</button>
     <button class="nav-tab" onclick="showPage('p-checkin',this)"><i class="ti ti-map-pin"></i> 客上客下記錄</button>
+    <button class="nav-tab" onclick="showPage('p-reimburse',this)"><i class="ti ti-receipt"></i> 待請款清單</button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -1001,6 +1013,7 @@ function showPage(id, tabEl){
   else if(id==='p-vehicle-status')renderVehicleStatus();
   else if(id==='p-payroll')renderPayroll();
   else if(id==='p-checkin')renderCheckin();
+  else if(id==='p-reimburse')renderReimburse();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -2964,7 +2977,7 @@ const CASHFLOW_EXP_TYPES=['fuel','urea','parking','toll','maint','inspection','s
 function calcPrivMisc(p){
   const driverIds=getPrivDriverIds(p);
   if(!driverIds.length||!p.start||!p.end)return 0;
-  return driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+  return driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
     .reduce((s,r)=>s+(r.amount||0),0);
 }
 // 組合單一包車團的現金流水：客收(既有income記錄關聯)、回帳公司、代付支出(日期區間)、住宿代付
@@ -2978,8 +2991,12 @@ function buildPrivCashFlow(p){
     driverRecs.filter(r=>r.type==='remit'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
+    // 自行代墊、明確指定連結到這團的支出（不限日期範圍）
+    driverRecs.filter(r=>r.advance&&r.advanceLinkType==='priv'&&r.advanceLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
+      events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
   (p.nightlyHotels||[]).forEach((nh,i)=>{
@@ -3061,7 +3078,7 @@ function buildPrivCostBreakdown(p){
   const miscRows=[];
   const driverIds=getPrivDriverIds(p);
   if(driverIds.length&&p.start&&p.end){
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
       .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
   }
   const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
@@ -3282,8 +3299,13 @@ function buildGroupCashFlow(tourId,date,busIdx){
     driverRecs.filter(r=>r.type==='remit'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
       events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
       events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+    });
+    // 自行代墊、明確指定連結到這車次的支出（不限日期範圍）
+    const thisGroupTourId=tourId+'_'+date+'_bus'+busIdx;
+    driverRecs.filter(r=>r.advance&&r.advanceLinkType==='group'&&r.advanceLinkId===thisGroupTourId&&r.driverId===driverId).forEach(r=>{
+      events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
   const gn=getGroupNightly(tourId,date,busIdx);
@@ -3353,7 +3375,7 @@ function buildGroupCostBreakdown(tourId,date,busIdx){
   }
   const miscRows=[];
   if(disp?.driverId){
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
       .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
   }
   const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
@@ -4374,6 +4396,41 @@ const MAINT_N={oil:'機油',tire:'輪胎',brake:'煞車',ac:'冷氣',battery:'�
 const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人）',fuel:'加油',urea:'尿素',parking:'停車費',toll:'過路費',maint:'保養/維修',inspection:'驗車',storage:'寄鋪',hotel:'住宿代付',other:'其他',remit:'回帳公司'};
 // 客上／客下 GPS回報
 // ══════════════════ PAGE: 客上客下記錄（僅管理員） ══════════════════
+// ══════════════════ PAGE: 待請款清單（僅管理員） ══════════════════
+function renderReimburse(){
+  const el=document.getElementById('p-reimburse');
+  if(!el)return;
+  const all=driverRecs.filter(r=>r.advance&&!r.advanceLinkType).sort((a,b)=>b.date>a.date?1:-1);
+  const pending=all.filter(r=>!r.advanceSettled);
+  const settled=all.filter(r=>r.advanceSettled);
+  const pendingTotal=pending.reduce((s,r)=>s+(r.amount||0),0);
+  const row=(r,showBtn)=>`<tr>
+    <td>${r.date}</td>
+    <td style="font-size:12px">${r.driverName||'-'}</td>
+    <td style="font-size:12px">${TYPE_N[r.type]||r.type}</td>
+    <td style="font-size:12px;color:var(--text2)">${r.note||'-'}</td>
+    <td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td>
+    <td>${showBtn?`<button class="btn btn-sm btn-primary" onclick="markAdvanceSettled('${r.id}',true)"><i class="ti ti-check"></i> 標記已請款</button>`:`<button class="btn btn-sm" onclick="markAdvanceSettled('${r.id}',false)">取消標記</button>`}</td>
+  </tr>`;
+  el.innerHTML=`<div class="card">
+    <div class="card-title"><i class="ti ti-receipt"></i> 待請款清單</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">司機勾選「自行代墊，要請款」但沒有連結特定行程的支出，會列在這裡。付款給司機後按「標記已請款」。</div>
+    <div class="stat-card" style="max-width:220px;margin-bottom:14px"><div class="stat-label">目前待請款總額</div><div class="stat-val" style="color:var(--red)">$${pendingTotal.toLocaleString()}</div></div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px">尚未請款（${pending.length}）</div>
+    ${!pending.length?'<div class="empty">目前沒有待請款項目</div>':`<div class="tbl-wrap" style="margin-bottom:16px"><table class="xtable"><thead><tr><th>日期</th><th>司機</th><th>類別</th><th>備註</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${pending.map(r=>row(r,true)).join('')}</tbody></table></div>`}
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text2)">已請款（${settled.length}）</div>
+    ${!settled.length?'<div class="empty">尚無已請款記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>司機</th><th>類別</th><th>備註</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${settled.map(r=>row(r,false)).join('')}</tbody></table></div>`}
+  </div>`;
+}
+async function markAdvanceSettled(id,settled){
+  setSS('syncing','儲存中…');
+  try{
+    await db.collection('driverRecs').doc(id).update({advanceSettled:settled});
+    const idx=driverRecs.findIndex(x=>x.id===id);
+    if(idx>=0)driverRecs[idx]={...driverRecs[idx],advanceSettled:settled};
+    renderReimburse();
+  }catch(e){alert('更新失敗，請稍後再試');}
+}
 function renderCheckin(){
   const el=document.getElementById('p-checkin');
   if(!el)return;
@@ -4704,7 +4761,20 @@ function openRec(id='',defaultType=''){
   cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===defaultCar?' selected':''}>${c}</option>`).join('');
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
+  if(document.getElementById('rf-advance'))document.getElementById('rf-advance').checked=!!r?.advance;
   toggleRecFields();
+  if(r?.advance&&r?.advanceLinkType&&r?.advanceLinkId){
+    populateAdvanceLinkOptions();
+    const linkSel=document.getElementById('rf-advance-link');
+    if(linkSel){
+      const val=r.advanceLinkType+':'+r.advanceLinkId;
+      if(![...linkSel.options].some(o=>o.value===val)){
+        linkSel.innerHTML+=`<option value="${val}">（原連結行程，已不在近期清單）</option>`;
+      }
+      linkSel.value=val;
+    }
+    document.getElementById('rf-advance-link-wrap').style.display='block';
+  }
   // 日期改變時：重新觸發 toggleRecFields（更新備註、待收項目等）
   const dateInput=document.getElementById('rf-date');
   dateInput.onchange=function(){
@@ -4728,6 +4798,28 @@ function openRec(id='',defaultType=''){
   om('rec');
   if(r&&r.type==='hotel') checkHotelDiff();
 }
+function toggleAdvanceLink(){
+  const chk=document.getElementById('rf-advance').checked;
+  document.getElementById('rf-advance-link-wrap').style.display=chk?'block':'none';
+  if(chk)populateAdvanceLinkOptions();
+}
+function populateAdvanceLinkOptions(){
+  const sel=document.getElementById('rf-advance-link');
+  if(!sel||!curDriverId)return;
+  const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-45);
+  const cutoffPastStr=cutoffPast.toISOString().slice(0,10);
+  const cutoffFuture=new Date();cutoffFuture.setDate(cutoffFuture.getDate()+45);
+  const cutoffFutureStr=cutoffFuture.toISOString().slice(0,10);
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&d.end>=cutoffPastStr&&d.start<=cutoffFutureStr).sort((a,b)=>a.start>b.start?1:-1);
+  const cur=sel.value;
+  const opts=myDisps.map(d=>{
+    if(d.privateId)return`<option value="priv:${d.privateId}">${d.start}${d.start!==d.end?'~'+d.end:''} ${d.label||''}</option>`;
+    if(d.groupTourId)return`<option value="group:${d.groupTourId}">${d.start} ${d.label||''}</option>`;
+    return '';
+  }).filter(Boolean);
+  sel.innerHTML='<option value="">— 不連結（進待請款清單）—</option>'+opts.join('');
+  if(cur)sel.value=cur;
+}
 function toggleRecFields(){
   const t=document.getElementById('rf-type').value;
   document.getElementById('rf-mileage-wrap').style.display=(t==='fuel'||t==='inspection')?'block':'none';
@@ -4736,6 +4828,9 @@ function toggleRecFields(){
   document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
   document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
   document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
+  const advanceEligible=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(t);
+  document.getElementById('rf-advance-sec').style.display=advanceEligible?'block':'none';
+  if(advanceEligible)populateAdvanceLinkOptions();
   const date=document.getElementById('rf-date').value;
   const noteEl=document.getElementById('rf-note');
   const isPersonalIncome=(t==='extra'||t==='tips');
@@ -4993,7 +5088,16 @@ async function saveRec(){
       if(balItems2[idx].type==='private'&&balItems2[idx].privateId) relatedPrivateIds.push(balItems2[idx].privateId);
     });
   }
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds};
+  const advanceEligible2=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(type);
+  const isAdvance=advanceEligible2&&!!document.getElementById('rf-advance')?.checked;
+  const advanceLinkVal=isAdvance?(document.getElementById('rf-advance-link')?.value||''):'';
+  let advanceLinkType='',advanceLinkId='';
+  if(advanceLinkVal){
+    const[lt,...rest]=advanceLinkVal.split(':');
+    advanceLinkType=lt;advanceLinkId=rest.join(':');
+  }
+  const existingRec=eIds.rec?driverRecs.find(x=>x.id===eIds.rec):null;
+  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,advance:isAdvance,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
   if(type==='hotel'){
     if(hotelSel){
       if(hotelSel.kind==='group'){
