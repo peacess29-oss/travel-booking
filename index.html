@@ -536,6 +536,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="rf-income-sec" style="display:none;margin-bottom:10px">
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">當天尾款待收項目</div>
     <div id="rf-balance-items"></div>
+    <div style="margin-top:8px">
+      <label style="font-size:11px;color:var(--text2)">或者手動選擇這筆客收屬於哪一團（如果上面沒有你要的項目）</label>
+      <select id="rf-income-link" style="width:100%;height:34px;font-size:13px"><option value="">— 不連結 —</option></select>
+    </div>
   </div>
   <!-- 住宿代付：選擇應現場付現的住宿晚數 -->
   <div id="rf-hotel-sec" style="display:none;margin-bottom:10px">
@@ -3061,6 +3065,10 @@ function buildPrivCashFlow(p){
   driverRecs.filter(r=>r.type==='income'&&r.relatedPrivateIds?.includes(p.id)).forEach(r=>{
     events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
+  // 客收：手動選擇連結到這團（沒有跳出待收項目可勾選時的備援方式）
+  driverRecs.filter(r=>r.type==='income'&&!r.relatedPrivateIds?.length&&!r.relatedBookingIds?.length&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id).forEach(r=>{
+    events.push({date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+  });
   if(driverIds.length){
     driverRecs.filter(r=>r.type==='remit'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
@@ -3372,6 +3380,10 @@ function buildGroupCashFlow(tourId,date,busIdx){
   const events=[];
   driverRecs.filter(r=>r.type==='income'&&r.relatedBookingIds?.some(id=>bookingIds.includes(id))).forEach(r=>{
     events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+  });
+  // 客收：手動選擇連結到這車次（沒有跳出待收項目可勾選時的備援方式）
+  driverRecs.filter(r=>r.type==='income'&&!r.relatedBookingIds?.length&&!r.relatedPrivateIds?.length&&r.incomeLinkType==='group'&&r.incomeLinkId===(tourId+'_'+date+'_bus'+busIdx)).forEach(r=>{
+    events.push({date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   if(driverId){
     driverRecs.filter(r=>r.type==='remit'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
@@ -4925,6 +4937,17 @@ function openRec(id='',defaultType=''){
     }
     document.getElementById('rf-advance-link-wrap').style.display='block';
   }
+  if(r?.type==='income'&&r?.incomeLinkType&&r?.incomeLinkId){
+    populateIncomeLinkOptions();
+    const incSel=document.getElementById('rf-income-link');
+    if(incSel){
+      const ival=r.incomeLinkType+':'+r.incomeLinkId;
+      if(![...incSel.options].some(o=>o.value===ival)){
+        incSel.innerHTML+=`<option value="${ival}">（原連結行程，已不在近期清單）</option>`;
+      }
+      incSel.value=ival;
+    }
+  }
   // 日期改變時：重新觸發 toggleRecFields（更新備註、待收項目等）
   const dateInput=document.getElementById('rf-date');
   dateInput.onchange=function(){
@@ -4948,6 +4971,19 @@ function openRec(id='',defaultType=''){
   om('rec');
   if(r&&r.type==='hotel') checkHotelDiff();
 }
+function buildTripLinkOptionsHtml(){
+  if(!curDriverId)return'';
+  const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-45);
+  const cutoffPastStr=cutoffPast.toISOString().slice(0,10);
+  const cutoffFuture=new Date();cutoffFuture.setDate(cutoffFuture.getDate()+45);
+  const cutoffFutureStr=cutoffFuture.toISOString().slice(0,10);
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&d.end>=cutoffPastStr&&d.start<=cutoffFutureStr).sort((a,b)=>a.start>b.start?1:-1);
+  return myDisps.map(d=>{
+    if(d.privateId)return`<option value="priv:${d.privateId}">${d.start}${d.start!==d.end?'~'+d.end:''} ${d.label||''}</option>`;
+    if(d.groupTourId)return`<option value="group:${d.groupTourId}">${d.start} ${d.label||''}</option>`;
+    return '';
+  }).filter(Boolean).join('');
+}
 function toggleAdvanceLink(){
   const chk=document.getElementById('rf-advance').checked;
   document.getElementById('rf-advance-link-wrap').style.display=chk?'block':'none';
@@ -4955,19 +4991,16 @@ function toggleAdvanceLink(){
 }
 function populateAdvanceLinkOptions(){
   const sel=document.getElementById('rf-advance-link');
-  if(!sel||!curDriverId)return;
-  const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-45);
-  const cutoffPastStr=cutoffPast.toISOString().slice(0,10);
-  const cutoffFuture=new Date();cutoffFuture.setDate(cutoffFuture.getDate()+45);
-  const cutoffFutureStr=cutoffFuture.toISOString().slice(0,10);
-  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&d.end>=cutoffPastStr&&d.start<=cutoffFutureStr).sort((a,b)=>a.start>b.start?1:-1);
+  if(!sel)return;
   const cur=sel.value;
-  const opts=myDisps.map(d=>{
-    if(d.privateId)return`<option value="priv:${d.privateId}">${d.start}${d.start!==d.end?'~'+d.end:''} ${d.label||''}</option>`;
-    if(d.groupTourId)return`<option value="group:${d.groupTourId}">${d.start} ${d.label||''}</option>`;
-    return '';
-  }).filter(Boolean);
-  sel.innerHTML='<option value="">— 不連結（進待請款清單）—</option>'+opts.join('');
+  sel.innerHTML='<option value="">— 不連結（進待請款清單）—</option>'+buildTripLinkOptionsHtml();
+  if(cur)sel.value=cur;
+}
+function populateIncomeLinkOptions(){
+  const sel=document.getElementById('rf-income-link');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— 不連結 —</option>'+buildTripLinkOptionsHtml();
   if(cur)sel.value=cur;
 }
 function toggleRecFields(){
@@ -4976,6 +5009,7 @@ function toggleRecFields(){
   document.getElementById('rf-fuel-wrap').style.display=t==='fuel'?'block':'none';
   document.getElementById('rf-maint-wrap').style.display=t==='maint'?'block':'none';
   document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
+  if(t==='income')populateIncomeLinkOptions();
   document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
   document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
   const advanceEligible=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(t);
@@ -5246,8 +5280,14 @@ async function saveRec(){
     const[lt,...rest]=advanceLinkVal.split(':');
     advanceLinkType=lt;advanceLinkId=rest.join(':');
   }
+  const incomeLinkVal=(type==='income'&&!relatedBookingIds.length&&!relatedPrivateIds.length)?(document.getElementById('rf-income-link')?.value||''):'';
+  let incomeLinkType='',incomeLinkId='';
+  if(incomeLinkVal){
+    const[ilt,...irest]=incomeLinkVal.split(':');
+    incomeLinkType=ilt;incomeLinkId=irest.join(':');
+  }
   const existingRec=eIds.rec?driverRecs.find(x=>x.id===eIds.rec):null;
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,advance:isAdvance,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
+  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,incomeLinkType,incomeLinkId,advance:isAdvance,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
   if(type==='hotel'){
     if(hotelSel){
       if(hotelSel.kind==='group'){
