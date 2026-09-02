@@ -125,6 +125,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 </head>
 <body>
 <!-- ═══ LOGIN ═══ -->
+<div id="ext-screen" class="login-wrap" style="display:none">
+  <div class="login-card" style="max-width:420px;text-align:left">
+    <div class="login-title" style="text-align:center">🚐 外派車資查詢</div>
+    <div id="ext-content" style="margin-top:16px"></div>
+  </div>
+</div>
 <div id="login-screen" class="login-wrap">
   <div class="login-card">
     <div class="login-title">🚌 旅遊業務管理</div>
@@ -386,6 +392,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mb10"><label>備註</label><input id="df-note" placeholder="特殊說明"></div>
   <div id="df-conflict"></div>
   <div id="df-pd-view"></div>
+  <div id="df-ext-link-view"></div>
   <div class="mf"><button class="btn btn-danger btn-sm" id="btn-del-disp" style="display:none" onclick="delDisp()"><i class="ti ti-trash"></i></button><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('disp')">取消</button><button class="btn btn-primary" onclick="saveDisp()">確認派車</button></div></div>
 </div></div>
 
@@ -2747,6 +2754,41 @@ function openDisp(id='',dateStr=''){
     }
   }
   om('disp');
+  const extEl=document.getElementById('df-ext-link-view');
+  if(extEl){
+    if(id&&d&&d.driverType==='out'){
+      extEl.innerHTML=d.extToken?`
+        <div style="margin-bottom:10px;padding:10px;background:var(--bg2);border-radius:8px">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">🔗 外派司機專屬連結（唯讀，不用登入）</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input readonly id="df-ext-link-input" value="${location.origin+location.pathname}?ext=${d.extToken}" style="flex:1;min-width:200px;height:32px;font-size:12px">
+            <button class="btn btn-sm" onclick="copyExtLink()"><i class="ti ti-copy"></i> 複製</button>
+          </div>
+        </div>`:`
+        <div style="margin-bottom:10px">
+          <button class="btn btn-sm" onclick="generateExtLink('${id}')"><i class="ti ti-link"></i> 產生外派司機連結</button>
+        </div>`;
+    } else {
+      extEl.innerHTML='';
+    }
+  }
+}
+async function generateExtLink(dispId){
+  const token=uid()+uid();
+  setSS('syncing','產生連結中…');
+  await db.collection('dispatches').doc(dispId).update({extToken:token});
+  const idx=dispatches.findIndex(x=>x.id===dispId);
+  if(idx>=0)dispatches[idx]={...dispatches[idx],extToken:token};
+  openDisp(dispId);
+}
+function copyExtLink(){
+  const input=document.getElementById('df-ext-link-input');
+  if(!input)return;
+  input.select();
+  navigator.clipboard?.writeText(input.value).then(()=>alert('已複製連結！可以直接貼給外派司機（LINE/簡訊都可以）。')).catch(()=>{
+    document.execCommand('copy');
+    alert('已複製連結！');
+  });
 }
 function toggleDrvSel(){
   const isOwn=document.getElementById('df-dtype').value==='own';
@@ -5928,6 +5970,82 @@ db.collection('tours').get().then(s=>{
 db.collection('meta').doc('cars').get().then(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
 
 // 判斷是否公開報名頁
+// 外派司機專屬連結：唯讀查詢畫面，不需登入
+function enterExternalMode(token){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='none';
+  document.getElementById('ext-screen').style.display='flex';
+  const contentEl=document.getElementById('ext-content');
+  contentEl.innerHTML='<div style="text-align:center;color:var(--text2)"><i class="ti ti-loader"></i> 載入中…</div>';
+  db.collection('dispatches').where('extToken','==',token).limit(1).get().then(s=>{
+    if(s.empty){contentEl.innerHTML='<div class="empty">連結無效或已過期，請跟公司確認</div>';return;}
+    const d={id:s.docs[0].id,...s.docs[0].data()};
+    Promise.all([
+      db.collection('privates').get(),
+      db.collection('tours').get(),
+      db.collection('bookings').get(),
+      db.collection('hotels').get()
+    ]).then(([ps,ts,bs,hs])=>{
+      privates=ps.docs.map(x=>({id:x.id,...x.data()}));
+      tours=ts.docs.map(x=>({id:x.id,...x.data()}));
+      bookings=bs.docs.map(x=>({id:x.id,...x.data()}));
+      hotels=hs.docs.map(x=>({id:x.id,...x.data()}));
+      renderExternalSummary(d);
+    });
+  }).catch(()=>{contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
+}
+function renderExternalSummary(d){
+  const el=document.getElementById('ext-content');
+  const disclaimer='<div style="font-size:11px;color:var(--text2);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">＊以上金額為系統試算僅供參考，實際金額請以公司通知為準，如有疑問請直接聯繫公司。</div>';
+  const statBox=(label,val,color)=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-val" style="color:${color||'inherit'}">$${val.toLocaleString()}</div></div>`;
+  if(d.privateId){
+    const p=privates.find(x=>x.id===d.privateId);
+    if(!p){el.innerHTML='<div class="empty">找不到對應的行程資料</div>';return;}
+    const balance=(p.price||0)-(p.deposit||0);
+    let hotelAdvance=0;
+    (p.nightlyHotels||[]).forEach((nh,i)=>{
+      if((nh.paymentType||'company')==='driver'){
+        hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcNightQuote(p,nh,i);
+      }
+    });
+    const outwage=d.outwage||0;
+    const shouldRemit=balance-hotelAdvance-outwage;
+    el.innerHTML=`
+      <div style="font-size:12px;color:var(--text2)">行程</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${statBox('應收現金（尾款）',balance)}
+        ${statBox('住宿代付',hotelAdvance,'var(--red)')}
+        ${statBox('您的外派車資',outwage,'var(--green)')}
+        ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
+      </div>
+      ${disclaimer}
+    `;
+  } else if(d.groupTourId){
+    const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
+    if(!m){el.innerHTML='<div class="empty">找不到對應的行程資料</div>';return;}
+    const tourId=m[1],date=m[2];
+    const t=tours.find(x=>x.id===tourId);
+    el.innerHTML=`
+      <div style="font-size:12px;color:var(--text2)">行程</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}${d.car?'｜'+d.car:''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${statBox('您的外派車資',d.outwage||0,'var(--green)')}
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:10px">此行程的客收／代付明細較複雜，請洽公司確認實際應回帳金額。</div>
+      ${disclaimer}
+    `;
+  } else {
+    el.innerHTML=`
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${d.label||'-'}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${d.start}${d.start!==d.end?'～'+d.end:''}${d.car?'｜'+d.car:''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${statBox('您的外派車資',d.outwage||0,'var(--green)')}</div>
+      ${disclaimer}
+    `;
+  }
+}
 function enterBookingMode(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -5943,7 +6061,11 @@ function enterBookingMode(){
 window.addEventListener('hashchange',()=>{
   if(window.location.hash==='#booking') enterBookingMode();
 });
-if(window.location.hash==='#booking'){
+const urlParams=new URLSearchParams(window.location.search);
+const extToken=urlParams.get('ext');
+if(extToken){
+  enterExternalMode(extToken);
+} else if(window.location.hash==='#booking'){
   enterBookingMode();
 } else if(window.location.hash==='#driver'){
   // 來自 driver.html 的跳轉
