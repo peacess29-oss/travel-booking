@@ -3069,26 +3069,26 @@ function buildPrivCashFlow(p){
   const driverIds=getPrivDriverIds(p);
   const events=[];
   driverRecs.filter(r=>r.type==='income'&&r.relatedPrivateIds?.includes(p.id)).forEach(r=>{
-    events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+    events.push({id:r.id,date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   // 客收：手動選擇連結到這團（沒有跳出待收項目可勾選時的備援方式）
   driverRecs.filter(r=>r.type==='income'&&!r.relatedPrivateIds?.length&&!r.relatedBookingIds?.length&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id).forEach(r=>{
-    events.push({date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+    events.push({id:r.id,date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   if(driverIds.length){
     driverRecs.filter(r=>r.type==='remit'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
-      events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
-      events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 自行代墊、明確指定連結到這團的支出（不限日期範圍）
     driverRecs.filter(r=>r.advance&&r.advanceLinkType==='priv'&&r.advanceLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
-      events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 代付外派司機薪資：只影響此司機現金流水，不重複計入公司支出（外派車資已在派車總表計過）
     driverRecs.filter(r=>r.type==='outpay'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
-      events.push({date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
   (p.nightlyHotels||[]).forEach((nh,i)=>{
@@ -3099,7 +3099,7 @@ function buildPrivCashFlow(p){
     const quote=calcNightQuote(p,nh,i);
     if(nh.driverPaid){
       const diff=(nh.driverPaidAmount||0)-quote;
-      events.push({date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+      events.push({id:nh.driverRecId||'',date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
     } else {
       events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
     }
@@ -3107,7 +3107,7 @@ function buildPrivCashFlow(p){
   // 手動輸入、未連結任何行程晚數的住宿代付（比照雜支，用司機ID+日期區間配對，避免與已連結晚數重複計算）
   if(driverIds.length){
     driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
-      events.push({date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
+      events.push({id:r.id,date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
     });
   }
   events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
@@ -3207,7 +3207,9 @@ function cashFlowRowsHtml(events){
     const amtStr=e.kind==='hotel-pending'?`（報價 $${e.quote.toLocaleString()}）`:`${e.amount>=0?'+':'-'}$${Math.abs(e.amount).toLocaleString()}`;
     const diffBadge=e.diff?`<span style="color:var(--red);font-size:11px;margin-left:4px">⚠️ 報價$${e.quote.toLocaleString()}，差${e.diff>0?'+':''}$${e.diff.toLocaleString()}</span>`:'';
     const balStr=e.balance==null?'-':`$${e.balance.toLocaleString()}`;
-    return `<tr><td style="white-space:nowrap;font-size:12px">${e.date||'-'}</td><td style="font-size:12px">${e.label}${diffBadge}</td><td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${amtStr}</td><td style="text-align:right;font-size:12px;white-space:nowrap">${balStr}</td></tr>`;
+    const clickable=!!e.id;
+    const trAttrs=clickable?` style="cursor:pointer" title="點擊修正這筆記錄" onclick="openRec('${e.id}')"`:'';
+    return `<tr${trAttrs}><td style="white-space:nowrap;font-size:12px">${e.date||'-'}</td><td style="font-size:12px">${e.label}${diffBadge}${clickable?' <i class="ti ti-edit" style="font-size:11px;color:var(--blue)"></i>':''}</td><td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${amtStr}</td><td style="text-align:right;font-size:12px;white-space:nowrap">${balStr}</td></tr>`;
   }).join('');
 }
 // 現金流水總覽卡片（包車團/拼團共用）
@@ -3385,27 +3387,27 @@ function buildGroupCashFlow(tourId,date,busIdx){
   const bookingIds=(myBus?.bookings||[]).map(b=>b.id);
   const events=[];
   driverRecs.filter(r=>r.type==='income'&&r.relatedBookingIds?.some(id=>bookingIds.includes(id))).forEach(r=>{
-    events.push({date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+    events.push({id:r.id,date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   // 客收：手動選擇連結到這車次（沒有跳出待收項目可勾選時的備援方式）
   driverRecs.filter(r=>r.type==='income'&&!r.relatedBookingIds?.length&&!r.relatedPrivateIds?.length&&r.incomeLinkType==='group'&&r.incomeLinkId===(tourId+'_'+date+'_bus'+busIdx)).forEach(r=>{
-    events.push({date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
+    events.push({id:r.id,date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   if(driverId){
     driverRecs.filter(r=>r.type==='remit'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
-      events.push({date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
-      events.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 自行代墊、明確指定連結到這車次的支出（不限日期範圍）
     const thisGroupTourId=tourId+'_'+date+'_bus'+busIdx;
     driverRecs.filter(r=>r.advance&&r.advanceLinkType==='group'&&r.advanceLinkId===thisGroupTourId&&r.driverId===driverId).forEach(r=>{
-      events.push({date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:'🧾 自行代墊-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 代付外派司機薪資：只影響此司機現金流水，不重複計入公司支出
     driverRecs.filter(r=>r.type==='outpay'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
-      events.push({date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
+      events.push({id:r.id,date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
   const gn=getGroupNightly(tourId,date,busIdx);
@@ -3416,7 +3418,7 @@ function buildGroupCashFlow(tourId,date,busIdx){
     const quote=calcGroupNightQuote(gn,nh,i);
     if(nh.driverPaid){
       const diff=(nh.driverPaidAmount||0)-quote;
-      events.push({date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+      events.push({id:nh.driverRecId||'',date:nightDate,label:'住宿代付'+(hotel?'-'+hotel.name:''),amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
     } else {
       events.push({date:nightDate,label:'住宿代付（尚未代付）'+(hotel?'-'+hotel.name:''),amount:0,kind:'hotel-pending',quote});
     }
@@ -3424,17 +3426,18 @@ function buildGroupCashFlow(tourId,date,busIdx){
   // 手動輸入、未連結任何行程晚數的住宿代付（比照雜支，用司機ID+日期區間配對，避免與已連結晚數重複計算）
   if(driverId){
     driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
-      events.push({date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
+      events.push({id:r.id,date:r.date,label:'住宿代付（手動輸入）'+(r.hotelName?'-'+r.hotelName:'')+(r.note?'（'+r.note+'）':''),amount:-(r.amount||0),kind:'hotel'});
     });
   }
   events.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
   let bal=0;
   events.forEach(e=>{if(e.kind!=='hotel-pending'){bal+=e.amount;e.balance=bal;}else{e.balance=null;}});
   const totalIncome=events.filter(e=>e.kind==='income').reduce((s,e)=>s+e.amount,0);
+  const totalRemit=events.filter(e=>e.kind==='remit').reduce((s,e)=>s-e.amount,0);
   const totalExpense=events.filter(e=>e.kind==='expense'||e.kind==='hotel').reduce((s,e)=>s-e.amount,0);
   const netProfit=totalIncome-totalExpense;
   const isEnded=!!rangeEnd&&rangeEnd<new Date().toISOString().slice(0,10);
-  return{t,disp,driverId,busIdx,date,events,totalIncome,totalExpense,netProfit,cashBalance:bal,isEnded,settled:bal<=0};
+  return{t,disp,driverId,busIdx,date,events,totalIncome,totalRemit,totalExpense,netProfit,cashBalance:bal,isEnded,settled:bal<=0};
 }
 // 拼團成本明細（某天某車）：司機薪資/外派費用/外宿補貼(此車派車記錄)、酒店費用(住宿排程或舊版估算)、雜支、附加費用(依人數比例分攤)、旅遊險
 function buildGroupCostBreakdown(tourId,date,busIdx){
@@ -4499,70 +4502,109 @@ const TYPE_N={income:'客收',extra:'外收（個人）',tips:'小費（個人�
 // ══════════════════ PAGE: 待請款清單（僅管理員） ══════════════════
 // ══════════════════ PAGE: 回帳對帳（僅管理員） ══════════════════
 function setReconSel(y,m){reconSelYear=y;reconSelMonth=m;renderReconcile();}
+// 回帳對帳：抓某月份內，某自家司機所有出團的逐團現金流水
+function getReconcileTripsForDriver(driverId,y,m){
+  const trips=[];
+  tours.forEach(t=>{
+    getDates(t.id).filter(d=>d.startsWith(y+'-'+String(m+1).padStart(2,'0'))).forEach(d=>{
+      const dateBks=bookings.filter(b=>b.tourId===t.id&&b.date===d);
+      const buses=buildBuses(dateBks,t.busMax||8,t.id,d);
+      buses.forEach(bus=>{
+        const disp=getGroupDispatch(t.id,d,bus.busIdx);
+        if(!disp||disp.driverId!==driverId||disp.driverType!=='own')return;
+        const cf=buildGroupCashFlow(t.id,d,bus.busIdx);
+        trips.push({kind:'group',label:t.name+'（'+d+'・'+String.fromCharCode(65+bus.busIdx)+'車）',date:d,cf});
+      });
+    });
+  });
+  privates.forEach(p=>{
+    if(!p.start||!p.start.startsWith(y+'-'+String(m+1).padStart(2,'0')))return;
+    const driverIds=getPrivDriverIds(p);
+    if(!driverIds.includes(driverId))return;
+    // 主要負責司機才歸戶到這位司機底下，避免多司機包車團重複計入
+    const primaryId=driverIds.find(id=>drivers.find(x=>x.id===id&&x.type==='own'))||driverIds[0];
+    if(primaryId!==driverId)return;
+    const cf=buildPrivCashFlow(p);
+    trips.push({kind:'priv',label:p.name+'（'+p.start+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start,cf});
+  });
+  return trips.sort((a,b)=>b.date>a.date?1:b.date<a.date?-1:0);
+}
+// 已結清團次的回帳說明：單次回帳直接顯示，多次回帳逐筆列出＋加總
+function remitNoteHtml(cf){
+  const remits=cf.events.filter(e=>e.kind==='remit');
+  if(!remits.length)return '尚無回帳記錄';
+  if(remits.length===1)return '回帳'+remits[0].date+'-$'+Math.abs(remits[0].amount).toLocaleString();
+  const parts=remits.map(r=>r.date+'-$'+Math.abs(r.amount).toLocaleString());
+  return '回帳'+parts.join('、')+'，共 $'+cf.totalRemit.toLocaleString();
+}
 function renderReconcile(){
   const el=document.getElementById('p-reconcile');
   if(!el)return;
   const y=reconSelYear,m=reconSelMonth;
   const ownDrivers=drivers.filter(d=>d.type==='own');
-  const rows=ownDrivers.map(d=>{
-    const recs=driverRecs.filter(r=>r.driverId===d.id&&inMonth(r.date,y,m));
-    const collected=recs.filter(r=>r.type==='income').reduce((s,r)=>s+(r.amount||0),0);
-    const misc=recs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)).reduce((s,r)=>s+(r.amount||0),0);
-    const advance=recs.filter(r=>r.advance).reduce((s,r)=>s+(r.amount||0),0);
-    const outpay=recs.filter(r=>r.type==='outpay').reduce((s,r)=>s+(r.amount||0),0);
-    const remitRecs=recs.filter(r=>r.type==='remit');
-    const remitActual=remitRecs.reduce((s,r)=>s+(r.amount||0),0);
-    const expected=collected-misc-advance-outpay;
-    const diff=expected-remitActual;
-    return{driver:d,collected,misc,advance,outpay,expected,remitActual,diff,remitCount:remitRecs.length,hasActivity:collected||misc||advance||outpay||remitActual};
-  }).filter(x=>x.hasActivity);
+  const driverRows=ownDrivers.map(d=>{
+    const trips=getReconcileTripsForDriver(d.id,y,m);
+    const totalIncome=trips.reduce((s,x)=>s+x.cf.totalIncome,0);
+    const totalOwed=trips.reduce((s,x)=>s+Math.max(x.cf.cashBalance,0),0);
+    return{driver:d,trips,totalIncome,totalOwed};
+  }).filter(x=>x.trips.length);
+  window._reconData=driverRows;
   el.innerHTML=`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span class="card-title" style="margin:0"><i class="ti ti-scale"></i> 回帳對帳</span>
       <div style="display:flex;gap:8px">
         <select onchange="setReconSel(reconSelYear,parseInt(this.value))" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>
         <select onchange="setReconSel(parseInt(this.value),reconSelMonth)" style="height:34px;font-size:13px">${[2024,2025,2026].map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
+        <button class="btn btn-sm" onclick="exportReconcileExcel()" style="border-color:var(--green);color:var(--green-d)"><i class="ti ti-file-spreadsheet"></i> 下載 Excel</button>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">
-      應回帳 ＝ 客收 － 雜支（油錢/停車等） － 自行代墊 － 代付外派薪資。<br>
-      差額不為0代表：可能還沒回帳完（尚有現金在司機手上）、回帳金額打錯，或有記錄漏登，需要人工確認。
-    </div>
-    ${!rows.length?'<div class="empty">本月無自家司機現金相關記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr>
-      <th>司機</th><th style="text-align:right">客收</th><th style="text-align:right">支出/代墊</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回帳</th><th style="text-align:right">差額</th><th></th>
-    </tr></thead><tbody>${rows.map(x=>`<tr>
-      <td style="font-weight:600">${x.driver.name}</td>
-      <td style="text-align:right">$${x.collected.toLocaleString()}</td>
-      <td style="text-align:right;color:var(--text2)">$${(x.misc+x.advance+x.outpay).toLocaleString()}</td>
-      <td style="text-align:right;font-weight:600">$${x.expected.toLocaleString()}</td>
-      <td style="text-align:right">$${x.remitActual.toLocaleString()}</td>
-      <td style="text-align:right;font-weight:700;color:${x.diff===0?'var(--green)':'var(--red)'}">${x.diff===0?'✅ $0':'⚠️ $'+x.diff.toLocaleString()}</td>
-      <td><button class="btn btn-sm" onclick="openReconDetail('${x.driver.id}')"><i class="ti ti-list"></i> 明細</button></td>
-    </tr>`).join('')}</tbody></table></div>`}
+    ${!driverRows.length?'<div class="empty">本月無自家司機出團記錄</div>':driverRows.map(dr=>`
+      <div style="margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;padding:6px 4px;color:var(--text2)">${dr.driver.name}　本月客收 $${dr.totalIncome.toLocaleString()}　${dr.totalOwed>0?`<span style="color:var(--red)">尚欠現金 $${dr.totalOwed.toLocaleString()}</span>`:'<span style="color:var(--green)">✅ 全數結清</span>'}</div>
+        ${dr.trips.map((x,i)=>{
+          const rid=dr.driver.id+'_'+i;
+          const statusHtml=x.cf.settled
+            ?`<span style="color:var(--green);font-weight:600">✅ 已結清 客收 $${x.cf.totalIncome.toLocaleString()}（${remitNoteHtml(x.cf)}）</span>`
+            :`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${x.cf.cashBalance.toLocaleString()} 未回帳</span>`;
+          return `<div style="border-bottom:1px solid var(--border)">
+            <div onclick="toggleReconRow('${rid}')" style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer">
+              <i id="chev-${rid}" class="ti ti-chevron-right" style="font-size:14px;color:var(--text2);transition:transform .15s"></i>
+              <span style="font-size:13px;color:var(--text2)">${x.label}</span>
+              <span style="margin-left:auto;font-size:12px">${statusHtml}</span>
+            </div>
+            <div id="det-${rid}" style="display:none;padding:0 4px 8px 26px">
+              ${x.cf.events.length?`<table class="xtable" style="width:100%"><tbody>${cashFlowRowsHtml(x.cf.events)}</tbody></table>`:'<div class="empty" style="font-size:12px">尚無現金流水記錄</div>'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `).join('')}
   </div>`;
 }
-function openReconDetail(driverId){
-  const d=drivers.find(x=>x.id===driverId);if(!d)return;
+function toggleReconRow(rid){
+  const det=document.getElementById('det-'+rid);
+  const chev=document.getElementById('chev-'+rid);
+  const open=det.style.display==='block';
+  det.style.display=open?'none':'block';
+  chev.style.transform=open?'rotate(0deg)':'rotate(90deg)';
+}
+function exportReconcileExcel(){
   const y=reconSelYear,m=reconSelMonth;
-  const recs=driverRecs.filter(r=>r.driverId===driverId&&inMonth(r.date,y,m)&&(r.type==='income'||CASHFLOW_EXP_TYPES.includes(r.type)||r.advance||r.type==='outpay'||r.type==='remit')).sort((a,b)=>a.date>b.date?1:-1);
-  document.getElementById('pd-title').innerHTML=`<i class="ti ti-scale"></i> ${d.name} － ${y}年${MONTHS[m]} 現金明細`;
-  document.getElementById('pd-content').innerHTML=recs.length?`
-    <div class="tbl-wrap"><table class="xtable"><thead><tr>
-      <th>日期</th><th>類別</th><th>備註</th><th style="text-align:right">金額</th><th></th>
-    </tr></thead><tbody>${recs.map(r=>{
-      const isIncome=r.type==='income';
-      const sign=isIncome?'+':'-';
-      const color=isIncome?'var(--green)':(r.type==='remit'?'var(--blue)':'var(--red)');
-      return`<tr style="cursor:pointer" onclick="cm('payroll-detail');openRec('${r.id}')" title="點擊修正這筆記錄">
-        <td>${r.date}</td>
-        <td style="font-size:12px">${TYPE_N[r.type]||r.type}${r.advance?'（自行代墊）':''}</td>
-        <td style="font-size:12px;color:var(--text2)">${r.note||'-'}</td>
-        <td style="text-align:right;color:${color};font-weight:600">${sign}$${(r.amount||0).toLocaleString()}</td>
-        <td style="font-size:11px;color:var(--blue)"><i class="ti ti-edit"></i></td>
-      </tr>`;
-    }).join('')}</tbody></table></div>
-  `:'<div class="empty">本月無記錄</div>';
-  om('payroll-detail');
+  const driverRows=window._reconData||[];
+  const data=[['司機','團次','日期','項目','金額','結餘']];
+  driverRows.forEach(dr=>{
+    dr.trips.forEach(x=>{
+      x.cf.events.forEach(e=>{
+        data.push([dr.driver.name,x.label,e.date||'',e.label,e.kind==='hotel-pending'?0:e.amount,e.balance==null?'':e.balance]);
+      });
+      data.push(['','','',x.cf.settled?'已結清':'尚有現金未回帳','',x.cf.cashBalance]);
+    });
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:10},{wch:24},{wch:10},{wch:16},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'回帳對帳');
+  XLSX.writeFile(wb,'回帳對帳_'+y+'年'+MONTHS[m]+'.xlsx');
 }
 function renderReimburse(){
   const el=document.getElementById('p-reimburse');
