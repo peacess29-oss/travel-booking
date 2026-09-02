@@ -553,6 +553,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-extra-items"></div>
     <div id="rf-extra-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
   </div>
+  <!-- 回帳公司：選擇要回帳入帳的團次（尚未結清的團） -->
+  <div id="rf-remit-sec" style="display:none;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">選擇要回帳的團次（尚未結清的團，不選則依日期自動歸戶）</div>
+    <div id="rf-remit-items"></div>
+  </div>
   <div id="rf-advance-sec" style="display:none;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
       <input type="checkbox" id="rf-advance" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，要請款
@@ -3076,7 +3081,11 @@ function buildPrivCashFlow(p){
     events.push({id:r.id,date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   if(driverIds.length){
-    driverRecs.filter(r=>r.type==='remit'&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+    driverRecs.filter(r=>r.type==='remit'&&!r.remitLinkType&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+    });
+    // 回帳公司：明確選擇連結到這團的記錄（不限日期範圍，常見於團結束後幾天才回帳）
+    driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
@@ -3394,7 +3403,11 @@ function buildGroupCashFlow(tourId,date,busIdx){
     events.push({id:r.id,date:r.date,label:'客收（手動連結）'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
   });
   if(driverId){
-    driverRecs.filter(r=>r.type==='remit'&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+    driverRecs.filter(r=>r.type==='remit'&&!r.remitLinkType&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+    });
+    // 回帳公司：明確選擇連結到這車次的記錄（不限日期範圍，常見於團結束後幾天才回帳）
+    driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&r.driverId===driverId).forEach(r=>{
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
@@ -5062,6 +5075,8 @@ function toggleRecFields(){
   if(t==='income')populateIncomeLinkOptions();
   document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
   document.getElementById('rf-extras-sec').style.display=(t==='other'&&!eIds.rec)?'block':'none';
+  document.getElementById('rf-remit-sec').style.display=(t==='remit'&&!eIds.rec)?'block':'none';
+  if(t==='remit'&&!eIds.rec)renderRemitItems();
   document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
   const advanceEligible=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(t);
   document.getElementById('rf-advance-sec').style.display=advanceEligible?'block':'none';
@@ -5199,6 +5214,47 @@ function getPendingHotelItems(date){
   return items;
 }
 // 取得某司機在指定日期，當天派車拼團可代墊的附加費用建議（每人/桌費，不含住宿）
+// 取得某司機所有尚未完全回帳結清的團次（不限日期），供回帳連結選單使用
+function getUnsettledTripsForDriver(driverId){
+  if(!driverId)return[];
+  const trips=[];
+  const seen=new Set();
+  dispatches.filter(d=>d.driverId===driverId&&d.driverType==='own').forEach(d=>{
+    if(d.groupTourId){
+      const key='group:'+d.groupTourId;
+      if(seen.has(key))return;
+      seen.add(key);
+      const tId=d.groupTourId.split('_')[0];
+      const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+      const busIdx=busMatch?parseInt(busMatch[1]):0;
+      const t=tours.find(x=>x.id===tId);if(!t)return;
+      const cf=buildGroupCashFlow(tId,d.start,busIdx);
+      if(cf.cashBalance>0)trips.push({type:'group',id:d.groupTourId,label:t.name+'（'+d.start+'・'+String.fromCharCode(65+busIdx)+'車）',date:d.start,balance:cf.cashBalance});
+    } else if(d.privateId){
+      const key='priv:'+d.privateId;
+      if(seen.has(key))return;
+      seen.add(key);
+      const p=privates.find(x=>x.id===d.privateId);if(!p)return;
+      const cf=buildPrivCashFlow(p);
+      if(cf.cashBalance>0)trips.push({type:'priv',id:p.id,label:p.name+'（'+p.start+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start,balance:cf.cashBalance});
+    }
+  });
+  return trips.sort((a,b)=>b.date>a.date?1:b.date<a.date?-1:0);
+}
+function renderRemitItems(){
+  const el=document.getElementById('rf-remit-items');
+  if(!el)return;
+  const items=getUnsettledTripsForDriver(curDriverId);
+  window._rfRemitItems=items;
+  if(!items.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px">目前沒有尚未結清的團次，此筆回帳將依日期自動歸戶</div>';
+    return;
+  }
+  el.innerHTML=`<select id="rf-remit-link" style="width:100%;height:34px;font-size:13px">
+    <option value="">— 不連結（依日期自動歸戶）—</option>
+    ${items.map((x,i)=>`<option value="${i}">${x.label}　尚欠 $${x.balance.toLocaleString()}</option>`).join('')}
+  </select>`;
+}
 function getPendingExtraItems(date){
   if(!curDriverId||!date) return [];
   const items=[];
@@ -5459,6 +5515,19 @@ async function saveRec(){
     } else {
       // 手動輸入，不綁定任何排程晚數
       data.hotelName=hotelManualName;data.quoteAmount=0;
+    }
+  }
+  // 回帳公司：選擇連結到某團次時，記錄連結資訊；沒選則沿用日期自動歸戶
+  if(type==='remit'){
+    if(!eIds.rec){
+      const remitIdx=document.getElementById('rf-remit-link')?.value;
+      const remitItems=window._rfRemitItems||[];
+      if(remitIdx!==undefined&&remitIdx!==''&&remitItems[remitIdx]){
+        data.remitLinkType=remitItems[remitIdx].type;data.remitLinkId=remitItems[remitIdx].id;
+      }
+    } else {
+      const oldRec=driverRecs.find(x=>x.id===eIds.rec);
+      data.remitLinkType=oldRec?.remitLinkType||'';data.remitLinkId=oldRec?.remitLinkId||'';
     }
   }
   let recId=eIds.rec;
