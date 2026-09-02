@@ -3061,6 +3061,13 @@ function getPrivDriverIds(p){
   names.forEach(n=>{const d=drivers.find(x=>x.name===n);if(d&&!ids.includes(d.id))ids.push(d.id);});
   return ids;
 }
+// 包車團多車：帳務統一由A車負責（privateBusIdx===0），B/C車自己的雜支仍會併入這團的共用現金池扣除
+function getPrivBusADriverId(p){
+  const dispA=dispatches.find(d=>d.privateId===p.id&&(d.privateBusIdx??0)===0&&d.driverId);
+  if(dispA)return dispA.driverId;
+  // 舊資料相容：找不到明確A車派車記錄時，退回第一位指派司機
+  return getPrivDriverIds(p)[0]||'';
+}
 const CASHFLOW_EXP_TYPES=['fuel','urea','parking','toll','maint','inspection','storage','other'];
 // 該團行程期間內，指派司機登打的雜支總額（油錢/停車/過路/保養/驗車/寄鋪/其他），供利潤計算共用
 function calcPrivMisc(p){
@@ -4532,11 +4539,8 @@ function getReconcileTripsForDriver(driverId,y,m){
   });
   privates.forEach(p=>{
     if(!p.start||!p.start.startsWith(y+'-'+String(m+1).padStart(2,'0')))return;
-    const driverIds=getPrivDriverIds(p);
-    if(!driverIds.includes(driverId))return;
-    // 主要負責司機才歸戶到這位司機底下，避免多司機包車團重複計入
-    const primaryId=driverIds.find(id=>drivers.find(x=>x.id===id&&x.type==='own'))||driverIds[0];
-    if(primaryId!==driverId)return;
+    // 包車團帳務統一由A車負責，只歸戶到A車司機底下，避免多車重複列出
+    if(getPrivBusADriverId(p)!==driverId)return;
     const cf=buildPrivCashFlow(p);
     trips.push({kind:'priv',label:p.name+'（'+p.start+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start,cf});
   });
@@ -4921,10 +4925,10 @@ function renderDriverPage(){
       </div>
     </div>`;
 
-  // 未回帳提醒：已結束但手上現金尚未歸零的包車團（持續提醒直到結清）
+  // 未回帳提醒：已結束但手上現金尚未歸零的包車團（持續提醒直到結清；多車情況下帳務統一由A車負責，只提醒A車司機）
   const myUnsettled=privates.filter(p=>{
     if(!p.end||p.end>=today)return false;
-    return getPrivDriverIds(p).includes(curDriverId);
+    return getPrivBusADriverId(p)===curDriverId;
   }).map(p=>({p,cf:buildPrivCashFlow(p)})).filter(x=>x.cf.cashBalance>0);
   const myUnsettledG=getUnsettledGroups().filter(x=>x.cf.driverId===curDriverId);
   const unsettledHtml=(myUnsettled.length||myUnsettledG.length)?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
@@ -5115,16 +5119,22 @@ function getBalanceItems(date){
   // 找此司機當天有派車的訂單
   const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end);
   if(!myDisps.length) return [];
-  // 拼團：找對應的 bookings 尾款
+  // 拼團：找對應的 bookings 尾款（只列出司機自己車次的乘客，AB車分開）
   tours.forEach(t=>{
     const dates2=getDates(t.id).filter(d=>d===date||d<=date);
     dates2.forEach(d=>{
       const disp=myDisps.find(x=>x.groupTourId?.includes(t.id+'_'+d)||x.label?.includes(t.name));
       if(!disp)return;
-      const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);
+      const busMatch=disp.groupTourId?.match(/_bus(\d+)$/);
+      const busIdx=busMatch?parseInt(busMatch[1]):0;
+      const dateBks=getDateBks(t.id,d);
+      const buses=buildBuses(dateBks,t.busMax||8,t.id,d);
+      const myBus=buses.find(b=>b.busIdx===busIdx);
+      const busLabel=buses.length>1?String.fromCharCode(65+busIdx)+'車 / ':'';
+      const bks=(myBus?.bookings||[]).filter(b=>!b.balancePaid);
       bks.forEach(b=>{
         const bal=(getPrice(t,d,'price')-getPrice(t,d,'deposit'))*b.count;
-        if(bal>0) items.push({type:'group',label:t.name+' / '+d+' / '+b.name+' × '+b.count+'人',amount:bal,bookingId:b.id,field:'balancePaid'});
+        if(bal>0) items.push({type:'group',label:t.name+' / '+d+' / '+busLabel+b.name+' × '+b.count+'人',amount:bal,bookingId:b.id,field:'balancePaid'});
       });
     });
   });
@@ -5231,6 +5241,8 @@ function getUnsettledTripsForDriver(driverId){
       const cf=buildGroupCashFlow(tId,d.start,busIdx);
       if(cf.cashBalance>0)trips.push({type:'group',id:d.groupTourId,label:t.name+'（'+d.start+'・'+String.fromCharCode(65+busIdx)+'車）',date:d.start,balance:cf.cashBalance});
     } else if(d.privateId){
+      // 包車團多車：只有A車司機需要負責這團的回帳（B/C車自己的雜支仍會併入這團現金池扣除，但回帳責任在A車）
+      if((d.privateBusIdx??0)!==0)return;
       const key='priv:'+d.privateId;
       if(seen.has(key))return;
       seen.add(key);
