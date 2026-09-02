@@ -247,7 +247,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="mh"><span class="mh-title" id="mb-title">新增報名</span><button class="btn btn-sm" onclick="cm('book')"><i class="ti ti-x"></i></button></div>
   <div id="mb-info" class="info-box" style="font-size:12px"></div>
   <div class="mb10"><label>姓名 *</label><input id="bf-name" placeholder="王小明"></div>
-  <div class="fg2"><div><label>人數 *</label><input id="bf-cnt" type="number" value="1" min="1" oninput="updateBkRoomCost()"></div><div><label>報名日期</label><input id="bf-reg" type="date"></div></div>
+  <div class="fg2"><div><label>人數 *</label><input id="bf-cnt" type="number" value="1" min="1" oninput="updateBkPrice()"></div><div><label>報名日期</label><input id="bf-reg" type="date"></div></div>
   <div class="fg2"><div><label>聯絡方式</label><select id="bf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div><div><label>電話</label><input id="bf-phone" placeholder="0912345678"></div></div>
   <div class="fg2"><div><label>出發日期 *</label><input id="bf-date" type="date" onchange="updateBkPrice()"></div><div><label>帳號</label><input id="bf-contact" placeholder="LINE ID"></div></div>
   <div id="bf-price-info" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
@@ -260,14 +260,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     </div>
     <div id="bf-room-hotel-sel-wrap" style="display:none;margin-bottom:8px">
       <label style="font-size:11px;color:var(--text2)">酒店（僅此客人特殊狀況使用，一般不需更改）</label>
-      <select id="bf-room-hotel" style="width:100%;height:32px;font-size:12px" onchange="updateBkRoomCost()">
+      <select id="bf-room-hotel" style="width:100%;height:32px;font-size:12px" onchange="updateBkPrice()">
         <option value="">— 選擇酒店 —</option>
       </select>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
       <div style="flex:1;min-width:80px">
         <label style="font-size:11px;color:var(--text2)">房型</label>
-        <select id="bf-room-type" style="width:100%;height:32px;font-size:12px" onchange="updateBkRoomCost()">
+        <select id="bf-room-type" style="width:100%;height:32px;font-size:12px" onchange="updateBkPrice()">
           <option value="2">2人房</option>
           <option value="3">3人房</option>
           <option value="4">4人房</option>
@@ -277,16 +277,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
       </div>
       <div style="flex:1;min-width:60px">
         <label style="font-size:11px;color:var(--text2)">間數</label>
-        <input type="number" id="bf-room-count" min="1" value="1" style="width:100%;height:32px;font-size:12px" oninput="bkRoomCountTouched=true;updateBkRoomCostManual()">
+        <input type="number" id="bf-room-count" min="1" value="1" style="width:100%;height:32px;font-size:12px" oninput="bkRoomCountTouched=true;updateBkRoomCostManual();updateBkPriceDisplayOnly()">
       </div>
       <div style="flex:1;min-width:80px">
         <label style="font-size:11px;color:var(--text2)">住宿費用</label>
-        <input type="number" id="bf-room-cost" min="0" style="width:100%;height:32px;font-size:12px" oninput="document.getElementById('bf-room-manual').checked=true">
+        <input type="number" id="bf-room-cost" min="0" style="width:100%;height:32px;font-size:12px" oninput="document.getElementById('bf-room-manual').checked=true;updateBkPriceDisplayOnly()">
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="bf-room-manual" style="width:13px;height:13px" onchange="updateBkRoomCost()"> 手動輸入費用
+        <input type="checkbox" id="bf-room-manual" style="width:13px;height:13px" onchange="updateBkPrice()"> 手動輸入費用
       </label>
     </div>
     <div id="bf-room-hint" style="font-size:11px;color:var(--text2);margin-top:4px"></div>
@@ -1464,10 +1464,25 @@ function openBook(tid,date='',bookId=''){
 }
 function updateBkPrice(){
   const t=tours.find(x=>x.id===curBkTourId),d=document.getElementById('bf-date').value;
+  const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
   if(!t||!d){document.getElementById('bf-price-info').textContent='';return;}
-  const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
-  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 定金$${dep} / 全額$${pr} / 尾款$${pr-dep}`;
   updateBkRoomCost();
+  const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
+  const totalPrice=pr*cnt,totalDeposit=dep*cnt;
+  const roomCost=parseInt(document.getElementById('bf-room-cost')?.value)||0;
+  const balance=totalPrice+roomCost-totalDeposit;
+  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">尾款：$${balance.toLocaleString()}</b>`;
+}
+// 房間金額/間數手動輸入時，只刷新尾款顯示文字，不重新觸發房間試算（避免蓋掉手動輸入）
+function updateBkPriceDisplayOnly(){
+  const t=tours.find(x=>x.id===curBkTourId),d=document.getElementById('bf-date').value;
+  const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
+  if(!t||!d)return;
+  const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price');
+  const totalPrice=pr*cnt,totalDeposit=dep*cnt;
+  const roomCost=parseInt(document.getElementById('bf-room-cost')?.value)||0;
+  const balance=totalPrice+roomCost-totalDeposit;
+  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">尾款：$${balance.toLocaleString()}</b>`;
 }
 let bkRoomCountTouched=false;
 function getBkHotelId(){
@@ -1538,7 +1553,11 @@ async function saveBook(){
   const cnt=parseInt(document.getElementById('bf-cnt').value)||1;
   if(cnt>4&&!confirm(`⚠️ 人數 ${cnt} 人超過4人，請注意需安排九人座車！\n確定繼續儲存？`))return;
   setSS('syncing','儲存中…');
-  const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false,roomCost:parseInt(document.getElementById('bf-room-cost')?.value)||0,roomCount:parseInt(document.getElementById('bf-room-count')?.value)||0,roomType:document.getElementById('bf-room-type')?.value||'2',roomHotelId:getBkHotelId(),roomManual:!!document.getElementById('bf-room-manual')?.checked};
+  const t2=tours.find(x=>x.id===curBkTourId);
+  const dep2=t2?getPrice(t2,date,'deposit'):0,pr2=t2?getPrice(t2,date,'price'):0;
+  const roomCost2=parseInt(document.getElementById('bf-room-cost')?.value)||0;
+  const balance=(pr2*cnt)+roomCost2-(dep2*cnt);
+  const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false,balance,roomCost:roomCost2,roomCount:parseInt(document.getElementById('bf-room-count')?.value)||0,roomType:document.getElementById('bf-room-type')?.value||'2',roomHotelId:getBkHotelId(),roomManual:!!document.getElementById('bf-room-manual')?.checked};
   if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
 }
 async function delBook(){
