@@ -620,6 +620,14 @@ const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-
 const TW_MKP=new Set(['2025-01-23','2025-04-02']);
 function isHol(d){const w=new Date(d).getDay();if(TW_HOL.has(d))return true;if(TW_MKP.has(d))return false;return w===0||w===6;}
 function isMkp(d){return TW_MKP.has(d);}
+// 計算單筆拼團報名的應收尾款（優先用已存的 balance，沒有的話依公式現算，確保新舊資料都算得出來）
+function calcBookingBalance(b){
+  if(typeof b.balance==='number')return b.balance;
+  const t=tours.find(x=>x.id===b.tourId);
+  if(!t)return 0;
+  const dep=getPrice(t,b.date,'deposit'),pr=getPrice(t,b.date,'price');
+  return (pr*b.count)+(b.roomCost||0)-(dep*b.count);
+}
 function getPrice(t,d,f){const h=isHol(d);if(f==='deposit')return h?(t.depositWk||t.deposit||0):(t.depositWd||t.deposit||0);return h?(t.priceWk||t.price||0):(t.priceWd||t.price||0);}
 
 // ══════════════════ UTILS ══════════════════
@@ -6044,16 +6052,35 @@ function renderExternalSummary(d){
   } else if(d.groupTourId){
     const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
     if(!m){el.innerHTML='<div class="empty">找不到對應的行程資料</div>';return;}
-    const tourId=m[1],date=m[2];
+    const tourId=m[1],date=m[2],busIdx=parseInt(m[3]);
     const t=tours.find(x=>x.id===tourId);
+    const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
+    const buses=buildBuses(dateBks,t?.busMax||8,tourId,date);
+    const myBus=buses.find(b=>b.busIdx===busIdx);
+    const bks=myBus?.bookings||[];
+    const custRows=bks.map(b=>({name:b.name,count:b.count,balance:calcBookingBalance(b)}));
+    const totalBalance=custRows.reduce((s,r)=>s+r.balance,0);
+    const gn=getGroupNightly(tourId,date,busIdx);
+    let hotelAdvance=0;
+    (gn?.nightlyHotels||[]).forEach((nh,i)=>{
+      if((nh.paymentType||'company')==='driver'){
+        hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcGroupNightQuote(gn,nh,i);
+      }
+    });
+    const outwage=d.outwage||0;
+    const shouldRemit=totalBalance-hotelAdvance-outwage;
     el.innerHTML=`
       <div style="font-size:12px;color:var(--text2)">行程</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}${d.car?'｜'+d.car:''}</div>
+      ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
+      <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th></tr></thead><tbody>${custRows.map(r=>`<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${statBox('您的外派車資',d.outwage||0,'var(--green)')}
+        ${statBox('應收現金合計',totalBalance)}
+        ${statBox('住宿代付',hotelAdvance,'var(--red)')}
+        ${statBox('您的外派車資',outwage,'var(--green)')}
+        ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-top:10px">此行程的客收／代付明細較複雜，請洽公司確認實際應回帳金額。</div>
       ${disclaimer}
     `;
   } else {
