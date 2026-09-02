@@ -5051,6 +5051,36 @@ function buildTripLinkOptionsHtml(){
     return '';
   }).filter(Boolean).join('');
 }
+// 客收手動連結專用清單：只看前後2週，且只列出「尚未完全收齊（還有尾款未收）」的團，避免選單過長
+function buildIncomeLinkOptionsHtml(){
+  if(!curDriverId)return'';
+  const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-14);
+  const cutoffPastStr=cutoffPast.toISOString().slice(0,10);
+  const cutoffFuture=new Date();cutoffFuture.setDate(cutoffFuture.getDate()+14);
+  const cutoffFutureStr=cutoffFuture.toISOString().slice(0,10);
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&d.end>=cutoffPastStr&&d.start<=cutoffFutureStr).sort((a,b)=>a.start>b.start?1:-1);
+  return myDisps.map(d=>{
+    if(d.privateId){
+      const p=privates.find(x=>x.id===d.privateId);
+      if(!p||(p.depositPaid&&p.balancePaid))return'';
+      return`<option value="priv:${d.privateId}">${d.start}${d.start!==d.end?'~'+d.end:''} ${d.label||''}</option>`;
+    }
+    if(d.groupTourId){
+      const tId=d.groupTourId.split('_')[0];
+      const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+      const busIdx=busMatch?parseInt(busMatch[1]):0;
+      const t=tours.find(x=>x.id===tId);if(!t)return'';
+      const dateBks=bookings.filter(b=>b.tourId===tId&&b.date===d.start);
+      const buses=buildBuses(dateBks,t.busMax||8,tId,d.start);
+      const myBus=buses.find(b=>b.busIdx===busIdx);
+      const myBookings=myBus?.bookings||[];
+      const fullyPaid=myBookings.length>0&&myBookings.every(b=>b.depositPaid&&b.balancePaid);
+      if(fullyPaid)return'';
+      return`<option value="group:${d.groupTourId}">${d.start} ${d.label||''}</option>`;
+    }
+    return '';
+  }).filter(Boolean).join('');
+}
 function toggleAdvanceLink(){
   const chk=document.getElementById('rf-advance').checked;
   document.getElementById('rf-advance-link-wrap').style.display=chk?'block':'none';
@@ -5067,7 +5097,7 @@ function populateIncomeLinkOptions(){
   const sel=document.getElementById('rf-income-link');
   if(!sel)return;
   const cur=sel.value;
-  sel.innerHTML='<option value="">— 不連結 —</option>'+buildTripLinkOptionsHtml();
+  sel.innerHTML='<option value="">— 不連結 —</option>'+buildIncomeLinkOptionsHtml();
   if(cur)sel.value=cur;
 }
 function toggleRecFields(){
