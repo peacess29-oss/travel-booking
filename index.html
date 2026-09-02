@@ -547,6 +547,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-hotel-items"></div>
     <div id="rf-hotel-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
   </div>
+  <!-- 拼團附加費用代墊：選擇本團可代墊的品項（司機現場付現） -->
+  <div id="rf-extras-sec" style="display:none;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">本團附加費用（司機現場付現）</div>
+    <div id="rf-extra-items"></div>
+    <div id="rf-extra-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
+  </div>
   <div id="rf-advance-sec" style="display:none;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
       <input type="checkbox" id="rf-advance" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，要請款
@@ -4956,6 +4962,8 @@ function openRec(id='',defaultType=''){
       renderBalanceItems(this.value);
     } else if(t==='hotel'&&!eIds.rec){
       renderHotelItems(this.value);
+    } else if(t==='other'&&!eIds.rec){
+      renderExtraItems(this.value);
     } else {
       const noteEl=document.getElementById('rf-note');
       if(!noteEl.value.trim()||noteEl.dataset.autoFilled==='1'){
@@ -5011,6 +5019,7 @@ function toggleRecFields(){
   document.getElementById('rf-income-sec').style.display=t==='income'?'block':'none';
   if(t==='income')populateIncomeLinkOptions();
   document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
+  document.getElementById('rf-extras-sec').style.display=(t==='other'&&!eIds.rec)?'block':'none';
   document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
   const advanceEligible=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(t);
   document.getElementById('rf-advance-sec').style.display=advanceEligible?'block':'none';
@@ -5035,6 +5044,10 @@ function toggleRecFields(){
     } else {
       renderHotelItems(date);
     }
+  }
+  // 其他支出：新增時列出本團可代墊的附加費用建議
+  if(t==='other'&&date&&!eIds.rec){
+    renderExtraItems(date);
   }
 }
 
@@ -5143,6 +5156,103 @@ function getPendingHotelItems(date){
   });
   return items;
 }
+// 取得某司機在指定日期，當天派車拼團可代墊的附加費用建議（每人/桌費，不含住宿）
+function getPendingExtraItems(date){
+  if(!curDriverId||!date) return [];
+  const items=[];
+  const myDisps=dispatches.filter(d=>d.driverId===curDriverId&&d.driverType==='own'&&d.groupTourId&&date>=d.start&&date<=d.end);
+  myDisps.forEach(d=>{
+    const tId=d.groupTourId.split('_')[0];
+    const busMatch=d.groupTourId.match(/_bus(\d+)$/);
+    const busIdx=busMatch?parseInt(busMatch[1]):0;
+    const gDate=d.start;
+    const t=tours.find(x=>x.id===tId);
+    if(!t||!t.extras?.length) return;
+    const bks=getDateBks(tId,gDate);
+    const buses=buildBuses(bks,t.busMax||8,tId,gDate);
+    const bus=buses.find(b=>b.busIdx===busIdx);
+    const pax=bus?bus.seats:0;
+    if(!pax) return;
+    t.extras.filter(e=>e.mode!=='room'&&e.price).forEach(e=>{
+      let amount=0,detail='';
+      if(e.mode==='table'){
+        const tables=Math.ceil(pax/(e.tableSize||8));
+        amount=tables*e.price;
+        detail=tables+'桌 × $'+e.price;
+      } else {
+        amount=pax*e.price;
+        detail=pax+'人 × $'+e.price;
+      }
+      items.push({groupTourId:d.groupTourId,tourName:t.name,name:e.name,label:t.name+' - '+e.name+'（'+detail+'）',amount});
+    });
+  });
+  return items;
+}
+function renderExtraItems(date){
+  const el=document.getElementById('rf-extra-items');
+  const items=getPendingExtraItems(date);
+  window._rfExtraItems=items;
+  document.getElementById('rf-extra-diff').style.display='none';
+  document.getElementById('rf-amt').dataset.extraQuote='';
+  if(!items.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px">今日無拼團附加費用項目可代墊，如有代墊請直接於下方輸入金額與備註</div>';
+    return;
+  }
+  el.innerHTML=items.map((item,idx)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg2);border-radius:6px;margin-bottom:4px;font-size:12px">
+      <div>
+        <div style="font-weight:600">${item.label}</div>
+        <div style="color:var(--blue-d)">建議金額：$${item.amount.toLocaleString()}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="rf-ext-${idx}" data-idx="${idx}" style="width:14px;height:14px" onchange="selectExtraItem(${idx})">
+        <span>選取</span>
+      </label>
+    </div>`).join('');
+}
+// 附加費用單選：勾選其中一項時自動取消其他，並帶入金額/備註/代墊連結
+function selectExtraItem(idx){
+  const items=window._rfExtraItems||[];
+  items.forEach((_,i)=>{if(i!==idx){const c=document.getElementById('rf-ext-'+i);if(c)c.checked=false;}});
+  const chk=document.getElementById('rf-ext-'+idx);
+  const amtEl=document.getElementById('rf-amt');
+  const noteEl=document.getElementById('rf-note');
+  if(chk&&chk.checked){
+    const item=items[idx];
+    amtEl.value=item.amount;
+    amtEl.dataset.extraQuote=item.amount;
+    noteEl.value=item.name;
+    noteEl.dataset.autoFilled='1';
+    // 自動勾選代墊，並連結到該團次
+    const advChk=document.getElementById('rf-advance');
+    if(advChk){
+      advChk.checked=true;
+      toggleAdvanceLink();
+      const linkSel=document.getElementById('rf-advance-link');
+      if(linkSel){
+        const val='group:'+item.groupTourId;
+        if(![...linkSel.options].some(o=>o.value===val)){
+          linkSel.innerHTML+=`<option value="${val}">${item.tourName}</option>`;
+        }
+        linkSel.value=val;
+      }
+    }
+  } else {
+    amtEl.dataset.extraQuote='';
+  }
+  checkExtraDiff();
+}
+function checkExtraDiff(){
+  const amtEl=document.getElementById('rf-amt');
+  const diffEl=document.getElementById('rf-extra-diff');
+  if(document.getElementById('rf-type').value!=='other'){diffEl.style.display='none';return;}
+  const q=parseFloat(amtEl.dataset.extraQuote||'');
+  const amt=parseFloat(amtEl.value)||0;
+  if(!q||amt===q){diffEl.style.display='none';return;}
+  const diff=amt-q;
+  diffEl.style.display='block';
+  diffEl.textContent='⚠️ 建議金額 $'+q.toLocaleString()+'，實付 $'+amt.toLocaleString()+'，差額 '+(diff>0?'+':'')+'$'+diff.toLocaleString();
+}
 function renderHotelItems(date){
   const el=document.getElementById('rf-hotel-items');
   const items=getPendingHotelItems(date);
@@ -5208,7 +5318,7 @@ function renderHotelItemEdit(r){
     el.innerHTML=`<div style="margin-bottom:4px"><label style="font-size:12px">酒店名稱</label><input id="rf-hotel-manual" type="text" value="${(r.hotelName||'').replace(/"/g,'&quot;')}" style="height:34px;font-size:13px;width:100%"></div>`;
   }
 }
-document.addEventListener('input',e=>{if(e.target.id==='rf-amt')checkHotelDiff();});
+document.addEventListener('input',e=>{if(e.target.id==='rf-amt'){checkHotelDiff();checkExtraDiff();}});
 function checkHotelDiff(){
   const amtEl=document.getElementById('rf-amt');
   const diffEl=document.getElementById('rf-hotel-diff');
