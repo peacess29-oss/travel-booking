@@ -2731,7 +2731,7 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
   const newDocId=uid();
   const newData={label,start,end:type==='private'?end:(end||start),startTime:'full',endTime:'full',
     driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,
-    outsourceName:'',car:'',carCount:1,wage,outwage,nightAllowance,
+    outsourceName:newDrv?.type==='own'?'':drvName,car:'',carCount:1,wage,outwage,nightAllowance,
     note:type==='private'?'來自包車團：'+label:'來自拼團：'+label};
   if(type==='private'){
     // orderId 格式：privId 或 privId_busN
