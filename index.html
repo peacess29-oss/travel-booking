@@ -4743,6 +4743,18 @@ function renderDriverPage(){
     if(seenKey.has(key))return false;
     seenKey.add(key);return true;
   });
+  // 排序：出團中 → 即將出發（早到晚）→ 已結束（最近結束的在前）
+  myOrders.sort((a,b)=>{
+    const pri=x=>{
+      if(x.start<=today&&today<=x.end)return 0;
+      if(x.end<today)return 2;
+      return 1;
+    };
+    const pa=pri(a),pb=pri(b);
+    if(pa!==pb)return pa-pb;
+    if(pa===2)return a.end>b.end?-1:a.end<b.end?1:0;
+    return a.start>b.start?1:a.start<b.start?-1:0;
+  });
 
   const scheduleHtml=myOrders.length===0?'<div class="empty" style="padding:12px">目前無即將出發或近期已結束的行程</div>':myOrders.map(d=>{
     // 包車團
