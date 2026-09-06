@@ -3659,7 +3659,7 @@ function buildGroupIncomeRows(y,m,isYear,field){
   return rows;
 }
 function calcDI(y,m,isYear){
-  return driverRecs.filter(r=>r.type==='income'&&!(r.relatedBookingIds?.length)&&!(r.relatedPrivateIds?.length)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
+  return driverRecs.filter(r=>r.type==='income'&&!(r.relatedBookingIds?.length)&&!(r.relatedPrivateIds?.length)&&!(r.incomeLinkType==='group'||r.incomeLinkType==='priv')&&(isYear?inYear(r.date,y):inMonth(r.date,y,m)));
 }
 // 司機個人收入（外收/小費，僅顯示參考，不納入公司損益）
 function calcDriverPersonal(y,m,isYear){
@@ -6333,6 +6333,10 @@ async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds
 async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
   if(!confirm(`確定要回報「${name}」已收款 $${balance.toLocaleString()} 嗎？`))return;
   await submitExtIncome(driverId,driverName,balance,'外派司機回報客收：'+name,[bookingId]);
+  // 連動標記這筆報名的尾款為已收，跟司機app的客收流程一致
+  await db.collection('bookings').doc(bookingId).update({balancePaid:true});
+  const bi=bookings.findIndex(b=>b.id===bookingId);
+  if(bi>=0) bookings[bi]={...bookings[bi],balancePaid:true};
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
@@ -6341,8 +6345,56 @@ async function reportPrivIncome(privId,driverId,driverName){
   if(!amt){alert('請輸入金額');return;}
   if(!confirm(`確定要回報已收款 $${amt.toLocaleString()} 嗎？`))return;
   await submitExtIncome(driverId,driverName,amt,'外派司機回報客收','','priv',privId);
+  // 累計回報金額若已達尾款總額，連動標記這團尾款為已收（比照司機app的客收流程）
+  const p=privates.find(x=>x.id===privId);
+  if(p){
+    const totalBalance=(p.price||0)-(p.deposit||0);
+    const priorTotal=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===privId).reduce((s,r)=>s+(r.amount||0),0);
+    if(!p.balancePaid&&priorTotal>=totalBalance&&totalBalance>0){
+      await db.collection('privates').doc(privId).update({balancePaid:true});
+      const pi=privates.findIndex(x=>x.id===privId);
+      if(pi>=0) privates[pi]={...privates[pi],balancePaid:true};
+    }
+  }
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
+}
+async function submitExtRemit(driverId,driverName,amount,remitLinkType,remitLinkId){
+  const id=uid();
+  const data={type:'remit',driverId,driverName:driverName||'',date:new Date().toISOString().slice(0,10),amount,note:'外派司機回報回帳',source:'ext-link',remitLinkType,remitLinkId};
+  await db.collection('driverRecs').doc(id).set(data);
+  driverRecs=[...driverRecs,{id,...data}];
+}
+async function reportGroupRemit(groupTourId,driverId,driverName){
+  const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
+  if(!amt){alert('請輸入金額');return;}
+  if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
+  await submitExtRemit(driverId,driverName,amt,'group',groupTourId);
+  alert('已回報，謝謝！');
+  if(window._extDisp)renderExternalSummary(window._extDisp);
+}
+async function reportPrivRemit(privId,driverId,driverName){
+  const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
+  if(!amt){alert('請輸入金額');return;}
+  if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
+  await submitExtRemit(driverId,driverName,amt,'priv',privId);
+  alert('已回報，謝謝！');
+  if(window._extDisp)renderExternalSummary(window._extDisp);
+}
+// 外派連結：回報已回帳區塊（含歷史回報清單），拼團／包車團共用
+function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driverName,onclickFn){
+  const priorRemits=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitLinkType&&r.remitLinkId===remitLinkId);
+  const priorTotal=priorRemits.reduce((s,r)=>s+(r.amount||0),0);
+  const nameEsc=(driverName||'').replace(/'/g,"\\'");
+  return `
+    <div style="font-size:12px;font-weight:600;margin:14px 0 6px">回報已回帳</div>
+    ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已回報：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;height:34px;font-size:13px" placeholder="回帳金額">
+      <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 回報</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:14px">送出前會再跳出確認視窗</div>
+  `;
 }
 function renderExternalSummary(d){
   window._extDisp=d;
@@ -6391,6 +6443,7 @@ function renderExternalSummary(d){
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
         <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 回報</button>
       </div>
+      ${extRemitSectionHtml('priv',p.id,shouldRemit,d.driverId,d.driverName,'reportPrivRemit')}
       ${disclaimer}
     `;
   } else if(d.groupTourId){
@@ -6432,6 +6485,7 @@ function renderExternalSummary(d){
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
       </div>
+      ${extRemitSectionHtml('group',d.groupTourId,shouldRemit,d.driverId,d.driverName,'reportGroupRemit')}
       ${disclaimer}
     `;
   } else {
