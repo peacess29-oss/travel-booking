@@ -6336,6 +6336,45 @@ function enterExternalMode(token){
     });
   }).catch(()=>{contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
 }
+// 外派司機連結：行程資訊區塊（特殊需求裝備／貴賓聯絡方式／接送機／住宿安排／行程內容），A車與B/C車共用
+function extTripInfoHtml(p,d){
+  const gear=[];
+  if(p.carSeat>0)gear.push(`安全座椅×${p.carSeat}`);
+  if(p.booster>0)gear.push(`增高墊×${p.booster}`);
+  if(p.stroller>0)gear.push(`嬰兒車×${p.stroller}`);
+  if(p.wheelchair>0)gear.push(`輪椅×${p.wheelchair}`);
+  const gearHtml=gear.length?`<div style="font-size:12px;padding:8px 10px;background:var(--amber-l);color:#9A6000;border-radius:8px;margin-bottom:14px">⚠️ 特殊需求裝備：${gear.join('、')}</div>`:'';
+  const chMap={WhatsApp:'WhatsApp',LINE官方:'LINE官方',LINE個人:'LINE個人',FB:'FB',微信:'微信'};
+  const ch=chMap[p.channel]||p.channel||'';
+  const contactHtml=`<div style="border-radius:8px;padding:10px 12px;background:var(--bg2);margin-bottom:14px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">貴賓聯絡方式</div>
+    <div style="font-size:13px;margin-bottom:4px"><i class="ti ti-phone"></i> ${p.phone||'-'}${ch?'（'+ch+(p.contact?' '+p.contact:'')+'）':''}</div>
+    ${p.pickup?`<div style="font-size:13px;margin-bottom:4px"><i class="ti ti-plane-departure"></i> 接機 ${p.pickupTime||''} ${p.pickupFlight||''}${p.pickupNote?'／'+p.pickupNote:''}</div>`:''}
+    ${p.dropoff?`<div style="font-size:13px"><i class="ti ti-plane-arrival"></i> 送機 ${p.dropoffTime||''} ${p.dropoffFlight||''}${p.dropoffNote?'／'+p.dropoffNote:''}</div>`:''}
+  </div>`;
+  let hotelHtml='';
+  if(p.type==='car+hotel'&&p.nightlyHotels?.length){
+    const rows=p.nightlyHotels.map((n,i)=>{
+      const h=hotels.find(x=>x.id===n.hotelId);
+      const name=h?h.name:(n.hotelId||'-');
+      const area=h?.area||'';
+      const dt=p.start?(()=>{const x=new Date(p.start);x.setDate(x.getDate()+i);return(x.getMonth()+1)+'/'+x.getDate();})():'';
+      return`<tr style="border-bottom:0.5px solid var(--border)"><td style="padding:5px 0;white-space:nowrap;color:var(--text2);font-size:12px">${dt}</td><td style="padding:5px 0 5px 10px;font-size:13px">${name}${area?'（'+area+'）':''}</td></tr>`;
+    }).join('');
+    hotelHtml=`<div style="font-size:12px;font-weight:600;margin-bottom:6px">住宿安排</div><table style="width:100%;border-collapse:collapse;margin-bottom:14px">${rows}</table>`;
+  }
+  const itin=(p.itinerary||'').trim();
+  const itinHtml=itin?`<div style="font-size:12px;font-weight:600;margin-bottom:6px">行程內容</div><div style="font-size:13px;white-space:pre-wrap;line-height:1.7;margin-bottom:14px;color:var(--text2)">${itin}</div>`:'';
+  return `
+    <div style="font-size:12px;color:var(--text2)">行程</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
+    ${gearHtml}
+    ${contactHtml}
+    ${hotelHtml}
+    ${itinHtml}
+  `;
+}
 function renderExternalSummary(d){
   const el=document.getElementById('ext-content');
   const disclaimer='<div style="font-size:11px;color:var(--text2);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">＊以上金額為系統試算僅供參考，實際金額請以公司通知為準，如有疑問請直接聯繫公司。</div>';
@@ -6343,15 +6382,12 @@ function renderExternalSummary(d){
   if(d.privateId){
     const p=privates.find(x=>x.id===d.privateId);
     if(!p){el.innerHTML='<div class="empty">找不到對應的行程資料</div>';return;}
-    // 包車團多車：帳務統一由A車負責，B/C車只顯示行程與住宿資訊供查詢，不顯示金額/應回帳
+    const tripInfoHtml=extTripInfoHtml(p,d);
+    // 包車團多車：帳務統一由A車負責，B/C車只顯示行程資訊，不顯示金額/應回帳
     if((d.privateBusIdx??0)!==0){
       el.innerHTML=`
-        <div style="font-size:12px;color:var(--text2)">行程</div>
-        <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
-        <div style="font-size:12px;padding:8px 10px;background:var(--blue-l);color:var(--blue-d);border-radius:8px;margin-bottom:14px">ℹ️ 本團帳務統一由A車司機負責回帳，此頁僅供查詢行程與住宿資訊</div>
-        ${p.hotelName?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">住宿安排</div><div style="font-size:13px;margin-bottom:14px;white-space:pre-wrap;line-height:1.6">${p.hotelName}</div>`:''}
-        ${p.itinerary?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">行程內容</div><div style="font-size:13px;white-space:pre-wrap;line-height:1.7;margin-bottom:14px">${p.itinerary}</div>`:''}
+        <div style="font-size:12px;padding:8px 10px;background:var(--blue-l);color:var(--blue-d);border-radius:8px;margin-bottom:14px">ℹ️ 本團帳務統一由A車司機負責回帳，此頁僅供查詢行程資訊</div>
+        ${tripInfoHtml}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           ${statBox('您的外派車資',d.outwage||0,'var(--green)')}
         </div>
@@ -6369,9 +6405,8 @@ function renderExternalSummary(d){
     const outwage=d.outwage||0;
     const shouldRemit=balance-hotelAdvance-outwage;
     el.innerHTML=`
-      <div style="font-size:12px;color:var(--text2)">行程</div>
-      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
+      ${tripInfoHtml}
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('應收現金（尾款）',balance)}
         ${statBox('住宿代付',hotelAdvance,'var(--red)')}
