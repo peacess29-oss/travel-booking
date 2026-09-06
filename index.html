@@ -3826,6 +3826,16 @@ function renderFinance(){
   function finCard(id,label,val,color,icon){
     return `<div class="fin-card${color==='red'?' fin-card-exp':''}" onclick="toggleFinSection('${id}')" style="cursor:pointer"><div class="fin-card-label"><i class="ti ${icon}"></i> ${label}</div><div class="fin-card-val" style="color:var(--${color})">${val===0?'—':'$'+val.toLocaleString()}</div><div class="fin-card-arrow" id="arr-${id}">▾</div></div>`;
   }
+  function finStatCard(label,val,color){
+    return `<div style="background:var(--bg2);border-radius:8px;padding:10px 14px;flex:1;min-width:140px"><div style="font-size:12px;color:var(--text2)">${label}</div><div style="font-size:18px;font-weight:700;color:var(--${color})">$${val.toLocaleString()}</div></div>`;
+  }
+  const expSecsDef=[
+    {id:'hotel',label:'酒店費用'},{id:'salary',label:'司機薪資'},{id:'outsource',label:'外派費用'},
+    {id:'night',label:'外宿補貼'},{id:'insurance',label:'旅遊險'},{id:'fuel',label:'油錢'},
+    {id:'urea',label:'尿素'},{id:'parking',label:'停車費'},{id:'toll',label:'過路費'},
+    {id:'maint',label:'保養/維修'},{id:'inspection',label:'驗車'},{id:'storage',label:'寄鋪'},
+    {id:'fixed',label:'固定支出'},{id:'ad',label:'廣告行銷'},{id:'misc',label:'其他雜支'},
+  ];
   el.innerHTML=`
   <style>
     .fin-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:110px;flex:1;text-align:center;transition:box-shadow .15s;user-select:none}
@@ -3845,103 +3855,37 @@ function renderFinance(){
   </div>
   ${isYear&&monthly?`<div class="card"><div class="card-title"><i class="ti ti-chart-line"></i> 月度趨勢</div><div class="mo-chart">${monthly.map((d,i)=>`<div class="mo-bar-wrap"><div style="display:flex;align-items:flex-end;gap:2px;height:100px"><div class="mo-bar" style="background:var(--green-l);border:1px solid var(--green);height:${Math.round(d.income/maxBar*100)}px;width:10px" title="收入$${d.income.toLocaleString()}"></div><div class="mo-bar" style="background:var(--red-l);border:1px solid #F09595;height:${Math.round(d.exp/maxBar*100)}px;width:10px" title="支出$${d.exp.toLocaleString()}"></div></div><div class="mo-bar-lbl">${i+1}</div></div>`).join('')}</div><div class="tbl-wrap"><table class="xtable"><thead><tr><th>月份</th><th style="text-align:right">收入</th><th style="text-align:right">支出</th><th style="text-align:right">利潤</th><th style="text-align:right">利潤率</th></tr></thead><tbody>${monthly.map((d,i)=>`<tr><td style="cursor:pointer;color:var(--blue)" onclick="finMonth=${i};document.getElementById('fin-mode').value='month';renderFinance()">${y}年${MONTHS[i]} ↗</td><td style="text-align:right;color:${d.income>0?'var(--green)':'var(--text3)'}">$${d.income.toLocaleString()}</td><td style="text-align:right;color:${d.exp>0?'var(--red)':'var(--text3)'}">$${d.exp.toLocaleString()}</td><td style="text-align:right;color:${d.profit>0?'var(--green)':d.profit<0?'var(--red)':'var(--text3)'}">$${d.profit.toLocaleString()}</td><td style="text-align:right;color:var(--text2)">${d.income?Math.round(d.profit/d.income*100)+'%':'—'}</td></tr>`).join('')}</tbody><tfoot><tr><td>全年</td><td style="text-align:right;color:var(--green)">$${ti.toLocaleString()}</td><td style="text-align:right;color:var(--red)">$${te.toLocaleString()}</td><td style="text-align:right;color:${np>=0?'var(--green)':'var(--red)'}">$${np.toLocaleString()}</td><td style="text-align:right">${ti?pr+'%':'—'}</td></tr></tfoot></table></div></div>`:''}
   <div class="card">
-    <div class="card-title" style="margin-bottom:10px"><i class="ti ti-layout-grid"></i> 財務總覽 <span style="font-size:11px;font-weight:400;color:var(--text2)">點擊格子展開明細</span></div>
-    <div style="font-size:11px;font-weight:600;color:var(--green-d);margin-bottom:6px;letter-spacing:1px">▌ 收入</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
-      ${finCard('dep','定金收入',tDep,'green','ti-wallet')}
-      ${finCard('bal','尾款收入',tBal,'green','ti-cash')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      ${finStatCard('訂金總收入',tDep,'green-d')}
+      ${finStatCard('尾款總收入',tBal,'green-d')}
+      ${finStatCard('總支出',te,'red')}
+      ${finStatCard('淨利',np,np>=0?'green-d':'red')}
     </div>
-    <div id="fin-section-dep" class="fin-section">
-      <div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable">
-        <thead><tr><th>來源</th><th>行程/團名</th><th>組/人</th><th style="text-align:right">定金</th></tr></thead>
-        <tbody>
-          ${buildGroupIncomeRows(y,m,isYear,'deposit').map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.date} ${x.name}</td><td>${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td></tr>`).join('')}
-          ${pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);const depIn=p2?.depositPaid&&(isYear?inYear(p2.depositDate||p2.start,y):inMonth(p2.depositDate||p2.start,y,m));return depIn;}).map(x=>`<tr><td><span class="badge badge-blue">包車</span></td><td>${x.name}</td><td>${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${(privates.find(p=>p.id===x.id)?.deposit||0).toLocaleString()}</td></tr>`).join('')}
-          ${(giDep===0&&piDepOnly===0)?'<tr><td colspan="4" style="text-align:center;color:var(--text2)">本期無定金收入</td></tr>':''}
-        </tbody>
-        <tfoot><tr><td colspan="3">合計</td><td style="text-align:right;color:var(--green);font-weight:700">$${tDep.toLocaleString()}</td></tr></tfoot>
-      </table></div>
-    </div>
-    <div id="fin-section-bal" class="fin-section">
-      <div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable">
-        <thead><tr><th>來源</th><th>行程/團名</th><th>說明</th><th style="text-align:right">尾款</th></tr></thead>
-        <tbody>
-          ${buildGroupIncomeRows(y,m,isYear,'balance').map(x=>`<tr><td><span class="badge badge-green">拼團</span></td><td>${x.date} ${x.name}</td><td style="font-size:11px;color:var(--text2)">${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td></tr>`).join('')}
-          ${pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);return p2?.balancePaid&&(isYear?inYear(p2.start,y):inMonth(p2.start,y,m));}).map(x=>`<tr><td><span class="badge badge-blue">包車</span></td><td>${x.name}</td><td style="font-size:11px;color:var(--text2)">${x.pax}人</td><td style="text-align:right;color:var(--green);font-weight:600">$${((privates.find(p=>p.id===x.id)?.price||0)-(privates.find(p=>p.id===x.id)?.deposit||0)).toLocaleString()}</td></tr>`).join('')}
-          ${di.map(r=>`<tr><td><span class="badge" style="background:var(--blue-l);color:var(--blue)">司機客收</span></td><td>${r.driverName||'-'}</td><td style="font-size:11px;color:var(--text2)">${r.note||'-'}${r.car?' ・'+r.car:''}</td><td style="text-align:right;color:var(--green);font-weight:600">$${r.amount.toLocaleString()}</td></tr>`).join('')}
-          ${(giBal===0&&piBalOnly===0&&di.length===0)?'<tr><td colspan="4" style="text-align:center;color:var(--text2)">本期無尾款收入</td></tr>':''}
-        </tbody>
-        <tfoot><tr><td colspan="3">合計</td><td style="text-align:right;color:var(--green);font-weight:700">$${tBal.toLocaleString()}</td></tr></tfoot>
-      </table></div>
-    </div>
-    <div style="font-size:11px;font-weight:600;color:#A32D2D;margin-bottom:6px;margin-top:14px;letter-spacing:1px">▌ 支出</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px">
-      ${finCard('exp-hotel','酒店費用',expBycat['hotel']||0,'red','ti-building')}
-      ${finCard('exp-salary','司機薪資',expBycat['salary']||0,'red','ti-steering-wheel')}
-      ${finCard('exp-outsource','外派費用',expBycat['outsource']||0,'red','ti-users')}
-      ${finCard('exp-night','外宿補貼',expBycat['night']||0,'red','ti-moon')}
-      ${finCard('exp-insurance','旅遊險',expBycat['insurance']||0,'red','ti-shield')}
-      ${finCard('exp-fuel','油錢',expBycat['fuel']||0,'red','ti-gas-station')}
-      ${finCard('exp-urea','尿素',expBycat['urea']||0,'red','ti-droplet')}
-      ${finCard('exp-parking','停車費',expBycat['parking']||0,'red','ti-parking')}
-      ${finCard('exp-toll','過路費',expBycat['toll']||0,'red','ti-road')}
-      ${finCard('exp-maint','保養/維修',expBycat['maint']||0,'red','ti-tool')}
-      ${finCard('exp-inspection','驗車',expBycat['inspection']||0,'red','ti-certificate')}
-      ${finCard('exp-storage','寄鋪',expBycat['storage']||0,'red','ti-home-garage')}
-      ${finCard('exp-fixed','固定支出',(expBycat['car_ins']||0)+(expBycat['license']||0)+(expBycat['loan']||0),'red','ti-repeat')}
-      ${finCard('exp-ad','廣告行銷',expBycat['ad']||0,'red','ti-speakerphone')}
-      ${finCard('exp-misc','其他雜支',expBycat['misc']||0,'red','ti-dots')}
-    </div>
+    <select id="fin-cat-filter" onchange="filterFinRows()" style="width:100%;margin-bottom:10px;height:34px;font-size:13px">
+      <option value="all">全部類別</option>
+      <option value="exp-all">全部支出</option>
+      <option value="dep">定金收入</option>
+      <option value="bal">尾款收入</option>
+      ${expSecsDef.map(s=>`<option value="exp-${s.id}">${s.label}</option>`).join('')}
+    </select>
     ${(()=>{
-      const expSecs=[
-        {id:'hotel',label:'酒店費用',meCats:['hotel'],deTypes:[],feCats:[]},
-        {id:'salary',label:'司機薪資',meCats:['salary'],deTypes:[],feCats:[]},
-        {id:'outsource',label:'外派費用',meCats:['outsource'],deTypes:[],feCats:[]},
-        {id:'night',label:'外宿補貼',meCats:[],deTypes:[],feCats:[]},
-        {id:'insurance',label:'旅遊險',meCats:['insurance'],deTypes:[],feCats:[]},
-        {id:'fuel',label:'油錢',meCats:['fuel'],deTypes:['fuel'],feCats:[]},
-        {id:'urea',label:'尿素',meCats:['urea'],deTypes:['urea'],feCats:[]},
-        {id:'parking',label:'停車費',meCats:['parking'],deTypes:['parking'],feCats:[]},
-        {id:'toll',label:'過路費',meCats:['toll'],deTypes:['toll'],feCats:[]},
-        {id:'maint',label:'保養/維修',meCats:['maint'],deTypes:['maint'],feCats:[]},
-        {id:'inspection',label:'驗車',meCats:[],deTypes:['inspection'],feCats:[]},
-        {id:'storage',label:'寄鋪',meCats:[],deTypes:['storage'],feCats:[]},
-        {id:'fixed',label:'固定支出',meCats:[],deTypes:[],feCats:['insurance','license','loan']},
-        {id:'ad',label:'廣告行銷',meCats:['ad'],deTypes:[],feCats:['ad']},
-        {id:'misc',label:'其他雜支',meCats:['misc'],deTypes:['other'],feCats:['other']},
+      const depRows=[
+        ...buildGroupIncomeRows(y,m,isYear,'deposit').map(x=>`<tr data-cat="dep"><td>${x.date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px"><span class="badge badge-green">拼團</span> ${x.name}（${x.pax}人）</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td><td></td></tr>`),
+        ...pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);const depIn=p2?.depositPaid&&(isYear?inYear(p2.depositDate||p2.start,y):inMonth(p2.depositDate||p2.start,y,m));return depIn;}).map(x=>{const p2=privates.find(p=>p.id===x.id);return`<tr data-cat="dep"><td>${p2?.depositDate||p2?.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px"><span class="badge badge-blue">包車</span> ${x.name}（${x.pax}人）</td><td style="text-align:right;color:var(--green);font-weight:600">$${(p2?.deposit||0).toLocaleString()}</td><td></td></tr>`;}),
       ];
-      return expSecs.map(sec=>{
-        const mr=me.filter(e=>sec.meCats.includes(e.category));
-        const dr=de.filter(r=>sec.deTypes.includes(r.type));
-        const fr=fe.filter(f=>sec.feCats.includes(f.category));
-        // 酒店費用：booked+已付款或司機現場付，依出發日篩選
-        const piHotelRows=sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivHotelExpense(p)>0).map(pv=>{
-          const hexp=calcPrivHotelExpense(pv);
-          const hadv=calcPrivAdvanceHotel(pv);
-          const balBadge=pv.balancePaid
-            ?`<span class="badge badge-green" style="font-size:10px">尾款已收</span>`
-            :(hadv>0?`<span class="badge badge-amber" style="font-size:10px">⚠️ 代墊中</span>`:'');
-          // 各晚付款方式摘要
-          const paySum=(pv.nightlyHotels||[]).filter(n=>n.hotelId||n.finalQuote||n.r2||n.r3||n.r4||n.r5||n.r6).map((n,i)=>{
-            const isPay=(n.paymentType||'company')==='driver'||n.hotelPaid;
-            if(!isPay)return'';
-            const payLabel=(n.paymentType||'company')==='driver'?'司機付':'公司付';
-            return`<span style="font-size:10px;color:var(--text2)">第${i+1}晚${payLabel}</span>`;
-          }).filter(Boolean).join(' ');
-          return `<tr><td>${pv.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">包車團：${pv.name} ${balBadge} <span style="margin-left:4px">${paySum}</span></td><td style="text-align:right;color:var(--red);font-weight:600">$${calcPrivHotelExpense(pv).toLocaleString()}</td><td></td></tr>`;
-        }):[];
-        // 外宿補貼：從 dispatch 記錄抓，帶出團名/司機名
-        const piNightRows=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
-          return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.nightAllowance||0).toLocaleString()}</td><td></td></tr>`;
-        }):[];
-        // 司機薪資／外派車資：從派車總表(dispatches.wage/outwage)抓
-        const piSalaryRows=sec.id==='salary'?dispatches.filter(d=>(d.wage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
-          return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.wage||0).toLocaleString()}</td><td></td></tr>`;
-        }):[];
-        const piOutsourceRows=sec.id==='outsource'?dispatches.filter(d=>(d.outwage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>{
-          return `<tr><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.outwage||0).toLocaleString()}</td><td></td></tr>`;
-        }):[];
-        // 拼團住宿成本明細（依出發日+車，涵蓋所有多天行程）
+      const balRows=[
+        ...buildGroupIncomeRows(y,m,isYear,'balance').map(x=>`<tr data-cat="bal"><td>${x.date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px"><span class="badge badge-green">拼團</span> ${x.name}（${x.pax}人）</td><td style="text-align:right;color:var(--green);font-weight:600">$${x.amount.toLocaleString()}</td><td></td></tr>`),
+        ...pi.filter(x=>{const p2=privates.find(p=>p.id===x.id);return p2?.balancePaid&&(isYear?inYear(p2.start,y):inMonth(p2.start,y,m));}).map(x=>{const p2=privates.find(p=>p.id===x.id);return`<tr data-cat="bal"><td>${p2?.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px"><span class="badge badge-blue">包車</span> ${x.name}（${x.pax}人）</td><td style="text-align:right;color:var(--green);font-weight:600">$${((p2?.price||0)-(p2?.deposit||0)).toLocaleString()}</td><td></td></tr>`;}),
+        ...di.map(r=>`<tr data-cat="bal"><td>${r.date||'-'}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px"><span class="badge" style="background:var(--blue-l);color:var(--blue)">司機客收</span> ${r.note||'-'}</td><td style="text-align:right;color:var(--green);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
+      ];
+      const expRowsAll=expSecsDef.map(sec=>{
+        const mr=me.filter(e=>({hotel:['hotel'],salary:['salary'],outsource:['outsource'],night:[],insurance:['insurance'],fuel:['fuel'],urea:['urea'],parking:['parking'],toll:['toll'],maint:['maint'],inspection:[],storage:[],fixed:[],ad:['ad'],misc:['misc']}[sec.id]||[]).includes(e.category));
+        const dr=de.filter(r=>({hotel:[],salary:[],outsource:[],night:[],insurance:[],fuel:['fuel'],urea:['urea'],parking:['parking'],toll:['toll'],maint:['maint'],inspection:['inspection'],storage:['storage'],fixed:[],ad:[],misc:['other']}[sec.id]||[]).includes(r.type));
+        const fr=fe.filter(f=>({fixed:['insurance','license','loan'],ad:['ad'],misc:['other']}[sec.id]||[]).includes(f.category));
+        const piHotelRows=sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivHotelExpense(p)>0).map(pv=>`<tr data-cat="exp-hotel"><td>${pv.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">包車團：${pv.name}</td><td style="text-align:right;color:var(--red);font-weight:600">$${calcPrivHotelExpense(pv).toLocaleString()}</td><td></td></tr>`):[];
+        const piNightRows=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>`<tr data-cat="exp-night"><td>${d.start||'-'}</td><td style="font-size:11px">-</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.nightAllowance||0).toLocaleString()}</td><td></td></tr>`):[];
+        const piSalaryRows=sec.id==='salary'?dispatches.filter(d=>(d.wage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>`<tr data-cat="exp-salary"><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.wage||0).toLocaleString()}</td><td></td></tr>`):[];
+        const piOutsourceRows=sec.id==='outsource'?dispatches.filter(d=>(d.outwage||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).map(d=>`<tr data-cat="exp-outsource"><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">派車：${d.note||d.label||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(d.outwage||0).toLocaleString()}</td><td></td></tr>`):[];
         const piGroupHotelRows=sec.id==='hotel'?(()=>{
           const rows2=[];
           const tourDatePairs=[...new Set(bookings.filter(b=>isYear?inYear(b.date,y):inMonth(b.date,y,m)).map(b=>b.tourId+'|'+b.date))];
@@ -3957,12 +3901,11 @@ function renderFinance(){
               let cost;
               if(gnHasData){cost=calcGroupHotelExpense(tourId,date,bus.busIdx);}
               else{cost=dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);if(buses.length>1)cost=cost/buses.length;}
-              if(cost>0)rows2.push(`<tr><td>${date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">拼團：${t.name}${buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':''}</td><td style="text-align:right;color:var(--red);font-weight:600">$${cost.toLocaleString()}</td><td></td></tr>`);
+              if(cost>0)rows2.push(`<tr data-cat="exp-hotel"><td>${date}</td><td style="font-size:11px">-</td><td style="font-size:11px">-</td><td style="font-size:11px">拼團：${t.name}${buses.length>1?'（'+String.fromCharCode(65+bus.busIdx)+'車）':''}</td><td style="text-align:right;color:var(--red);font-weight:600">$${cost.toLocaleString()}</td><td></td></tr>`);
             });
           });
           return rows2;
         })():[];
-        // 手動輸入、未連結排程的住宿代付（排除已被某包車團依司機+日期區間認領計入 calcPrivHotelExpense 的那些，避免重複計算）
         const piManualHotelRows=sec.id==='hotel'?(()=>{
           const claimedIds=new Set();
           privates.forEach(p=>{
@@ -3971,28 +3914,19 @@ function renderFinance(){
             if(!dIds.length)return;
             driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&dIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>claimedIds.add(r.id));
           });
-          return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&!claimedIds.has(r.id)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).map(r=>{
-            return `<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">手動輸入：${r.hotelName||r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td><td></td></tr>`;
-          });
+          return driverRecs.filter(r=>r.type==='hotel'&&!r.privateId&&!r.groupTourId&&!claimedIds.has(r.id)&&(isYear?inYear(r.date,y):inMonth(r.date,y,m))).map(r=>`<tr data-cat="exp-hotel"><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="font-size:11px">手動輸入：${r.hotelName||r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${(r.amount||0).toLocaleString()}</td><td></td></tr>`);
         })():[];
-        const rows=[
-          ...mr.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr><td>${e.date}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">${e.desc||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`),
-          ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
-          ...fr.map(f=>`<tr><td>固定</td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">${f.name}（${f.cycle==='monthly'?'每月':'每年'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td><td></td></tr>`),
-          ...piHotelRows,
-          ...piGroupHotelRows,
-          ...piManualHotelRows,
-          ...piNightRows,
-          ...piSalaryRows,
-          ...piOutsourceRows,
+        return [
+          ...mr.sort((a,b)=>a.date>b.date?1:-1).map(e=>`<tr data-cat="exp-${sec.id}"><td>${e.date}</td><td style="font-size:11px">${e.car||'-'}</td><td style="font-size:11px">${e.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">${e.desc||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${e.amount.toLocaleString()}</td><td><button class="btn btn-sm" onclick="openExp('${e.id}')"><i class="ti ti-edit"></i></button></td></tr>`),
+          ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr data-cat="exp-${sec.id}"><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
+          ...fr.map(f=>`<tr data-cat="exp-${sec.id}"><td>固定</td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">${f.name}（${f.cycle==='monthly'?'每月':'每年'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td><td></td></tr>`),
+          ...piHotelRows,...piGroupHotelRows,...piManualHotelRows,...piNightRows,...piSalaryRows,...piOutsourceRows,
         ];
-        const nightTotal=sec.id==='night'?dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0):0;
-        const salaryTotal=sec.id==='salary'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.wage||0),0):0;
-        const outsourceTotal=sec.id==='outsource'?dispatches.filter(d=>(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.outwage||0),0):0;
-        const total=mr.reduce((s,e)=>s+e.amount,0)+dr.reduce((s,r)=>s+r.amount,0)+fr.reduce((s,f)=>s+f.eff,0)+(sec.id==='hotel'?privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear)+calcAllGroupHotelExpense(y,m,isYear):0)+nightTotal+salaryTotal+outsourceTotal;
-        return `<div id="fin-section-exp-${sec.id}" class="fin-section">${rows.length?`<div class="tbl-wrap" style="margin:8px 0 4px"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>司機</th><th>說明</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody>${rows.join('')}</tbody><tfoot><tr><td colspan="4">小計</td><td style="text-align:right;color:var(--red)">$${total.toLocaleString()}</td><td></td></tr></tfoot></table></div>`:'<div style="padding:8px;color:var(--text2);font-size:12px">本期無'+sec.label+'記錄</div>'}</div>`;
-      }).join('');
+      }).flat();
+      const allRows=[...depRows,...balRows,...expRowsAll];
+      return `<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>車輛</th><th>司機</th><th>說明</th><th style="text-align:right">金額</th><th></th></tr></thead><tbody id="fin-ledger-body">${allRows.length?allRows.join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text2)">本期無收支記錄</td></tr>'}</tbody></table></div>`;
     })()}
+
     <div style="font-size:11px;font-weight:600;color:#0C447C;margin-bottom:6px;margin-top:14px;letter-spacing:1px">▌ 分析</div>
     ${(()=>{
       const advPrivs=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivAdvanceHotel(p)>0);
@@ -4095,6 +4029,16 @@ function renderFinance(){
       ${drvSections}`;
     })()}
   </div>`;
+}
+function filterFinRows(){
+  const v=document.getElementById('fin-cat-filter')?.value||'all';
+  const body=document.getElementById('fin-ledger-body');
+  if(!body)return;
+  body.querySelectorAll('tr[data-cat]').forEach(tr=>{
+    const cat=tr.dataset.cat||'';
+    const show=v==='all'||(v==='exp-all'&&cat.startsWith('exp-'))||v===cat;
+    tr.style.display=show?'':'none';
+  });
 }
 function toggleFinSection(id){
   const el=document.getElementById('fin-section-'+id);
