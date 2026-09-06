@@ -2333,9 +2333,9 @@ function renderDispatch(){
           const cars=getPrivBusCars(p),BUS=['A','B','C','D','E','F'];
           for(let i=0;i<cars;i++){
             const busOrderId=cars>1?p.id+'_bus'+i:p.id;
-            // 判斷這一天（ds）是否已有 dispatch 記錄涵蓋（不管哪個日期段）
+            // 判斷這一天（ds）是否已有這一台車（i）的 dispatch 記錄涵蓋（多車情況下要比對車次，避免A車派了就誤判B車也算派車）
             const coveredByDisp=dispatches.some(d=>
-              (d.privateId===p.id||(d.label&&d.label.includes(p.name)&&d.start>=p.start&&d.end<=p.end))
+              ((d.privateId===p.id&&(d.privateBusIdx??0)===i)||(cars<=1&&d.label&&d.label.includes(p.name)&&d.start>=p.start&&d.end<=p.end))
               &&ds>=d.start&&ds<=d.end
             );
             if(coveredByDisp)continue; // 這天已有派車記錄，不顯示待派車
