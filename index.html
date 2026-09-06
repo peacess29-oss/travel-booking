@@ -6270,12 +6270,14 @@ function enterExternalMode(token){
       db.collection('privates').get(),
       db.collection('tours').get(),
       db.collection('bookings').get(),
-      db.collection('hotels').get()
-    ]).then(([ps,ts,bs,hs])=>{
+      db.collection('hotels').get(),
+      db.collection('driverRecs').where('driverId','==',d.driverId).get()
+    ]).then(([ps,ts,bs,hs,drs])=>{
       privates=ps.docs.map(x=>({id:x.id,...x.data()}));
       tours=ts.docs.map(x=>({id:x.id,...x.data()}));
       bookings=bs.docs.map(x=>({id:x.id,...x.data()}));
       hotels=hs.docs.map(x=>({id:x.id,...x.data()}));
+      driverRecs=drs.docs.map(x=>({id:x.id,...x.data()}));
       renderExternalSummary(d);
     });
   }).catch(()=>{contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
@@ -6319,7 +6321,31 @@ function extTripInfoHtml(p,d){
     ${itinHtml}
   `;
 }
+// 外派連結回報客收：建立一筆客收記錄（標記 source 供後台追蹤來源）
+async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds,incomeLinkType,incomeLinkId){
+  const id=uid();
+  const data={type:'income',driverId,driverName:driverName||'',date:new Date().toISOString().slice(0,10),amount,note:note||'外派司機回報客收',source:'ext-link'};
+  if(relatedBookingIds)data.relatedBookingIds=relatedBookingIds;
+  if(incomeLinkType){data.incomeLinkType=incomeLinkType;data.incomeLinkId=incomeLinkId;}
+  await db.collection('driverRecs').doc(id).set(data);
+  driverRecs=[...driverRecs,{id,...data}];
+}
+async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
+  if(!confirm(`確定要回報「${name}」已收款 $${balance.toLocaleString()} 嗎？`))return;
+  await submitExtIncome(driverId,driverName,balance,'外派司機回報客收：'+name,[bookingId]);
+  alert('已回報，謝謝！');
+  if(window._extDisp)renderExternalSummary(window._extDisp);
+}
+async function reportPrivIncome(privId,driverId,driverName){
+  const amt=parseInt(document.getElementById('ext-inc-amt')?.value)||0;
+  if(!amt){alert('請輸入金額');return;}
+  if(!confirm(`確定要回報已收款 $${amt.toLocaleString()} 嗎？`))return;
+  await submitExtIncome(driverId,driverName,amt,'外派司機回報客收','','priv',privId);
+  alert('已回報，謝謝！');
+  if(window._extDisp)renderExternalSummary(window._extDisp);
+}
 function renderExternalSummary(d){
+  window._extDisp=d;
   const el=document.getElementById('ext-content');
   const disclaimer='<div style="font-size:11px;color:var(--text2);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">＊以上金額為系統試算僅供參考，實際金額請以公司通知為準，如有疑問請直接聯繫公司。</div>';
   const statBox=(label,val,color)=>`<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-val" style="color:${color||'inherit'}">$${val.toLocaleString()}</div></div>`;
@@ -6348,6 +6374,8 @@ function renderExternalSummary(d){
     });
     const outwage=d.outwage||0;
     const shouldRemit=balance-hotelAdvance-outwage;
+    const priorReports=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id);
+    const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
     el.innerHTML=`
       ${tripInfoHtml}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
@@ -6356,6 +6384,12 @@ function renderExternalSummary(d){
         ${statBox('住宿代付',hotelAdvance,'var(--red)')}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
+      </div>
+      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">回報收款</div>
+      ${priorReports.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已回報：${priorReports.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
+        <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 回報</button>
       </div>
       ${disclaimer}
     `;
@@ -6368,7 +6402,7 @@ function renderExternalSummary(d){
     const buses=buildBuses(dateBks,t?.busMax||8,tourId,date);
     const myBus=buses.find(b=>b.busIdx===busIdx);
     const bks=myBus?.bookings||[];
-    const custRows=bks.map(b=>({name:b.name,count:b.count,balance:calcBookingBalance(b)}));
+    const custRows=bks.map(b=>({bookingId:b.id,name:b.name,count:b.count,balance:calcBookingBalance(b)}));
     const totalBalance=custRows.reduce((s,r)=>s+r.balance,0);
     const gn=getGroupNightly(tourId,date,busIdx);
     let hotelAdvance=0;
@@ -6384,7 +6418,14 @@ function renderExternalSummary(d){
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}${d.car?'｜'+d.car:''}</div>
       ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
-      <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th></tr></thead><tbody>${custRows.map(r=>`<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
+      <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
+        const reported=driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
+        const nameEsc=(r.name||'').replace(/'/g,"\\'");
+        const action=reported
+          ?`<span style="color:var(--green);font-size:12px"><i class="ti ti-check"></i> 已回報</span>`
+          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">回報已收</button>`:'-');
+        return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
+      }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('應收現金合計',totalBalance)}
         ${statBox('住宿代付',hotelAdvance,'var(--red)')}
