@@ -6343,6 +6343,22 @@ function renderExternalSummary(d){
   if(d.privateId){
     const p=privates.find(x=>x.id===d.privateId);
     if(!p){el.innerHTML='<div class="empty">找不到對應的行程資料</div>';return;}
+    // 包車團多車：帳務統一由A車負責，B/C車只顯示行程與住宿資訊供查詢，不顯示金額/應回帳
+    if((d.privateBusIdx??0)!==0){
+      el.innerHTML=`
+        <div style="font-size:12px;color:var(--text2)">行程</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
+        <div style="font-size:12px;padding:8px 10px;background:var(--blue-l);color:var(--blue-d);border-radius:8px;margin-bottom:14px">ℹ️ 本團帳務統一由A車司機負責回帳，此頁僅供查詢行程與住宿資訊</div>
+        ${p.hotelName?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">住宿安排</div><div style="font-size:13px;margin-bottom:14px;white-space:pre-wrap;line-height:1.6">${p.hotelName}</div>`:''}
+        ${p.itinerary?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">行程內容</div><div style="font-size:13px;white-space:pre-wrap;line-height:1.7;margin-bottom:14px">${p.itinerary}</div>`:''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${statBox('您的外派車資',d.outwage||0,'var(--green)')}
+        </div>
+        ${disclaimer}
+      `;
+      return;
+    }
     const balance=(p.price||0)-(p.deposit||0);
     let hotelAdvance=0;
     (p.nightlyHotels||[]).forEach((nh,i)=>{
