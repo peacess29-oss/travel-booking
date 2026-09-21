@@ -4776,6 +4776,7 @@ function renderDriverPage(){
       let busLabelHtml='';
       let descHtml='';
       let nightlyHtml='';
+      let extrasHtml='';
       if(t){
         // groupTourId: tId + '_' + date + '_bus' + N  或  tId + '_' + date（單車舊格式）
         const busMatch=d.groupTourId.match(/_bus(\d+)$/);
@@ -4797,19 +4798,37 @@ function renderDriverPage(){
           }).filter(Boolean).join('');
           if(nights)nightlyHtml=`<div style="margin-top:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">住宿安排</div>${nights}</div>`;
         }
+        if(myBus&&t.extras?.length){
+          const pax=myBus.seats;
+          const extraRows=t.extras.filter(e=>e.mode!=='room'&&e.price).map(e=>{
+            let amount=0,detail='';
+            if(e.mode==='table'){const tables=Math.ceil(pax/(e.tableSize||8));amount=tables*e.price;detail=tables+'桌 × $'+e.price;}
+            else{amount=pax*e.price;detail=pax+'人 × $'+e.price;}
+            return`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${e.name}　<span style="font-size:11px;color:var(--text2)">(${detail})</span></span><span style="font-weight:600;color:var(--amber-d)">$${amount.toLocaleString()}</span></div>`;
+          }).join('');
+          if(extraRows)extrasHtml=`<div style="margin-top:8px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
+            <div style="font-size:11px;color:var(--amber-d);margin-bottom:3px;font-weight:600">附加費用（需代墊）</div>
+            ${extraRows}
+          </div>`;
+        }
         if(myBus&&myBus.bookings.length){
-          const rows=myBus.bookings.map(b=>`<tr>
-            <td style="font-weight:600;font-size:13px">${b.name}</td>
+          const rows=myBus.bookings.map(b=>{
+            const bal=calcBookingBalance(b);
+            return`<tr>
+            <td style="font-size:13px">
+              <div style="font-weight:600">${b.name}</div>
+              <div style="font-size:11px;margin-top:1px;color:${bal>0?'var(--red)':'var(--text2)'}">${bal>0?'尾款 $'+bal.toLocaleString():'尾款已收'}</div>
+            </td>
             <td style="font-size:12px">${b.meetPoint||'-'}</td>
             <td style="font-size:12px">${b.count}人</td>
             <td style="font-size:12px">${b.channel||''}${b.phone?' '+b.phone:''}</td>
             <td style="font-size:12px;color:var(--text2)">${b.note||''}</td>
-          </tr>`).join('');
+          </tr>`;}).join('');
           passengerHtml=`<div style="margin-top:10px">
             <div style="font-size:11px;color:var(--text2);margin-bottom:4px">本車乘客（${myBus.seats}人）</div>
             <table style="width:100%;border-collapse:collapse">
               <thead><tr>
-                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">姓名</th>
+                <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">姓名／尾款</th>
                 <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">集合地點/時間</th>
                 <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">人數</th>
                 <th style="font-size:11px;color:var(--text2);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border)">聯絡</th>
@@ -4830,6 +4849,7 @@ function renderDriverPage(){
         </div>
         ${descHtml}
         ${nightlyHtml}
+        ${extrasHtml}
         ${passengerHtml}
         ${d.note?`<div style="margin-top:8px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:6px">備註：${d.note}</div>`:''}
         ${t?`<div style="margin-top:10px"><button class="btn btn-sm" onclick="openMyCashFlowGroup('${tId}','${dateStr}',${busIdx})"><i class="ti ti-cash"></i> 現金流水</button></div>`:''}
