@@ -229,6 +229,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="fg3"><div><label>幾日遊</label><input id="tf-days" type="number" value="1" min="1" placeholder="1" onchange="renderTourNightlyTemplate()"></div><div><label>最少成團人數</label><input id="tf-min" type="number" value="4"></div><div><label>每車上限</label><input id="tf-bus" type="number" value="8"></div></div>
   <div class="fg2"><div><label>需投旅遊險</label><select id="tf-ins"><option value="1">是</option><option value="0">否</option></select></div><div><label>旅遊險/人（元）</label><input id="tf-insp" type="number" placeholder="100"></div></div>
   <div class="mb10"><label>說明</label><textarea id="tf-desc" style="height:48px" placeholder="行程特色…"></textarea></div>
+  <div class="mb10"><label>預設集合地點/時間</label><input id="tf-meet" placeholder="如：台中高鐵站 07:30，新增報名時會自動帶入，客人另有指定再手動修改"></div>
   <div class="divider"></div>
   <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">🍱 附加費用項目（成本計算用）</div>
   <div id="tf-extras"></div>
@@ -251,6 +252,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="fg2"><div><label>聯絡方式</label><select id="bf-ch"><option>WhatsApp</option><option>LINE官方</option><option>LINE個人</option><option>FB</option><option>微信</option></select></div><div><label>電話</label><input id="bf-phone" placeholder="0912345678"></div></div>
   <div class="fg2"><div><label>出發日期 *</label><input id="bf-date" type="date" onchange="updateBkPrice()"></div><div><label>帳號</label><input id="bf-contact" placeholder="LINE ID"></div></div>
   <div id="bf-price-info" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
+  <div class="mb10"><label>尾款金額（可手動調整——如有小孩，依實際金額修改；上方為系統依人數試算的參考值）</label><input id="bf-balance" type="number" oninput="bkBalanceTouched=true"></div>
   <div class="mb10"><label>集合地點/時間</label><input id="bf-meet" placeholder="如：台中高鐵站 07:30"></div>
   <div class="mb10"><label>備註</label><input id="bf-note" placeholder="特殊需求"></div>
   <div id="bf-room-sec" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--blue-l);border-radius:8px;border:1px solid var(--border)">
@@ -560,12 +562,19 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-remit-items"></div>
   </div>
   <div id="rf-advance-sec" style="display:none;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">此筆支出款項來源</label>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
-      <input type="checkbox" id="rf-advance" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，要請款
+      <input type="radio" name="rf-fund" id="rf-fund-normal" value="normal" checked onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 一般支出（不算代墊）
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
+      <input type="radio" name="rf-fund" id="rf-fund-cash" value="cash" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 客收支付（用今日客收現金支出，不需另外請款）
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
+      <input type="radio" name="rf-fund" id="rf-fund-personal" value="personal" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，需請款（司機自己先出錢，之後公司撥款）
     </label>
     <div id="rf-advance-link-wrap" style="display:none">
-      <label style="font-size:11px;color:var(--text2)">要不要連結到某一團？（連結後會自動算進那團的現金流水；不連結則列入「待請款清單」）</label>
-      <select id="rf-advance-link" style="width:100%;height:34px;font-size:13px"><option value="">— 不連結（進待請款清單）—</option></select>
+      <label style="font-size:11px;color:var(--text2)">連結到哪一團？（客收支付需指定團次）</label>
+      <select id="rf-advance-link" style="width:100%;height:34px;font-size:13px"><option value="">— 請選擇團次 —</option></select>
     </div>
   </div>
   <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
@@ -1388,6 +1397,7 @@ function openTour(id=''){
   document.getElementById('tf-days').value=t?.days||1;document.getElementById('tf-min').value=t?.min||4;document.getElementById('tf-bus').value=t?.busMax||8;
   document.getElementById('tf-ins').value=t?.needInsurance?'1':'0';document.getElementById('tf-insp').value=t?.insPrice||'';
   document.getElementById('tf-desc').value=t?.desc||'';
+  document.getElementById('tf-meet').value=t?.meetDefault||'';
   // 附加費用項目
   window._tourExtras=(t?.extras||[]).map(e=>({...e}));
   renderTourExtras();
@@ -1398,7 +1408,7 @@ function openTour(id=''){
 }
 async function saveTour(){
   const name=document.getElementById('tf-name').value.trim();if(!name)return alert('請填寫名稱');setSS('syncing','儲存中…');
-  const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim(),extras:(window._tourExtras||[]).filter(e=>e.name),nightlyHotels:(window._tourNightly||[]).filter(nh=>nh.hotelId)};
+  const data={name,depositWd:parseInt(document.getElementById('tf-dep-wd').value)||0,depositWk:parseInt(document.getElementById('tf-dep-wk').value)||0,priceWd:parseInt(document.getElementById('tf-pr-wd').value)||0,priceWk:parseInt(document.getElementById('tf-pr-wk').value)||0,min:parseInt(document.getElementById('tf-min').value)||4,busMax:parseInt(document.getElementById('tf-bus').value)||8,days:parseInt(document.getElementById('tf-days').value)||1,needInsurance:document.getElementById('tf-ins').value==='1',insPrice:parseInt(document.getElementById('tf-insp').value)||0,desc:document.getElementById('tf-desc').value.trim(),meetDefault:document.getElementById('tf-meet').value.trim(),extras:(window._tourExtras||[]).filter(e=>e.name),nightlyHotels:(window._tourNightly||[]).filter(nh=>nh.hotelId)};
   if(eIds.tour)await db.collection('tours').doc(eIds.tour).update(data);else await db.collection('tours').doc(uid()).set(data);cm('tour');
 }
 // 住宿範本（多天拼團）：只存飯店/房型比例，每次實際出團另有獨立記錄追蹤訂房/付款狀態
@@ -1469,7 +1479,9 @@ let curBkTourId='';
 function openBook(tid,date='',bookId=''){
   curBkTourId=tid;eIds.book=bookId||null;
   bkRoomCountTouched=!!bookId; // 編輯既有報名時不要用人數覆蓋已存的間數；新增報名才給預設建議
+  bkBalanceTouched=!!bookId; // 編輯既有報名時保留原本（可能已手動調整過的）尾款金額，不被自動試算覆蓋
   const t=tours.find(x=>x.id===tid),b=bookId?bookings.find(x=>x.id===bookId):null;
+  document.getElementById('bf-balance').value=b?.balance??'';
   document.getElementById('mb-title').textContent=bookId?'編輯報名':'新增報名';
   document.getElementById('btn-del-book').style.display=bookId?'inline-flex':'none';
   document.getElementById('mb-info').textContent=(t?.name||'')+(date||b?.date?' ｜ 出發：'+(date||b?.date):'');
@@ -1478,7 +1490,7 @@ function openBook(tid,date='',bookId=''){
   document.getElementById('bf-ch').value=b?.channel||'WhatsApp';document.getElementById('bf-phone').value=b?.phone||'';
   document.getElementById('bf-contact').value=b?.contact||'';document.getElementById('bf-date').value=b?.date||date;
   document.getElementById('bf-note').value=b?.note||'';document.getElementById('bf-dep').checked=!!b?.depositPaid;document.getElementById('bf-ins').checked=!!b?.insured;
-  document.getElementById('bf-meet').value=b?.meetPoint||'';
+  document.getElementById('bf-meet').value=b?b.meetPoint||'':(t?.meetDefault||'');
   // 住宿欄位
   if(document.getElementById('bf-room-hotel-sel-wrap'))document.getElementById('bf-room-hotel-sel-wrap').style.display='none';
   if(document.getElementById('bf-room-cost'))document.getElementById('bf-room-cost').value=b?.roomCost||'';
@@ -1496,7 +1508,8 @@ function updateBkPrice(){
   const totalPrice=pr*cnt,totalDeposit=dep*cnt;
   const roomCost=parseInt(document.getElementById('bf-room-cost')?.value)||0;
   const balance=totalPrice+roomCost-totalDeposit;
-  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">尾款：$${balance.toLocaleString()}</b>`;
+  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">系統試算尾款：$${balance.toLocaleString()}</b>`;
+  if(!bkBalanceTouched)document.getElementById('bf-balance').value=balance;
 }
 // 房間金額/間數手動輸入時，只刷新尾款顯示文字，不重新觸發房間試算（避免蓋掉手動輸入）
 function updateBkPriceDisplayOnly(){
@@ -1507,9 +1520,11 @@ function updateBkPriceDisplayOnly(){
   const totalPrice=pr*cnt,totalDeposit=dep*cnt;
   const roomCost=parseInt(document.getElementById('bf-room-cost')?.value)||0;
   const balance=totalPrice+roomCost-totalDeposit;
-  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">尾款：$${balance.toLocaleString()}</b>`;
+  document.getElementById('bf-price-info').innerHTML=`${isHol(d)?'<span style="color:var(--red)">假日</span>':'平日'} — 每人團費$${pr}×${cnt}人=$${totalPrice.toLocaleString()}　訂金$${dep}×${cnt}=$${totalDeposit.toLocaleString()}${roomCost?'　住宿$'+roomCost.toLocaleString():''}<br><b style="color:var(--red)">系統試算尾款：$${balance.toLocaleString()}</b>`;
+  if(!bkBalanceTouched)document.getElementById('bf-balance').value=balance;
 }
 let bkRoomCountTouched=false;
+let bkBalanceTouched=false;
 function getBkHotelId(){
   const overrideWrap=document.getElementById('bf-room-hotel-sel-wrap');
   const overrideSel=document.getElementById('bf-room-hotel');
@@ -1581,7 +1596,7 @@ async function saveBook(){
   const t2=tours.find(x=>x.id===curBkTourId);
   const dep2=t2?getPrice(t2,date,'deposit'):0,pr2=t2?getPrice(t2,date,'price'):0;
   const roomCost2=parseInt(document.getElementById('bf-room-cost')?.value)||0;
-  const balance=(pr2*cnt)+roomCost2-(dep2*cnt);
+  const balance=parseInt(document.getElementById('bf-balance')?.value)||0;
   const data={name,count:cnt,regdate:document.getElementById('bf-reg').value,channel:document.getElementById('bf-ch').value,phone:document.getElementById('bf-phone').value.trim(),contact:document.getElementById('bf-contact').value.trim(),tourId:curBkTourId,date,note:document.getElementById('bf-note').value.trim(),meetPoint:document.getElementById('bf-meet').value.trim(),depositPaid:document.getElementById('bf-dep').checked,insured:document.getElementById('bf-ins').checked,balancePaid:false,balance,roomCost:roomCost2,roomCount:parseInt(document.getElementById('bf-room-count')?.value)||0,roomType:document.getElementById('bf-room-type')?.value||'2',roomHotelId:getBkHotelId(),roomManual:!!document.getElementById('bf-room-manual')?.checked};
   if(eIds.book)await db.collection('bookings').doc(eIds.book).update(data);else await db.collection('bookings').doc(uid()).set(data);cm('book');
 }
@@ -4820,10 +4835,14 @@ function renderDriverPage(){
         if(myBus&&myBus.bookings.length){
           const rows=myBus.bookings.map(b=>{
             const bal=calcBookingBalance(b);
+            const paid=!!b.balancePaid;
             return`<tr>
             <td style="font-size:13px">
               <div style="font-weight:600">${b.name}</div>
-              <div style="font-size:11px;margin-top:1px;color:${bal>0?'var(--red)':'var(--text2)'}">${bal>0?'尾款 $'+bal.toLocaleString():'尾款已收'}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:1px">
+                <span style="font-size:11px;color:${paid?'var(--text2)':'var(--red)'}">${paid?'尾款已收':'尾款 $'+bal.toLocaleString()}</span>
+                ${!paid?`<button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="quickCollectBalance('${b.id}','${dateStr}')">登記客收</button>`:''}
+              </div>
             </td>
             <td style="font-size:12px">${b.meetPoint||'-'}</td>
             <td style="font-size:12px">${b.count}人</td>
@@ -4993,7 +5012,11 @@ function openRec(id='',defaultType=''){
   cs.innerHTML='<option value="">— 選擇 —</option>'+carsList.map(c=>`<option value="${c}"${c===defaultCar?' selected':''}>${c}</option>`).join('');
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
-  if(document.getElementById('rf-advance'))document.getElementById('rf-advance').checked=!!r?.advance;
+  {
+    const fundVal=r?.advance?(r?.advanceLinkType&&r?.advanceLinkId?'cash':'personal'):'normal';
+    const fundEl=document.getElementById('rf-fund-'+fundVal);
+    if(fundEl)fundEl.checked=true;
+  }
   toggleRecFields();
   if(r?.advance&&r?.advanceLinkType&&r?.advanceLinkId){
     populateAdvanceLinkOptions();
@@ -5086,16 +5109,20 @@ function buildIncomeLinkOptionsHtml(){
     return '';
   }).filter(Boolean).join('');
 }
+function getFundValue(){
+  return document.querySelector('input[name="rf-fund"]:checked')?.value||'normal';
+}
 function toggleAdvanceLink(){
-  const chk=document.getElementById('rf-advance').checked;
-  document.getElementById('rf-advance-link-wrap').style.display=chk?'block':'none';
-  if(chk)populateAdvanceLinkOptions();
+  const v=getFundValue();
+  document.getElementById('rf-advance-link-wrap').style.display=v==='cash'?'block':'none';
+  if(v==='cash')populateAdvanceLinkOptions();
+  else{const sel=document.getElementById('rf-advance-link');if(sel)sel.value='';}
 }
 function populateAdvanceLinkOptions(){
   const sel=document.getElementById('rf-advance-link');
   if(!sel)return;
   const cur=sel.value;
-  sel.innerHTML='<option value="">— 不連結（進待請款清單）—</option>'+buildTripLinkOptionsHtml();
+  sel.innerHTML='<option value="">— 請選擇團次 —</option>'+buildTripLinkOptionsHtml();
   if(cur)sel.value=cur;
 }
 function populateIncomeLinkOptions(){
@@ -5368,10 +5395,10 @@ function selectExtraItem(idx){
     amtEl.dataset.extraQuote=item.amount;
     noteEl.value=item.name;
     noteEl.dataset.autoFilled='1';
-    // 自動勾選代墊，並連結到該團次
-    const advChk=document.getElementById('rf-advance');
-    if(advChk){
-      advChk.checked=true;
+    // 自動選取「客收支付」，並連結到該團次
+    const cashRadio=document.getElementById('rf-fund-cash');
+    if(cashRadio){
+      cashRadio.checked=true;
       toggleAdvanceLink();
       const linkSel=document.getElementById('rf-advance-link');
       if(linkSel){
@@ -5397,6 +5424,19 @@ function quickAdvanceExtra(groupTourId,date,name){
   if(idx>=0){
     const chk=document.getElementById('rf-ext-'+idx);
     if(chk){chk.checked=true;selectExtraItem(idx);}
+  }
+}
+// 從司機行程卡片一鍵登記某乘客的客收尾款：開啟新增記錄視窗，自動切到「客收」並勾選對應乘客
+function quickCollectBalance(bookingId,date){
+  openRec('','income');
+  document.getElementById('rf-date').value=date;
+  toggleRecFields();
+  const el=document.getElementById('rf-balance-items');
+  const items=JSON.parse(el?.dataset.items||'[]');
+  const idx=items.findIndex(it=>it.bookingId===bookingId);
+  if(idx>=0){
+    const chk=document.getElementById('rf-bal-'+idx);
+    if(chk){chk.checked=true;updateIncomeAmt();}
   }
 }
 function checkExtraDiff(){
@@ -5540,8 +5580,10 @@ async function saveRec(){
     });
   }
   const advanceEligible2=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(type);
-  const isAdvance=advanceEligible2&&!!document.getElementById('rf-advance')?.checked;
-  const advanceLinkVal=isAdvance?(document.getElementById('rf-advance-link')?.value||''):'';
+  const fundVal=advanceEligible2?getFundValue():'normal';
+  if(fundVal==='cash'&&!document.getElementById('rf-advance-link')?.value){alert('「客收支付」需選擇要連結的團次');return;}
+  const isAdvance=fundVal!=='normal';
+  const advanceLinkVal=fundVal==='cash'?(document.getElementById('rf-advance-link')?.value||''):'';
   let advanceLinkType='',advanceLinkId='';
   if(advanceLinkVal){
     const[lt,...rest]=advanceLinkVal.split(':');
