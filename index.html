@@ -4804,7 +4804,13 @@ function renderDriverPage(){
             let amount=0,detail='';
             if(e.mode==='table'){const tables=Math.ceil(pax/(e.tableSize||8));amount=tables*e.price;detail=tables+'桌 × $'+e.price;}
             else{amount=pax*e.price;detail=pax+'人 × $'+e.price;}
-            return`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${e.name}　<span style="font-size:11px;color:var(--text2)">(${detail})</span></span><span style="font-weight:600;color:var(--amber-d)">$${amount.toLocaleString()}</span></div>`;
+            return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0;gap:8px">
+              <span>${e.name}　<span style="font-size:11px;color:var(--text2)">(${detail})</span></span>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                <span style="font-weight:600;color:var(--amber-d)">$${amount.toLocaleString()}</span>
+                <button class="btn btn-sm" style="padding:3px 8px;font-size:11px" onclick='quickAdvanceExtra("${d.groupTourId}","${dateStr}",${JSON.stringify(e.name)})'>登記代墊</button>
+              </div>
+            </div>`;
           }).join('');
           if(extraRows)extrasHtml=`<div style="margin-top:8px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
             <div style="font-size:11px;color:var(--amber-d);margin-bottom:3px;font-weight:600">附加費用（需代墊）</div>
@@ -5380,6 +5386,18 @@ function selectExtraItem(idx){
     amtEl.dataset.extraQuote='';
   }
   checkExtraDiff();
+}
+// 從司機行程卡片一鍵登記某項附加費用代墊：開啟新增記錄視窗，自動切到「其他支出」並勾選對應項目
+function quickAdvanceExtra(groupTourId,date,name){
+  openRec('','other');
+  document.getElementById('rf-date').value=date;
+  toggleRecFields();
+  const items=window._rfExtraItems||[];
+  const idx=items.findIndex(it=>it.groupTourId===groupTourId&&it.name===name);
+  if(idx>=0){
+    const chk=document.getElementById('rf-ext-'+idx);
+    if(chk){chk.checked=true;selectExtraItem(idx);}
+  }
 }
 function checkExtraDiff(){
   const amtEl=document.getElementById('rf-amt');
