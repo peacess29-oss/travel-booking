@@ -562,19 +562,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-remit-items"></div>
   </div>
   <div id="rf-advance-sec" style="display:none;margin-bottom:10px">
-    <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">此筆支出款項來源</label>
+    <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">此筆支出款項來源 *</label>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
-      <input type="radio" name="rf-fund" id="rf-fund-normal" value="normal" checked onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 一般支出（不算代墊）
-    </label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
-      <input type="radio" name="rf-fund" id="rf-fund-cash" value="cash" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 客收支付（用今日客收現金支出，不需另外請款）
+      <input type="radio" name="rf-fund" id="rf-fund-cash" value="cash" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 客收支付（用今日客收現金/零用金支出，不需另外請款）
     </label>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
       <input type="radio" name="rf-fund" id="rf-fund-personal" value="personal" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 自行代墊，需請款（司機自己先出錢，之後公司撥款）
     </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:6px">
+      <input type="radio" name="rf-fund" id="rf-fund-company" value="company" onchange="toggleAdvanceLink()" style="width:14px;height:14px"> 公司直接支付（司機沒有實際出錢，如公司直接匯給店家）
+    </label>
     <div id="rf-advance-link-wrap" style="display:none">
-      <label style="font-size:11px;color:var(--text2)">連結到哪一團？（客收支付需指定團次）</label>
-      <select id="rf-advance-link" style="width:100%;height:34px;font-size:13px"><option value="">— 請選擇團次 —</option></select>
+      <label style="font-size:11px;color:var(--text2)">連結到哪一團？（客收支付必須指定團次）</label>
+      <select id="rf-advance-link" style="width:100%;height:34px;font-size:13px" onchange="checkCashAvail()"><option value="">— 請選擇團次 —</option></select>
+      <div id="rf-cash-avail" style="display:none;font-size:12px;margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:6px"></div>
     </div>
   </div>
   <div class="mb10"><label>備註</label><input id="rf-note" placeholder="說明…"></div>
@@ -3090,8 +3091,14 @@ const CASHFLOW_EXP_TYPES=['fuel','urea','parking','toll','maint','inspection','s
 function calcPrivMisc(p){
   const driverIds=getPrivDriverIds(p);
   if(!driverIds.length||!p.start||!p.end)return 0;
-  return driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+  const normal=driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
     .reduce((s,r)=>s+(r.amount||0),0);
+  const advLinked=driverRecs.filter(r=>r.advance&&r.advanceLinkType==='priv'&&r.advanceLinkId===p.id&&driverIds.includes(r.driverId))
+    .reduce((s,r)=>s+(r.amount||0),0);
+  // 自行代墊、需請款但沒連結特定團次：只要支出日期落在此團行程期間內，仍算入此團成本（避免零用金不足時被漏算）
+  const advPersonal=driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.advance&&!r.advanceLinkType&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+    .reduce((s,r)=>s+(r.amount||0),0);
+  return normal+advLinked+advPersonal;
 }
 // 組合單一包車團的現金流水：客收(既有income記錄關聯)、回帳公司、代付支出(日期區間)、住宿代付
 function buildPrivCashFlow(p){
@@ -3112,7 +3119,7 @@ function buildPrivCashFlow(p){
     driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 自行代墊、明確指定連結到這團的支出（不限日期範圍）
@@ -3203,8 +3210,12 @@ function buildPrivCostBreakdown(p){
   const miscRows=[];
   const driverIds=getPrivDriverIds(p);
   if(driverIds.length&&p.start&&p.end){
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
       .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+    driverRecs.filter(r=>r.advance&&r.advanceLinkType==='priv'&&r.advanceLinkId===p.id&&driverIds.includes(r.driverId))
+      .forEach(r=>miscRows.push({date:r.date,label:'🧾 客收支付-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.advance&&!r.advanceLinkType&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end)
+      .forEach(r=>miscRows.push({date:r.date,label:'🧾 自行代墊(需請款)-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
   }
   const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
   const wage={total:sum(wageRows),rows:wageRows};
@@ -3434,7 +3445,7 @@ function buildGroupCashFlow(tourId,date,busIdx){
     driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&r.driverId===driverId).forEach(r=>{
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
     // 自行代墊、明確指定連結到這車次的支出（不限日期範圍）
@@ -3515,8 +3526,13 @@ function buildGroupCostBreakdown(tourId,date,busIdx){
   }
   const miscRows=[];
   if(disp?.driverId){
-    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
       .forEach(r=>miscRows.push({date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+    const thisGroupTourId=tourId+'_'+date+'_bus'+busIdx;
+    driverRecs.filter(r=>r.advance&&r.advanceLinkType==='group'&&r.advanceLinkId===thisGroupTourId&&r.driverId===disp.driverId)
+      .forEach(r=>miscRows.push({date:r.date,label:'🧾 客收支付-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
+    driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&r.advance&&!r.advanceLinkType&&r.driverId===disp.driverId&&r.date>=disp.start&&r.date<=disp.end)
+      .forEach(r=>miscRows.push({date:r.date,label:'🧾 自行代墊(需請款)-'+(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:r.amount}));
   }
   const sum=rows=>rows.reduce((s,r)=>s+r.amount,0);
   const wage={total:sum(wageRows),rows:wageRows};
@@ -5013,8 +5029,9 @@ function openRec(id='',defaultType=''){
   document.getElementById('rf-mileage').value=r?.mileage||'';document.getElementById('rf-liters').value=r?.fuelLiters||'';document.getElementById('rf-maint').value=r?.maintType||'oil';document.getElementById('rf-maint-km').value=r?.mileage||'';
   document.getElementById('rf-km-alert').style.display='none';
   {
-    const fundVal=r?.advance?(r?.advanceLinkType&&r?.advanceLinkId?'cash':'personal'):'normal';
-    const fundEl=document.getElementById('rf-fund-'+fundVal);
+    const fundVal=r?r.companyDirect?'company':(r.advance?(r.advanceLinkType&&r.advanceLinkId?'cash':'personal'):''):'';
+    document.querySelectorAll('input[name="rf-fund"]').forEach(el=>el.checked=false);
+    const fundEl=fundVal?document.getElementById('rf-fund-'+fundVal):null;
     if(fundEl)fundEl.checked=true;
   }
   toggleRecFields();
@@ -5066,6 +5083,26 @@ function openRec(id='',defaultType=''){
   om('rec');
   if(r&&r.type==='hotel') checkHotelDiff();
 }
+// 取得代墊連結（group:xxx 或 priv:xxx）對應團次目前的現金流水餘額（=司機手上尚未回帳的零用金）
+function getLinkedTripCashBalance(linkVal){
+  if(!linkVal)return null;
+  const idx=linkVal.indexOf(':');
+  const lt=linkVal.slice(0,idx),id=linkVal.slice(idx+1);
+  if(lt==='priv'){
+    const p=privates.find(x=>x.id===id);
+    if(!p)return null;
+    return buildPrivCashFlow(p).cashBalance;
+  }
+  if(lt==='group'){
+    const tId=id.split('_')[0];
+    const busMatch=id.match(/_bus(\d+)$/);
+    const busIdx=busMatch?parseInt(busMatch[1]):0;
+    const disp=dispatches.find(d=>d.groupTourId===id);
+    if(!disp)return null;
+    return buildGroupCashFlow(tId,disp.start,busIdx).cashBalance;
+  }
+  return null;
+}
 function buildTripLinkOptionsHtml(){
   if(!curDriverId)return'';
   const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-45);
@@ -5110,13 +5147,33 @@ function buildIncomeLinkOptionsHtml(){
   }).filter(Boolean).join('');
 }
 function getFundValue(){
-  return document.querySelector('input[name="rf-fund"]:checked')?.value||'normal';
+  return document.querySelector('input[name="rf-fund"]:checked')?.value||'';
 }
 function toggleAdvanceLink(){
   const v=getFundValue();
   document.getElementById('rf-advance-link-wrap').style.display=v==='cash'?'block':'none';
   if(v==='cash')populateAdvanceLinkOptions();
   else{const sel=document.getElementById('rf-advance-link');if(sel)sel.value='';}
+  checkCashAvail();
+}
+// 顯示所選團次目前的現金流水餘額（零用金），若本次金額超過餘額，提示超出部分會自動轉為「自行代墊，需請款」
+function checkCashAvail(){
+  const el=document.getElementById('rf-cash-avail');
+  if(!el)return;
+  const v=getFundValue();
+  const linkVal=document.getElementById('rf-advance-link')?.value||'';
+  if(v!=='cash'||!linkVal||eIds.rec){el.style.display='none';return;}
+  const avail=getLinkedTripCashBalance(linkVal);
+  if(avail===null){el.style.display='none';return;}
+  const amt=parseFloat(document.getElementById('rf-amt').value)||0;
+  if(amt>Math.max(avail,0)){
+    const over=amt-Math.max(avail,0);
+    el.style.display='block';
+    el.innerHTML=`此團目前零用金餘額：$${avail.toLocaleString()}<br><b style="color:var(--red)">超出部分 $${over.toLocaleString()} 將自動轉為「自行代墊，需請款」</b>`;
+  } else {
+    el.style.display='block';
+    el.innerHTML=`此團目前零用金餘額：$${avail.toLocaleString()}`;
+  }
 }
 function populateAdvanceLinkOptions(){
   const sel=document.getElementById('rf-advance-link');
@@ -5408,6 +5465,7 @@ function selectExtraItem(idx){
         }
         linkSel.value=val;
       }
+      checkCashAvail();
     }
   } else {
     amtEl.dataset.extraQuote='';
@@ -5515,7 +5573,7 @@ function renderHotelItemEdit(r){
     el.innerHTML=`<div style="margin-bottom:4px"><label style="font-size:12px">酒店名稱</label><input id="rf-hotel-manual" type="text" value="${(r.hotelName||'').replace(/"/g,'&quot;')}" style="height:34px;font-size:13px;width:100%"></div>`;
   }
 }
-document.addEventListener('input',e=>{if(e.target.id==='rf-amt'){checkHotelDiff();checkExtraDiff();}});
+document.addEventListener('input',e=>{if(e.target.id==='rf-amt'){checkHotelDiff();checkExtraDiff();checkCashAvail();}});
 function checkHotelDiff(){
   const amtEl=document.getElementById('rf-amt');
   const diffEl=document.getElementById('rf-hotel-diff');
@@ -5534,7 +5592,7 @@ function getDispatchHint(date){
     d.driverId===curDriverId&&d.driverType==='own'&&date>=d.start&&date<=d.end
   );
   if(!myDisps.length) return '';
-  return myDisps.map(d=>d.label||'').filter(Boolean).join('、');
+  return myDisps.map(d=>d.label?(d.start+' '+d.label):'').filter(Boolean).join('、');
 }
 document.getElementById('rf-car').addEventListener('change',checkKmAlert);
 document.addEventListener('input',e=>{if(e.target.id==='rf-mileage')checkKmAlert();});
@@ -5567,6 +5625,11 @@ async function saveRec(){
       if(!hotelManualName)return alert('請輸入酒店名稱');
     }
   }
+  // 油錢/保養等支出類別：必須三選一（客收支付／自行代墊需請款／公司直接支付），客收支付需指定團次
+  const advanceEligible2=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(type);
+  const fundVal=advanceEligible2?getFundValue():'';
+  if(advanceEligible2&&!fundVal)return alert('請選擇此筆支出的款項來源：客收支付／自行代墊需請款／公司直接支付');
+  if(fundVal==='cash'&&!document.getElementById('rf-advance-link')?.value)return alert('「客收支付」需選擇要連結的團次');
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
   const balEl2=document.getElementById('rf-balance-items');
@@ -5579,10 +5642,8 @@ async function saveRec(){
       if(balItems2[idx].type==='private'&&balItems2[idx].privateId) relatedPrivateIds.push(balItems2[idx].privateId);
     });
   }
-  const advanceEligible2=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(type);
-  const fundVal=advanceEligible2?getFundValue():'normal';
-  if(fundVal==='cash'&&!document.getElementById('rf-advance-link')?.value){alert('「客收支付」需選擇要連結的團次');return;}
-  const isAdvance=fundVal!=='normal';
+  const isAdvance=fundVal==='cash'||fundVal==='personal';
+  const companyDirect=fundVal==='company';
   const advanceLinkVal=fundVal==='cash'?(document.getElementById('rf-advance-link')?.value||''):'';
   let advanceLinkType='',advanceLinkId='';
   if(advanceLinkVal){
@@ -5596,7 +5657,8 @@ async function saveRec(){
     incomeLinkType=ilt;incomeLinkId=irest.join(':');
   }
   const existingRec=eIds.rec?driverRecs.find(x=>x.id===eIds.rec):null;
-  const data={date,type,amount:parseInt(document.getElementById('rf-amt').value)||0,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,incomeLinkType,incomeLinkId,advance:isAdvance,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
+  const enteredAmount=parseInt(document.getElementById('rf-amt').value)||0;
+  const data={date,type,amount:enteredAmount,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,incomeLinkType,incomeLinkId,advance:isAdvance,companyDirect,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
   if(type==='hotel'){
     if(hotelSel){
       if(hotelSel.kind==='group'){
@@ -5632,7 +5694,32 @@ async function saveRec(){
     }
   }
   let recId=eIds.rec;
-  if(eIds.rec)await db.collection('driverRecs').doc(eIds.rec).update(data);else{recId=uid();await db.collection('driverRecs').doc(recId).set(data);}
+  let splitInfo=null;
+  if(eIds.rec){
+    await db.collection('driverRecs').doc(eIds.rec).update(data);
+  } else if(fundVal==='cash'&&advanceLinkVal){
+    const avail=getLinkedTripCashBalance(advanceLinkVal);
+    const cashAmt=avail===null?enteredAmount:Math.min(enteredAmount,Math.max(avail,0));
+    const personalAmt=enteredAmount-cashAmt;
+    if(personalAmt>0){
+      // 零用金不足：超出部分自動拆成「自行代墊，需請款」，兩筆記錄備註/日期/類別皆相同，方便對帳
+      if(cashAmt>0){
+        recId=uid();
+        await db.collection('driverRecs').doc(recId).set({...data,amount:cashAmt});
+      }
+      const personalId=uid();
+      await db.collection('driverRecs').doc(personalId).set({...data,amount:personalAmt,advanceLinkType:'',advanceLinkId:''});
+      if(!cashAmt)recId=personalId;
+      splitInfo={avail:Math.max(avail||0,0),cashAmt,personalAmt};
+    } else {
+      recId=uid();
+      await db.collection('driverRecs').doc(recId).set(data);
+    }
+  } else {
+    recId=uid();
+    await db.collection('driverRecs').doc(recId).set(data);
+  }
+  if(splitInfo)alert(`零用金餘額 $${splitInfo.avail.toLocaleString()}，已自動拆分：\n客收支付 $${splitInfo.cashAmt.toLocaleString()}\n自行代墊，需請款 $${splitInfo.personalAmt.toLocaleString()}`);
   // 客收：自動標記勾選的尾款項目為已收
   if(type==='income'&&!eIds.rec){
     const balEl=document.getElementById('rf-balance-items');
