@@ -302,8 +302,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 </div></div>
 
 <!-- 包車團 -->
+<input type="file" id="pv-import-file" accept="application/pdf,.pdf" style="display:none" onchange="importPrivFromPdf(this)">
 <div class="overlay" id="m-priv"><div class="modal modal-lg">
   <div class="mh"><span class="mh-title" id="mp-title">新增包車團</span><button class="btn btn-sm" onclick="cm('priv')"><i class="ti ti-x"></i></button></div>
+  <div id="pf-import-banner" style="display:none;margin-bottom:10px"></div>
   <div class="fg2"><div><label>團名 *</label><input id="pf-name" placeholder="王先生一家"></div><div><label>類型</label><select id="pf-type" onchange="togglePriv()"><option value="car+hotel">車＋住宿</option><option value="car">純包車</option></select></div></div>
   <div class="fg3"><div><label>出發日 *</label><input id="pf-start" type="date" onchange="calcPrivDays()"></div><div><label>結束日 *</label><input id="pf-end" type="date" onchange="calcPrivDays()"></div><div><label>天數</label><input id="pf-days" readonly style="background:var(--bg2)"></div></div>
   <!-- 接機 -->
@@ -1691,11 +1693,12 @@ function renderPrivate(){
       <option value="ch"${fv==='ch'?' selected':''}>車+住宿</option>
       <option value="car"${fv==='car'?' selected':''}>純包車</option>
     </select>`:`<span style="font-size:13px;color:var(--text2)">共 ${donePrivs.length} 筆已完成訂單</span>`}
-    <div style="display:flex;align-items:center;gap:8px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
       <div style="position:relative">
         <i class="ti ti-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;pointer-events:none"></i>
         <input id="pv-q-fixed" placeholder="搜尋團名 / 電話 / 備註…" oninput="pvSearchQ=this.value;renderPrivate()" style="height:32px;font-size:13px;padding-left:28px;width:200px;border-radius:8px" value="${pvSearchQ}">
       </div>
+      <button class="btn btn-sm" onclick="document.getElementById('pv-import-file').click()"><i class="ti ti-file-import"></i> 從合約匯入</button>
       <button class="btn btn-primary btn-sm" onclick="openPriv()"><i class="ti ti-plus"></i> 新增包車團</button>
     </div>
   </div>
@@ -1822,6 +1825,8 @@ function goToPriv(id){
 function openPriv(id=''){
   eIds.priv=id||null;const p=id?privates.find(x=>x.id===id):null;
   document.getElementById('mp-title').textContent=id?'編輯包車團':'新增包車團';
+  const impBanner=document.getElementById('pf-import-banner');impBanner.style.display='none';impBanner.innerHTML='';
+  privImportHints=[];
   document.getElementById('btn-del-priv').style.display=id?'inline-flex':'none';
   document.getElementById('pf-name').value=p?.name||'';document.getElementById('pf-type').value=p?.type||'car+hotel';
   document.getElementById('pf-start').value=p?.start||'';document.getElementById('pf-end').value=p?.end||'';
@@ -1863,6 +1868,154 @@ function openPriv(id=''){
   nightlyHotels=p?.nightlyHotels||[];
   document.getElementById('pf-cost-sum').innerHTML='';
   togglePriv();renderNightlyPicker();om('priv');
+}
+// ===== 從合約產生器的 PDF 匯入包車團 =====
+// 合約產生器存 PDF 時，把業務確認過的資料以 base64(JSON) 寫進 PDF 的 Keywords 屬性
+// 這裡只讀那份資料並預填「新增包車團」，不寫入 Firestore；存檔仍走原本的 savePriv()
+const CONTRACT_IMPORT_PREFIX='JAYTOUR-IMPORT-V1:';
+// 匯入時每晚酒店的比對結果，給 renderNightlyPicker 顯示提示；openPriv() 會清空
+// 每筆：{src:'台北禾順行旅', room:'家庭房', status:'auto'|'multi'|'none'|'blank', autoId, candidates:[hotelId]}
+var privImportHints=[];
+function escH(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function normHotelName(s){ // 忽略全形半形、大小寫、空白與標點
+  return String(s||'').normalize('NFKC').toLowerCase().replace(/[\s·・.,，、()（）\[\]【】「」'"\-_/]/g,'');
+}
+function matchHotelByName(name){
+  const q=normHotelName(name);
+  if(q.length<2)return{status:'blank',candidates:[]};
+  const list=hotels.map(h=>({h,n:normHotelName(h.name)})).filter(x=>x.n.length>=2);
+  const exact=list.filter(x=>x.n===q);
+  if(exact.length===1)return{status:'auto',autoId:exact[0].h.id,candidates:[]};
+  if(exact.length>1)return{status:'multi',candidates:exact.map(x=>x.h.id)};
+  const part=list.filter(x=>x.n.includes(q)||q.includes(x.n));
+  if(part.length===1)return{status:'auto',autoId:part[0].h.id,candidates:[]};
+  if(part.length>1)return{status:'multi',candidates:part.map(x=>x.h.id)};
+  return{status:'none',candidates:[]};
+}
+function applyImportedNights(stays,start){
+  privImportHints=[];
+  const n=nightlyHotels.length;
+  (stays||[]).forEach((s,k)=>{
+    // 優先用日期對到第幾晚，日期無法辨識才用順序
+    let i=k;const ds=impDate(s.date);
+    if(ds&&start){const diff=Math.round((new Date(ds)-new Date(start))/86400000);if(diff>=0)i=diff;}
+    if(i<0||i>=n||privImportHints[i])return;
+    const m=matchHotelByName(s.hotelName);
+    privImportHints[i]={src:(s.hotelName||'').trim(),room:(s.roomText||'').trim(),...m};
+    if(m.status==='auto')nightlyHotels[i].hotelId=m.autoId;
+  });
+  renderNightlyPicker();
+}
+let _pdfjsLoading=null;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  if(_pdfjsLoading)return _pdfjsLoading;
+  _pdfjsLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';res(window.pdfjsLib);};
+    s.onerror=()=>{_pdfjsLoading=null;rej(new Error('pdf.js 載入失敗'));};
+    document.head.appendChild(s);
+  });
+  return _pdfjsLoading;
+}
+async function readContractPayload(file){
+  const lib=await loadPdfJs();
+  const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const meta=await pdf.getMetadata();
+  const kw=(meta&&meta.info&&meta.info.Keywords)||'';
+  if(!kw.startsWith(CONTRACT_IMPORT_PREFIX))return null;
+  const bin=atob(kw.slice(CONTRACT_IMPORT_PREFIX.length));
+  const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+function impDate(s){ // 2026/11/7 → 2026-11-07
+  const m=String(s||'').trim().match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:'';
+}
+function impTime(s){ // 7:05 → 07:05（type=time 欄位需兩位數）
+  const m=String(s||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  return m?`${m[1].padStart(2,'0')}:${m[2]}`:'';
+}
+function impInt(s){return parseInt(String(s??'').replace(/[^\d]/g,''),10)||0;}
+function impPax(s){ // 「6位」→6；「4大2小」→6
+  const str=String(s||'');const nums=(str.match(/\d+/g)||[]).map(Number);
+  if(!nums.length)return 1;
+  if(/大|小|成人|兒童|小孩|嬰兒/.test(str))return nums.reduce((a,b)=>a+b,0)||1;
+  return nums[0]||1;
+}
+function impChannel(s){
+  const v=String(s||'').toLowerCase();
+  if(v.includes('whatsapp'))return'WhatsApp';
+  if(v.includes('微信')||v.includes('wechat'))return'微信';
+  if(v.includes('fb')||v.includes('facebook')||v.includes('messenger'))return'FB';
+  if(v.includes('line'))return v.includes('官方')?'LINE官方':'LINE個人';
+  return'WhatsApp';
+}
+async function importPrivFromPdf(input){
+  const file=input.files&&input.files[0];
+  input.value=''; // 同一個檔案可以再選一次
+  if(!file)return;
+  let d;
+  try{ d=await readContractPayload(file); }
+  catch(e){ console.error('合約匯入失敗',e); alert('讀取 PDF 失敗：'+(e.message||e)); return; }
+  if(!d){ alert('這份 PDF 裡沒有可匯入的資料。\n只支援新版合約產生器「另存為 PDF」產生的檔案，舊合約請手動新增。'); return; }
+
+  openPriv(); // 先用「新增」模式清空表單
+  const $=id=>document.getElementById(id);
+  const start=impDate(d.dateStart),end=impDate(d.dateEnd);
+  $('pf-name').value=d.customerName||'';
+  $('pf-type').value='car+hotel';
+  $('pf-start').value=start;$('pf-end').value=end;
+  nightlyHotels=[];
+  calcPrivDays(); // 算天數、晚數＝天數−1、重畫每晚酒店選單
+  applyImportedNights(d.nightlyStays,start); // 每晚酒店：名稱比對酒店資料庫，唯一符合才自動選
+
+  // 接機
+  const arrT=impTime(d.flightArrivalTime),gatherT=impTime(d.gatherTime);
+  const hasPickup=!!(d.flightArrivalNo||arrT);
+  $('pf-pickup').checked=hasPickup;$('pf-pickup-sec').style.display=hasPickup?'block':'none';
+  $('pf-pickup-time').value=arrT;
+  $('pf-pickup-flight').value=(d.flightArrivalNo||'').trim();
+  $('pf-pickup-note').value=gatherT?`集合時間 ${gatherT}`:'';
+  // 送機
+  const depT=impTime(d.flightDepartureTime),sugT=impTime(d.suggestedDeparture);
+  const hasDropoff=!!(d.flightDepartureNo||depT);
+  $('pf-dropoff').checked=hasDropoff;$('pf-dropoff-sec').style.display=hasDropoff?'block':'none';
+  $('pf-dropoff-time').value=depT;
+  $('pf-dropoff-flight').value=(d.flightDepartureNo||'').trim();
+  $('pf-dropoff-note').value=sugT?`${sugT} 自${d.departurePoint&&d.departurePoint!=='其他'?d.departurePoint:'飯店'}出發`:'';
+
+  $('pf-pax').value=impPax(d.paxCount);
+  $('pf-cars').value=1;
+  $('pf-price').value=impInt(d.totalPrice)||'';
+  $('pf-dep').value=impInt(d.deposit)||'';
+  $('pf-itinerary').value=(d.days||[]).map(x=>`${x.date||''}${x.weekday?'（'+x.weekday+'）':''}\n${(x.body||'').trim()}`).join('\n\n');
+  $('pf-ch').value=impChannel(d.contactApp);
+  $('pf-phone').value=d.contactInfo||'';
+  $('pf-carseat').value=impInt(d.carSeat);
+  $('pf-booster').value=impInt(d.booster);
+  $('pf-stroller').value=impInt(d.stroller);
+  $('pf-wheelchair').value=impInt(d.wheelchair);
+  $('pf-note').value=d.carType==='wish'?'車型：Toyota Wish 同等休旅車（合約）':'車型：商務九人座（合約）';
+  // 合約只在客人付完定金後產生 → 定金已付，收款日＝合約產生日
+  if(impInt(d.deposit)>0){
+    $('pf-depaid').checked=true;
+    $('pf-dep-date').value=d.contractDate||new Date().toISOString().slice(0,10);
+    $('pf-dep-date').style.display='inline-block';
+  }
+  renderFreedaysBtns();
+
+  // 提示列（textContent 組字，避免檔名或客名含特殊字元）
+  const banner=$('pf-import-banner');banner.innerHTML='';
+  const mk=(bg,fg,icon,text)=>{const div=document.createElement('div');div.style.cssText=`background:${bg};color:${fg};border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px`;const i=document.createElement('i');i.className='ti '+icon;div.appendChild(i);div.appendChild(document.createTextNode(' '+text));banner.appendChild(div);};
+  mk('var(--blue-l)','var(--blue-d)','ti-file-check',`已從「${file.name}」帶入資料，請檢查後按儲存（尚未寫入系統）。每晚酒店已依名稱比對，房間數請手動填寫。`);
+  const unmatched=privImportHints.filter(h=>h&&(h.status==='multi'||h.status==='none')).length;
+  if(unmatched)mk('var(--amber-l)','var(--amber-d)','ti-building',`有 ${unmatched} 晚酒店需要手動選擇，請看住宿安排裡每晚的提示。`);
+  const dup=privates.find(p=>(p.name||'').trim()===(d.customerName||'').trim()&&p.start===start);
+  if(dup)mk('var(--amber-l)','var(--amber-d)','ti-alert-triangle',`系統已有「${dup.name}」${dup.start} 出發的包車團，請確認不是重複建單。`);
+  if(!start||!end)mk('var(--red-l,#fcebeb)','var(--red-d,#a32d2d)','ti-alert-circle','合約裡的日期格式無法辨識，請手動填寫出發日與結束日。');
+  banner.style.display='block';
 }
 function toggleDepDate(){
   const chk=document.getElementById('pf-depaid').checked;
@@ -1950,6 +2103,23 @@ function getHotelRoomRate(hotel,dateStr,roomType){
   if(roomType==='r6')return isWeekend?(hotel.r6wk||hotel.r6||0):(hotel.r6||0);
   return 0;
 }
+// 合約匯入的每晚酒店提示（非匯入時 privImportHints 為空，不顯示）
+function importHintHtml(i,nh){
+  const h=privImportHints[i];
+  if(!h)return'';
+  const orig=`合約原文：${escH(h.src||'（未寫住宿）')}${h.room?' '+escH(h.room):''}`;
+  const box=(bg,fg,inner)=>`<div style="font-size:12px;background:${bg};color:${fg};border-radius:6px;padding:6px 8px;margin-bottom:6px">${inner}</div>`;
+  if(nh.hotelId){
+    const tag=(h.status==='auto'&&nh.hotelId===h.autoId)?'<i class="ti ti-check"></i> 已依名稱自動比對　':'';
+    return box('var(--green-l)','var(--green-d)',tag+orig);
+  }
+  if(h.status==='multi'){
+    const btns=h.candidates.map(id=>{const ho=hotels.find(x=>x.id===id);return ho?`<button type="button" class="btn btn-sm" style="height:24px;font-size:11px;margin:4px 4px 0 0" onclick="setNightHotel(${i},'${id}')">${escH((ho.area?'['+ho.area+'] ':'')+ho.name)}</button>`:'';}).join('');
+    return box('var(--amber-l)','var(--amber-d)',`<i class="ti ti-help"></i> 有 ${h.candidates.length} 家相似，請點選　${orig}<div>${btns}</div>`);
+  }
+  if(h.status==='none')return box('var(--red-l)','var(--red-d)',`<i class="ti ti-alert-circle"></i> 資料庫無此酒店，請從選單選擇或用「其他／客人指定酒店」新增　${orig}`);
+  return box('var(--bg2)','var(--text2)',orig);
+}
 function renderNightlyPicker(){
   const nights=parseInt(document.getElementById('pf-nights').value)||0;
   const el=document.getElementById('pf-nightly-picker');
@@ -1983,6 +2153,7 @@ function renderNightlyPicker(){
         <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
         <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>
       </div>
+      ${importHintHtml(i,nh)}
       ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
         <div style="font-size:12px"><div style="color:var(--text2)">2人房 ${r2rate?'$'+r2rate:'未設房價'}</div><input type="number" value="${nh.r2||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r2',this.value)"> 間</div>
         <div style="font-size:12px"><div style="color:var(--text2)">3人房 ${r3rate?'$'+r3rate:'未設房價'}</div><input type="number" value="${nh.r3||0}" min="0" placeholder="間數" style="height:30px;text-align:center;font-size:13px" onchange="setNightRooms(${i},'r3',this.value)"> 間</div>
