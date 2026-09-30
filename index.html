@@ -201,6 +201,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-checkin" class="page"></div>
   <div id="p-reimburse" class="page"></div>
   <div id="p-reconcile" class="page"></div>
+  <div id="p-ext-report" class="page"></div>
   <div id="p-driver" class="page"></div>
   <div id="p-settings" class="page"></div>
   <div id="p-customers" class="page"></div>
@@ -466,6 +467,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 </div></div>
 
 <!-- [修正] 司機 Modal — 補齊所有缺失欄位 -->
+<div class="overlay" id="m-extshare"><div class="modal" style="width:460px">
+  <div class="mh"><span class="mh-title">🔗 外派司機專屬連結</span><button class="btn btn-sm" onclick="cm('extshare')"><i class="ti ti-x"></i></button></div>
+  <div id="extshare-body"></div>
+</div></div>
 <div class="overlay" id="m-driver"><div class="modal" style="width:460px">
   <div class="mh"><span class="mh-title" id="mdv-title">新增司機</span><button class="btn btn-sm" onclick="cm('driver')"><i class="ti ti-x"></i></button></div>
   <div class="fg2">
@@ -678,7 +683,9 @@ function getDates(tid){return[...new Set(getBks(tid).map(b=>b.date))].sort();}
 // busAssignMap：key = tourId+'_'+date+'_'+bookingId, value = busIndex(0=A,1=B,...)
 // 儲存在 Firestore meta/busAssign
 let busAssignMap={};
-db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.data():{};refresh();});
+// 外派司機專屬連結模式（?ext=token）：只載入該趟行程需要的資料，不載入任何公司全域資料
+const IS_EXT_MODE=new URLSearchParams(location.search).has('ext');
+if(!IS_EXT_MODE) db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.data():{};refresh();});
 async function setBusAssign(tourId,date,bookId,busIdx){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
   await db.collection('meta').doc('busAssign').set({[key]:busIdx},{merge:true});
@@ -872,6 +879,8 @@ function refresh(){
   if(curPage==='p-checkin')renderCheckin();
   if(curPage==='p-reimburse')renderReimburse();
   if(curPage==='p-reconcile')renderReconcile();
+  if(curPage==='p-ext-report')renderExtReport();
+  updateExtBadge();
 }
 
 // ══════════════════ AUTH ══════════════════
@@ -886,7 +895,7 @@ let ADMIN_PASSWORD=null; // null = 尚未從 Firestore 載入
 let adminPwdLoaded=false;
 
 // 頁面載入時立即非同步抓密碼，存入記憶體，不寫入任何 JS 變數名稱讓人猜
-db.collection('meta').doc('adminPassword').get()
+(IS_EXT_MODE?Promise.reject('ext'):db.collection('meta').doc('adminPassword').get())
   .then(s=>{
     if(s.exists && s.data().pwd){
       ADMIN_PASSWORD=s.data().pwd;
@@ -1030,6 +1039,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-checkin',this)"><i class="ti ti-map-pin"></i> 客上客下記錄</button>
     <button class="nav-tab" onclick="showPage('p-reimburse',this)"><i class="ti ti-receipt"></i> 待請款清單</button>
     <button class="nav-tab" onclick="showPage('p-reconcile',this)"><i class="ti ti-scale"></i> 回帳對帳</button>
+    <button class="nav-tab" onclick="showPage('p-ext-report',this)"><i class="ti ti-user-bolt"></i> 外派回報<span id="nav-ext-badge" class="badge badge-red" style="margin-left:4px;display:none"></span></button>
     <button class="nav-tab" onclick="showPage('p-settings',this)"><i class="ti ti-settings"></i> 設定</button>
     <button class="nav-tab" onclick="showQR()"><i class="ti ti-qrcode"></i> 報名QR</button>
     <button class="nav-tab" onclick="showPage('p-customers',this)"><i class="ti ti-users"></i> 客人明細</button>`;
@@ -1062,6 +1072,7 @@ function showPage(id, tabEl){
   else if(id==='p-checkin')renderCheckin();
   else if(id==='p-reimburse')renderReimburse();
   else if(id==='p-reconcile')renderReconcile();
+  else if(id==='p-ext-report')renderExtReport();
   else if(id==='p-driver')renderDriverPage();
   else if(id==='p-settings')renderSettings();
   else if(id==='p-customers')renderCustomers();
@@ -2592,7 +2603,7 @@ function renderDispatch(){
           if(p2?.dropoff) parts.push('🛫 送機 '+(p2.dropoffTime||'')+(p2.dropoffFlight?' '+p2.dropoffFlight:''));
           if(p2?.freeDays?.length) parts.push('免車：'+p2.freeDays.map(fd=>fd.slice(5)).join('、'));
           return parts.join(' ／ ')||'-';
-        })()}</td><td><button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
+        })()}</td><td style="white-space:nowrap">${d.driverType==='out'?`<button class="btn btn-sm" style="margin-right:4px" title="傳送外派司機連結" onclick="openExtShare('${d.id}')"><i class="ti ti-link"></i></button>`:''}<button class="btn btn-sm" onclick="openDisp('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody>
   </table></div>`;
 }
 
@@ -2798,7 +2809,7 @@ async function applySmartSuggest(orderId,type,label,start,end,drvId,drvName,conf
     if(extDrv){
       // 指定外派司機：更新派車記錄為外派（訂單仍顯示在行事曆，變橙色外派 pill）
       await db.collection('dispatches').doc(did).update({
-        driverType:'out',driverId:'',
+        driverType:'out',driverId:'',extToken:newExtToken(),
         driverName:extDrv.name,outsourceName:extDrv.name,
         note:(d.note||'')+' [智慧建議轉外派：'+extDrv.name+']'
       });
@@ -2921,6 +2932,7 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
   const newData={label,start,end:type==='private'?end:(end||start),startTime:'full',endTime:'full',
     driverType:newDrv?.type==='own'?'own':'out',driverId:drvId,driverName:drvName,
     outsourceName:newDrv?.type==='own'?'':drvName,car:'',carCount:1,wage,outwage,nightAllowance,
+    extToken:newDrv?.type==='own'?'':newExtToken(),
     note:type==='private'?'來自包車團：'+label:'來自拼團：'+label};
   if(type==='private'){
     // orderId 格式：privId 或 privId_busN
@@ -2953,6 +2965,7 @@ async function quickAssign(orderId,type,label,start,end,drvId,drvName,currentDis
   // ★ 立即把新記錄加入本地 dispatches，防止在 onSnapshot 回來前重複指派
   dispatches=[...dispatches,{id:newDocId,...newData}];
   cm('assign');
+  if(newData.driverType==='out'&&confirm('已指派外派司機「'+drvName+'」。\n要現在傳送專屬連結給他嗎？'))openExtShare(newDocId);
 }
 function openDisp(id='',dateStr=''){
   eIds.disp=id||null;const d=id?dispatches.find(x=>x.id===id):null;
@@ -2988,39 +3001,80 @@ function openDisp(id='',dateStr=''){
   const extEl=document.getElementById('df-ext-link-view');
   if(extEl){
     if(id&&d&&d.driverType==='out'){
-      extEl.innerHTML=d.extToken?`
-        <div style="margin-bottom:10px;padding:10px;background:var(--bg2);border-radius:8px">
-          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">🔗 外派司機專屬連結（唯讀，不用登入）</div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <input readonly id="df-ext-link-input" value="${location.origin+location.pathname}?ext=${d.extToken}" style="flex:1;min-width:200px;height:32px;font-size:12px">
-            <button class="btn btn-sm" onclick="copyExtLink()"><i class="ti ti-copy"></i> 複製</button>
-          </div>
-        </div>`:`
-        <div style="margin-bottom:10px">
-          <button class="btn btn-sm" onclick="generateExtLink('${id}')"><i class="ti ti-link"></i> 產生外派司機連結</button>
+      extEl.innerHTML=`
+        <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--bg2);border-radius:8px">
+          <span style="font-size:12px;font-weight:600;color:var(--text2)">🔗 外派司機專屬連結（唯讀，不用登入）</span>
+          <button class="btn btn-sm btn-primary" onclick="openExtShare('${id}')"><i class="ti ti-send"></i> ${d.extToken?'傳送連結':'產生並傳送'}</button>
         </div>`;
     } else {
       extEl.innerHTML='';
     }
   }
 }
-async function generateExtLink(dispId){
-  const token=uid()+uid();
-  setSS('syncing','產生連結中…');
+// ── 外派司機專屬連結：一鍵產生＋分享 ──
+function newExtToken(){return uid()+uid();}
+async function ensureExtToken(dispId,forceNew=false){
+  const d=dispatches.find(x=>x.id===dispId);if(!d)return '';
+  if(d.extToken&&!forceNew)return d.extToken;
+  const token=newExtToken();
   await db.collection('dispatches').doc(dispId).update({extToken:token});
   const idx=dispatches.findIndex(x=>x.id===dispId);
   if(idx>=0)dispatches[idx]={...dispatches[idx],extToken:token};
-  openDisp(dispId);
+  return token;
 }
-function copyExtLink(){
-  const input=document.getElementById('df-ext-link-input');
-  if(!input)return;
-  input.select();
-  navigator.clipboard?.writeText(input.value).then(()=>alert('已複製連結！可以直接貼給外派司機（LINE/簡訊都可以）。')).catch(()=>{
-    document.execCommand('copy');
-    alert('已複製連結！');
-  });
+function extLinkUrl(token){return location.origin+location.pathname+'?ext='+token;}
+function extShareMessage(d,url){
+  const range=d.start+(d.end&&d.end!==d.start?'～'+d.end:'');
+  return `${d.driverName&&d.driverName!=='外派未指定'?d.driverName+' 您好，':'您好，'}這是「${d.label||'行程'}」${range} 的行程與帳務頁面（免登入）。\n出車前請先查看行程；收到尾款、回帳給公司後，也請在頁面上按「回報」。\n${url}`;
 }
+async function openExtShare(dispId,forceNew=false){
+  const d0=dispatches.find(x=>x.id===dispId);
+  if(!d0){alert('找不到派車記錄，請先儲存');return;}
+  if(d0.driverType!=='out'){alert('只有外派派車才能產生外派司機連結');return;}
+  if(forceNew&&!confirm('重新產生後，舊連結會立即失效，確定嗎？'))return;
+  setSS('syncing','產生連結中…');
+  const token=await ensureExtToken(dispId,forceNew);
+  setSS('ok','已同步 ✓');
+  const d=dispatches.find(x=>x.id===dispId)||d0;
+  const url=extLinkUrl(token),msg=extShareMessage(d,url);
+  window._extShare={url,msg};
+  const canShare=!!navigator.share;
+  document.getElementById('extshare-body').innerHTML=`
+    <div style="font-size:13px;margin-bottom:8px"><strong>${d.driverName||'外派司機'}</strong>｜${d.label||'-'}｜${d.start}${d.end&&d.end!==d.start?'～'+d.end:''}</div>
+    <textarea id="extshare-msg" readonly style="width:100%;height:110px;font-size:12px;margin-bottom:10px;box-sizing:border-box">${msg}</textarea>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" style="background:#06C755;border-color:#06C755" onclick="extShareLine()"><i class="ti ti-brand-line"></i> 用 LINE 傳送</button>
+      <button class="btn btn-primary" onclick="extShareCopy('msg')"><i class="ti ti-copy"></i> 複製訊息</button>
+      <button class="btn" onclick="extShareCopy('url')"><i class="ti ti-link"></i> 只複製連結</button>
+      ${canShare?'<button class="btn" onclick="extShareNative()"><i class="ti ti-share"></i> 其他 App…</button>':`<a class="btn" href="${url}" target="_blank" style="text-decoration:none;justify-content:center"><i class="ti ti-eye"></i> 預覽頁面</a>`}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text2)">
+      <span>連結不會過期；換外派司機時會自動換新連結。</span>
+      <button class="btn btn-sm btn-danger" onclick="openExtShare('${dispId}',true)"><i class="ti ti-refresh"></i> 重新產生</button>
+    </div>`;
+  om('extshare');
+}
+function copyText(t){
+  if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t);
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');}finally{ta.remove();}
+  return Promise.resolve();
+}
+function extShareCopy(kind){
+  const t=kind==='url'?window._extShare?.url:window._extShare?.msg;if(!t)return;
+  copyText(t).then(()=>setSS('ok',kind==='url'?'已複製連結 ✓':'已複製訊息 ✓')).catch(()=>alert('複製失敗，請手動選取文字複製'));
+}
+function extShareLine(){
+  const t=window._extShare?.msg;if(!t)return;
+  window.open('https://line.me/R/share?text='+encodeURIComponent(t),'_blank');
+}
+function extShareNative(){
+  const s=window._extShare;if(!s)return;
+  navigator.share({text:s.msg}).catch(()=>{});
+}
+// 相容舊呼叫
+async function generateExtLink(dispId){openExtShare(dispId);}
+function copyExtLink(){extShareCopy('url');}
 function toggleDrvSel(){
   const isOwn=document.getElementById('df-dtype').value==='own';
   document.getElementById('df-own-wrap').style.display=isOwn?'block':'none';
@@ -3081,6 +3135,12 @@ async function saveDisp(){
   const existingDisp=eIds.disp?dispatches.find(x=>x.id===eIds.disp):null;
   const data={label:document.getElementById('df-label').value.trim()||'未命名',start,end,startTime:document.getElementById('df-st').value,endTime:document.getElementById('df-et').value,driverType:dtype,driverId:drvId,driverName:drvName,outsourceName:dtype==='out'?document.getElementById('df-outname').value.trim():'',car:document.getElementById('df-car').value,carCount:parseInt(document.getElementById('df-carcount').value)||1,wage:parseInt(document.getElementById('df-wage').value)||0,outwage:parseInt(document.getElementById('df-outwage').value)||0,note:document.getElementById('df-note').value.trim(),
     privateId:existingDisp?.privateId||'',privateBusIdx:existingDisp?.privateBusIdx??undefined};
+  // 外派：自動準備專屬連結；換了外派司機就換新連結（舊司機的連結失效）；改回自家司機則清除
+  if(dtype==='out'){
+    if(!existingDisp?.extToken||existingDisp.driverName!==drvName) data.extToken=newExtToken();
+  } else if(existingDisp?.extToken){ data.extToken=''; }
+  const _offerShare=dtype==='out'&&drvName!=='外派未指定'&&(!existingDisp||existingDisp.driverType!=='out'||existingDisp.driverName!==drvName);
+  let _savedDispId=eIds.disp;
   if(eIds.disp){
     await db.collection('dispatches').doc(eIds.disp).update(data);
     // 本地立即同步，讓行事曆和訂單表立刻反映變更
@@ -3090,6 +3150,7 @@ async function saveDisp(){
     const newDocId=uid();
     await db.collection('dispatches').doc(newDocId).set(data);
     dispatches=[...dispatches,{id:newDocId,...data}];
+    _savedDispId=newDocId;
   }
   // 若是包車團派車記錄，同步更新 busAssignedDrivers
   if(data.privateId){
@@ -3121,6 +3182,7 @@ async function saveDisp(){
   }
   cm('disp');
   refresh(); // 立即重新渲染，行事曆、訂單表、派車記錄同步更新
+  if(_offerShare&&confirm('已指派外派司機「'+drvName+'」。\n要現在傳送專屬連結給他嗎？'))openExtShare(_savedDispId);
 }
 async function cancelDispatchById(dispId){
   const d=dispatches.find(x=>x.id===dispId);
@@ -6603,6 +6665,7 @@ async function delHotel(){if(!confirm('確定刪除？'))return;await db.collect
 async function initDefaultDrivers(){ /* no-op */ }
 
 // 登入前只做輕量初始查詢（填充選單），不訂閱 onSnapshot
+if(!IS_EXT_MODE){
 db.collection('drivers').get().then(s=>{
   drivers=s.docs.map(d=>({id:d.id,...d.data()}));
   populateLoginSel();
@@ -6612,6 +6675,7 @@ db.collection('tours').get().then(s=>{
   if(document.getElementById('pub-screen').style.display!=='none')initPubPage();
 });
 db.collection('meta').doc('cars').get().then(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
+}
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
@@ -6621,24 +6685,55 @@ function enterExternalMode(token){
   document.getElementById('ext-screen').style.display='flex';
   const contentEl=document.getElementById('ext-content');
   contentEl.innerHTML='<div style="text-align:center;color:var(--text2)"><i class="ti ti-loader"></i> 載入中…</div>';
-  db.collection('dispatches').where('extToken','==',token).limit(1).get().then(s=>{
+  db.collection('dispatches').where('extToken','==',token).limit(1).get().then(async s=>{
     if(s.empty){contentEl.innerHTML='<div class="empty">連結無效或已過期，請跟公司確認</div>';return;}
     const d={id:s.docs[0].id,...s.docs[0].data()};
-    Promise.all([
-      db.collection('privates').get(),
-      db.collection('tours').get(),
-      db.collection('bookings').get(),
-      db.collection('hotels').get(),
-      db.collection('driverRecs').where('driverId','==',d.driverId).get()
-    ]).then(([ps,ts,bs,hs,drs])=>{
-      privates=ps.docs.map(x=>({id:x.id,...x.data()}));
-      tours=ts.docs.map(x=>({id:x.id,...x.data()}));
+    await loadExtTripData(d);
+    renderExternalSummary(d);
+  }).catch(e=>{console.error(e);contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
+}
+// 外派連結：只抓「這一趟」需要的文件，不下載全公司的包車團／報名／酒店／司機資料
+async function loadExtTripData(d){
+  const docOf=snap=>snap.exists?{id:snap.id,...snap.data()}:null;
+  const hotelIds=new Set();
+  privates=[];tours=[];bookings=[];hotels=[];groupNightlies=[];driverRecs=[];
+  const recQueries=[];
+  if(d.privateId){
+    const p=docOf(await db.collection('privates').doc(d.privateId).get());
+    if(p){
+      privates=[p];
+      (p.nightlyHotels||[]).forEach(nh=>{if(nh.hotelId)hotelIds.add(nh.hotelId);});
+      recQueries.push(db.collection('driverRecs').where('incomeLinkId','==',p.id).get());
+      recQueries.push(db.collection('driverRecs').where('remitLinkId','==',p.id).get());
+    }
+  } else if(d.groupTourId){
+    const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
+    if(m){
+      const tourId=m[1],date=m[2];
+      const [ts,bs,gs,ba]=await Promise.all([
+        db.collection('tours').doc(tourId).get(),
+        db.collection('bookings').where('tourId','==',tourId).where('date','==',date).get(),
+        db.collection('groupNightly').doc(d.groupTourId).get(),
+        db.collection('meta').doc('busAssign').get()
+      ]);
+      const t=docOf(ts);if(t)tours=[t];
       bookings=bs.docs.map(x=>({id:x.id,...x.data()}));
-      hotels=hs.docs.map(x=>({id:x.id,...x.data()}));
-      driverRecs=drs.docs.map(x=>({id:x.id,...x.data()}));
-      renderExternalSummary(d);
-    });
-  }).catch(()=>{contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
+      const gn=docOf(gs);if(gn){groupNightlies=[gn];(gn.nightlyHotels||[]).forEach(nh=>{if(nh.hotelId)hotelIds.add(nh.hotelId);});}
+      // 分車對照只保留這一天這團的部分
+      const prefix=tourId+'_'+date+'_';busAssignMap={};
+      if(ba.exists)Object.entries(ba.data()).forEach(([k,v])=>{if(k.startsWith(prefix))busAssignMap[k]=v;});
+      const ids=bookings.map(b=>b.id);
+      for(let i=0;i<ids.length;i+=10)recQueries.push(db.collection('driverRecs').where('relatedBookingIds','array-contains-any',ids.slice(i,i+10)).get());
+      recQueries.push(db.collection('driverRecs').where('remitLinkId','==',d.groupTourId).get());
+    }
+  }
+  const [hs,rs]=await Promise.all([
+    Promise.all([...hotelIds].map(id=>db.collection('hotels').doc(id).get())),
+    Promise.all(recQueries)
+  ]);
+  hotels=hs.map(docOf).filter(Boolean);
+  const seen=new Set();
+  rs.forEach(q=>q.docs.forEach(x=>{if(!seen.has(x.id)){seen.add(x.id);driverRecs.push({id:x.id,...x.data()});}}));
 }
 // 外派司機連結：行程資訊區塊（特殊需求裝備／貴賓聯絡方式／接送機／住宿安排／行程內容），A車與B/C車共用
 function extTripInfoHtml(p,d){
@@ -6854,6 +6949,113 @@ function renderExternalSummary(d){
       ${disclaimer}
     `;
   }
+}
+// ══════════════════ PAGE: 外派回報（僅管理員） ══════════════════
+// 外派司機透過專屬連結回報的收款／回帳，集中在這裡查看與確認（外派司機不使用現金流水）
+let extRepYear=new Date().getFullYear(),extRepMonth=new Date().getMonth();
+function setExtRepSel(y,m){extRepYear=y;extRepMonth=m;renderExtReport();}
+// 回報記錄對應的行程名稱
+function extRecTripLabel(r){
+  const privId=(r.type==='income'&&r.incomeLinkType==='priv')?r.incomeLinkId:(r.type==='remit'&&r.remitLinkType==='priv')?r.remitLinkId:'';
+  if(privId){const p=privates.find(x=>x.id===privId);return p?p.name+'（'+(p.start||'')+'）':'包車團（已刪除）';}
+  const gid=(r.type==='income'&&r.incomeLinkType==='group')?r.incomeLinkId:(r.type==='remit'&&r.remitLinkType==='group')?r.remitLinkId:'';
+  if(gid){const m=gid.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);if(m){const t=tours.find(x=>x.id===m[1]);return (t?.name||'拼團')+'（'+m[2]+'・'+String.fromCharCode(65+parseInt(m[3]))+'車）';}}
+  if(r.relatedBookingIds?.length){const b=bookings.find(x=>x.id===r.relatedBookingIds[0]);if(b){const t=tours.find(x=>x.id===b.tourId);return (t?.name||'拼團')+'（'+b.date+'）';}}
+  return '-';
+}
+// 單筆外派派車的帳務（公式與外派專屬連結頁 renderExternalSummary 相同）
+function calcExtDispAccount(d){
+  if(d.privateId){
+    if((d.privateBusIdx??0)!==0)return null; // 多車包車團帳務由A車負責
+    const p=privates.find(x=>x.id===d.privateId);if(!p)return null;
+    const balance=(p.price||0)-(p.deposit||0);
+    let hotelAdvance=0;
+    (p.nightlyHotels||[]).forEach((nh,i)=>{if((nh.paymentType||'company')==='driver')hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcNightQuote(p,nh,i);});
+    const income=driverRecs.filter(r=>r.type==='income'&&((r.incomeLinkType==='priv'&&r.incomeLinkId===p.id)||r.relatedPrivateIds?.includes(p.id))).reduce((s,r)=>s+(r.amount||0),0);
+    const remit=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id).reduce((s,r)=>s+(r.amount||0),0);
+    const outwage=d.outwage||0;
+    return{label:p.name+'（'+(p.start||'')+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start||d.start,balance,hotelAdvance,outwage,shouldRemit:balance-hotelAdvance-outwage,income,remit};
+  }
+  if(d.groupTourId){
+    const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);if(!m)return null;
+    const tourId=m[1],date=m[2],busIdx=parseInt(m[3]);
+    const t=tours.find(x=>x.id===tourId);
+    const buses=buildBuses(bookings.filter(b=>b.tourId===tourId&&b.date===date),t?.busMax||8,tourId,date);
+    const bks=buses.find(b=>b.busIdx===busIdx)?.bookings||[];
+    const balance=bks.reduce((s,b)=>s+calcBookingBalance(b),0);
+    const gn=getGroupNightly(tourId,date,busIdx);
+    let hotelAdvance=0;
+    (gn?.nightlyHotels||[]).forEach((nh,i)=>{if((nh.paymentType||'company')==='driver')hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcGroupNightQuote(gn,nh,i);});
+    const bkIds=bks.map(b=>b.id);
+    const income=driverRecs.filter(r=>r.type==='income'&&(r.relatedBookingIds?.some(id=>bkIds.includes(id))||(r.incomeLinkType==='group'&&r.incomeLinkId===d.groupTourId))).reduce((s,r)=>s+(r.amount||0),0);
+    const remit=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===d.groupTourId).reduce((s,r)=>s+(r.amount||0),0);
+    const outwage=d.outwage||0;
+    return{label:(t?.name||d.label||'拼團')+'（'+date+'・'+String.fromCharCode(65+busIdx)+'車）',date,balance,hotelAdvance,outwage,shouldRemit:balance-hotelAdvance-outwage,income,remit};
+  }
+  return null;
+}
+function updateExtBadge(){
+  const el=document.getElementById('nav-ext-badge');if(!el)return;
+  const n=driverRecs.filter(r=>r.source==='ext-link'&&!r.adminChecked).length;
+  el.textContent=n;el.style.display=n?'inline-flex':'none';
+}
+async function checkExtRec(id){
+  await db.collection('driverRecs').doc(id).update({adminChecked:true});
+  const i=driverRecs.findIndex(r=>r.id===id);if(i>=0)driverRecs[i]={...driverRecs[i],adminChecked:true};
+  renderExtReport();updateExtBadge();
+}
+async function checkAllExtRecs(){
+  const ids=driverRecs.filter(r=>r.source==='ext-link'&&!r.adminChecked).map(r=>r.id);
+  if(!ids.length||!confirm('將 '+ids.length+' 筆回報全部標記為已確認？'))return;
+  for(const id of ids)await db.collection('driverRecs').doc(id).update({adminChecked:true});
+  driverRecs=driverRecs.map(r=>ids.includes(r.id)?{...r,adminChecked:true}:r);
+  renderExtReport();updateExtBadge();
+}
+function renderExtReport(){
+  const el=document.getElementById('p-ext-report');if(!el)return;
+  const fmt=v=>'$'+(v||0).toLocaleString();
+  const pending=driverRecs.filter(r=>r.source==='ext-link'&&!r.adminChecked).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const y=extRepYear,m=extRepMonth,ym=y+'-'+String(m+1).padStart(2,'0');
+  const rows=dispatches.filter(d=>d.driverType==='out'&&(d.start||'').startsWith(ym))
+    .map(d=>{const a=calcExtDispAccount(d);return a?{d,...a}:null;}).filter(Boolean)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const tot=k=>rows.reduce((s,x)=>s+(x[k]||0),0);
+  const owedTotal=rows.reduce((s,x)=>s+Math.max(x.shouldRemit-x.remit,0),0);
+  const years=[];for(let yy=2024;yy<=new Date().getFullYear()+1;yy++)years.push(yy);
+  const typeBadge=r=>r.type==='income'?'<span class="badge badge-blue">收款</span>':'<span class="badge badge-green">回帳</span>';
+  el.innerHTML=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span class="card-title" style="margin:0"><i class="ti ti-bell"></i> 待確認回報 ${pending.length?`<span class="badge badge-red">${pending.length}</span>`:''}</span>
+      ${pending.length?'<button class="btn btn-sm" onclick="checkAllExtRecs()"><i class="ti ti-checks"></i> 全部確認</button>':''}
+    </div>
+    ${!pending.length?'<div class="empty" style="padding:1rem">沒有新的外派回報</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>回報日</th><th>外派司機</th><th>行程</th><th>類型</th><th style="text-align:right">金額</th><th>備註</th><th></th></tr></thead><tbody>
+    ${pending.map(r=>`<tr><td style="white-space:nowrap">${r.date||'-'}</td><td>${r.driverName||'-'}</td><td style="font-size:12px">${extRecTripLabel(r)}</td><td>${typeBadge(r)}</td><td style="text-align:right;font-weight:600">${fmt(r.amount)}</td><td style="font-size:12px;color:var(--text2)">${r.note||''}</td><td><button class="btn btn-sm" onclick="checkExtRec('${r.id}')"><i class="ti ti-check"></i> 確認</button></td></tr>`).join('')}
+    </tbody></table></div>`}
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派團次對帳</span>
+      <div style="display:flex;gap:8px">
+        <select onchange="setExtRepSel(extRepYear,parseInt(this.value))" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>
+        <select onchange="setExtRepSel(parseInt(this.value),extRepMonth)" style="height:34px;font-size:13px">${years.map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
+      </div>
+    </div>
+    ${!rows.length?'<div class="empty" style="padding:1rem">本月沒有需要回帳的外派團次</div>':`
+    <div class="stat-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
+      <div class="stat-card"><div class="stat-label">已回報收款</div><div class="stat-val">${fmt(tot('income'))}</div></div>
+      <div class="stat-card"><div class="stat-label">已回報回帳</div><div class="stat-val" style="color:var(--green)">${fmt(tot('remit'))}</div></div>
+      <div class="stat-card"><div class="stat-label">尚未回帳</div><div class="stat-val" style="color:${owedTotal?'var(--red)':'var(--green)'}">${fmt(owedTotal)}</div></div>
+    </div>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>外派司機</th><th style="text-align:right">應收尾款</th><th style="text-align:right">已回報收款</th><th style="text-align:right">住宿代付</th><th style="text-align:right">外派車資</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回報回帳</th><th>狀態</th></tr></thead><tbody>
+    ${rows.map(x=>{
+      const diff=x.shouldRemit-x.remit;
+      const st=x.shouldRemit<=0?'<span class="badge badge-blue">無需回帳</span>':diff<=0?'<span class="badge badge-green">✅ 已結清</span>':x.remit?`<span class="badge badge-amber">差 ${fmt(diff)}</span>`:'<span class="badge badge-red">未回帳</span>';
+      const incColor=x.income<x.balance?'var(--amber-d)':'inherit';
+      return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right;font-weight:600">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
+    }).join('')}
+    </tbody></table></div>`}
+    <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿代付－外派車資。</div>
+  </div>`;
 }
 function enterBookingMode(){
   document.getElementById('login-screen').style.display='none';
