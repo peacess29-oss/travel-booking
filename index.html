@@ -6938,7 +6938,13 @@ function extReportToRec(rid,r){
   if(r.type==='income'){
     if(r.linkType==='group')rec.relatedBookingIds=r.relatedBookingIds||[];
     else{rec.incomeLinkType='priv';rec.incomeLinkId=r.linkId;}
-  }else{rec.remitLinkType=r.linkType;rec.remitLinkId=r.linkId;}
+  }else{
+    rec.remitLinkType=r.linkType;rec.remitLinkId=r.linkId;
+    // 帳號後5碼存在 note 裡（不新增回報欄位，安全規則免改），入帳時拆成獨立欄位方便對帳
+    const m5=(r.note||'').match(/帳號後5碼\s*(\d{5})/);
+    if(m5)rec.acctLast5=m5[1];
+  }
+  if(r.createdAt)rec.reportedAt=r.createdAt; // 系統自動記錄的通知時間（非司機填寫）
   return rec;
 }
 // 外派司機連結：行程資訊區塊（特殊需求裝備／貴賓聯絡方式／接送機／住宿安排／行程內容），A車與B/C車共用
@@ -6995,38 +7001,46 @@ async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds
   await submitExtReport(r);
 }
 async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
-  if(!confirm(`確定要回報「${name}」已收款 $${balance.toLocaleString()} 嗎？`))return;
-  try{await submitExtIncome(driverId,driverName,balance,'外派司機回報客收：'+name,[bookingId]);}
-  catch(e){alert('回報失敗，請檢查網路後再試');return;}
-  alert('已回報，謝謝！');
+  if(!confirm(`確定要通知「${name}」已客收 $${balance.toLocaleString()} 嗎？`))return;
+  try{await submitExtIncome(driverId,driverName,balance,'外派司機通知已客收：'+name,[bookingId]);}
+  catch(e){alert('通知失敗，請檢查網路後再試');return;}
+  alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
 async function reportPrivIncome(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-inc-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  if(!confirm(`確定要回報已收款 $${amt.toLocaleString()} 嗎？`))return;
-  try{await submitExtIncome(driverId,driverName,amt,'外派司機回報客收');}
-  catch(e){alert('回報失敗，請檢查網路後再試');return;}
-  alert('已回報，謝謝！');
+  if(!confirm(`確定要通知已客收 $${amt.toLocaleString()} 嗎？`))return;
+  try{await submitExtIncome(driverId,driverName,amt,'外派司機通知已客收');}
+  catch(e){alert('通知失敗，請檢查網路後再試');return;}
+  alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
-async function submitExtRemit(driverId,driverName,amount){
-  await submitExtReport({type:'remit',amount,note:'外派司機回報回帳',driverName:driverName||''});
+async function submitExtRemit(driverId,driverName,amount,last5){
+  await submitExtReport({type:'remit',amount,note:'外派司機通知已回帳｜帳號後5碼 '+last5,driverName:driverName||''});
+}
+// 讀取並檢查「您的帳號後5碼」
+function getExtLast5(){
+  const v=(document.getElementById('ext-remit-acct')?.value||'').trim();
+  if(!/^\d{5}$/.test(v)){alert('請輸入您的帳號後5碼（5位數字）');document.getElementById('ext-remit-acct')?.focus();return null;}
+  return v;
 }
 async function reportGroupRemit(groupTourId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
-  try{await submitExtRemit(driverId,driverName,amt);}catch(e){alert('回報失敗，請檢查網路後再試');return;}
-  alert('已回報，謝謝！');
+  const last5=getExtLast5();if(!last5)return;
+  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}（帳號後5碼 ${last5}）嗎？`))return;
+  try{await submitExtRemit(driverId,driverName,amt,last5);}catch(e){alert('通知失敗，請檢查網路後再試');return;}
+  alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
 async function reportPrivRemit(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
-  try{await submitExtRemit(driverId,driverName,amt);}catch(e){alert('回報失敗，請檢查網路後再試');return;}
-  alert('已回報，謝謝！');
+  const last5=getExtLast5();if(!last5)return;
+  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}（帳號後5碼 ${last5}）嗎？`))return;
+  try{await submitExtRemit(driverId,driverName,amt,last5);}catch(e){alert('通知失敗，請檢查網路後再試');return;}
+  alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
 // 外派連結：回報已回帳區塊（含歷史回報清單），拼團／包車團共用
@@ -7035,13 +7049,14 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
   const priorTotal=priorRemits.reduce((s,r)=>s+(r.amount||0),0);
   const nameEsc=(driverName||'').replace(/'/g,"\\'");
   return `
-    <div style="font-size:12px;font-weight:600;margin:14px 0 6px">回報已回帳</div>
-    ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已回報：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+    <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已回帳</div>
+    ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()+(r.acctLast5?'（後5碼 '+r.acctLast5+'）':'')).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;height:34px;font-size:13px" placeholder="回帳金額">
-      <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 回報</button>
+      <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="回帳金額">
+      <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="您的帳號後5碼" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
+      <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 通知</button>
     </div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:14px">送出前會再跳出確認視窗</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:14px">通知日期由系統自動記錄；送出前會再跳出確認視窗</div>
   `;
 }
 function renderExternalSummary(d){
@@ -7081,16 +7096,16 @@ function renderExternalSummary(d){
       ${tripInfoHtml}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${statBox('應收現金（尾款）',balance)}
+        ${statBox('客收',balance)}
         ${statBox('住宿代付',hotelAdvance,'var(--red)')}
         ${statBox('您的外派車資',outwage,'var(--green)')}
-        ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
+        ${statBox('應回帳JayTour',shouldRemit,'var(--blue-d)')}
       </div>
-      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">回報收款</div>
-      ${priorReports.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已回報：${priorReports.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
+      ${priorReports.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorReports.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
       <div style="display:flex;gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
-        <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 回報</button>
+        <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
       </div>
       ${extRemitSectionHtml('priv',p.id,shouldRemit,d.driverId,d.driverName,'reportPrivRemit')}
       ${disclaimer}
@@ -7125,15 +7140,15 @@ function renderExternalSummary(d){
         const reported=driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
         const action=reported
-          ?`<span style="color:var(--green);font-size:12px"><i class="ti ti-check"></i> 已回報</span>`
-          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">回報已收</button>`:'-');
+          ?`<span style="color:var(--green);font-size:12px"><i class="ti ti-check"></i> 已通知</span>`
+          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${statBox('應收現金合計',totalBalance)}
+        ${statBox('客收合計',totalBalance)}
         ${statBox('住宿代付',hotelAdvance,'var(--red)')}
         ${statBox('您的外派車資',outwage,'var(--green)')}
-        ${statBox('應回帳公司',shouldRemit,'var(--blue-d)')}
+        ${statBox('應回帳JayTour',shouldRemit,'var(--blue-d)')}
       </div>
       ${extRemitSectionHtml('group',d.groupTourId,shouldRemit,d.driverId,d.driverName,'reportGroupRemit')}
       ${disclaimer}
@@ -7160,6 +7175,8 @@ function extRecTripLabel(r){
   if(r.relatedBookingIds?.length){const b=bookings.find(x=>x.id===r.relatedBookingIds[0]);if(b){const t=tours.find(x=>x.id===b.tourId);return (t?.name||'拼團')+'（'+b.date+'）';}}
   return '-';
 }
+// 系統記錄的通知時間 → YYYY-MM-DD HH:mm（本地時間）
+function extFmtTime(iso){const d=new Date(iso);if(isNaN(d))return iso||'-';const z=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes());}
 // 單筆外派派車的帳務（公式與外派專屬連結頁 renderExternalSummary 相同）
 function calcExtDispAccount(d){
   if(d.privateId){
@@ -7219,14 +7236,14 @@ function renderExtReport(){
   const tot=k=>rows.reduce((s,x)=>s+(x[k]||0),0);
   const owedTotal=rows.reduce((s,x)=>s+Math.max(x.shouldRemit-x.remit,0),0);
   const years=[];for(let yy=2024;yy<=new Date().getFullYear()+1;yy++)years.push(yy);
-  const typeBadge=r=>r.type==='income'?'<span class="badge badge-blue">收款</span>':'<span class="badge badge-green">回帳</span>';
+  const typeBadge=r=>r.type==='income'?'<span class="badge badge-blue">客收</span>':'<span class="badge badge-green">回帳</span>';
   el.innerHTML=`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span class="card-title" style="margin:0"><i class="ti ti-bell"></i> 待確認回報 ${pending.length?`<span class="badge badge-red">${pending.length}</span>`:''}</span>
       ${pending.length?'<button class="btn btn-sm" onclick="checkAllExtRecs()"><i class="ti ti-checks"></i> 全部確認</button>':''}
     </div>
-    ${!pending.length?'<div class="empty" style="padding:1rem">沒有新的外派回報</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>回報日</th><th>外派司機</th><th>行程</th><th>類型</th><th style="text-align:right">金額</th><th>備註</th><th></th></tr></thead><tbody>
-    ${pending.map(r=>`<tr><td style="white-space:nowrap">${r.date||'-'}</td><td>${r.driverName||'-'}</td><td style="font-size:12px">${extRecTripLabel(r)}</td><td>${typeBadge(r)}</td><td style="text-align:right;font-weight:600">${fmt(r.amount)}</td><td style="font-size:12px;color:var(--text2)">${r.note||''}</td><td><button class="btn btn-sm" onclick="checkExtRec('${r.id}')"><i class="ti ti-check"></i> 確認</button></td></tr>`).join('')}
+    ${!pending.length?'<div class="empty" style="padding:1rem">沒有新的外派回報</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>通知時間</th><th>外派司機</th><th>行程</th><th>類型</th><th style="text-align:right">金額</th><th>帳號後5碼</th><th>備註</th><th></th></tr></thead><tbody>
+    ${pending.map(r=>`<tr><td style="white-space:nowrap">${r.reportedAt?extFmtTime(r.reportedAt):(r.date||'-')}</td><td>${r.driverName||'-'}</td><td style="font-size:12px">${extRecTripLabel(r)}</td><td>${typeBadge(r)}</td><td style="text-align:right;font-weight:600">${fmt(r.amount)}</td><td style="font-weight:600">${r.acctLast5||'-'}</td><td style="font-size:12px;color:var(--text2)">${r.note||''}</td><td><button class="btn btn-sm" onclick="checkExtRec('${r.id}')"><i class="ti ti-check"></i> 確認</button></td></tr>`).join('')}
     </tbody></table></div>`}
   </div>
   <div class="card">
