@@ -6597,13 +6597,10 @@ async function saveHotel(){const name=document.getElementById('hf-name').value.t
 async function delHotel(){if(!confirm('確定刪除？'))return;await db.collection('hotels').doc(eIds.hotel).delete();cm('hotel');}
 
 // ══════════════════ INIT ══════════════════
-async function initDefaultDrivers(){
-  const snap=await db.collection('drivers').get();
-  if(snap.empty){
-    await db.collection('drivers').doc(uid()).set({name:'阿國',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});
-    await db.collection('drivers').doc(uid()).set({name:'子碩',phone:'',password:'0000',salary:0,perTrip:0,note:'',type:'own'});
-  }
-}
+// 已停用：原本在「查詢結果為空」時自動建立預設司機。
+// 但 Firestore 在網路不穩時會回傳「本機快取的空結果」（fromCache），
+// 導致每次重新載入都可能重複新增同名司機。司機名冊已建立，改由管理員手動新增。
+async function initDefaultDrivers(){ /* no-op */ }
 
 // 登入前只做輕量初始查詢（填充選單），不訂閱 onSnapshot
 db.collection('drivers').get().then(s=>{
