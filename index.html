@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#fff;--bg2:#f6f6f6;--bg3:#eee;--text:#1a1a1a;--text2:#666;--text3:#999;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--amber:#854F0B;--amber-l:#FAEEDA;--amber-d:#633806;--red:#A32D2D;--red-l:#FCEBEB;--red-d:#791F1F;--purple:#5b3fa0;--purple-l:#ede8f8;}
@@ -135,23 +136,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div class="login-card">
     <div class="login-title">🚌 旅遊業務管理</div>
     <div class="login-sub">請選擇身份登入</div>
-    <button class="role-btn" onclick="adminLogin()">
-      <i class="ti ti-shield-lock" style="font-size:22px;color:var(--blue)"></i>
-      <div><div>業務管理員</div><div style="font-size:11px;color:var(--text2)">完整管理功能</div></div>
+    <div id="login-checking" style="text-align:center;font-size:13px;color:var(--text2);margin-bottom:10px"><i class="ti ti-loader"></i> 檢查登入狀態…</div>
+    <button class="role-btn" onclick="adminGoogleLogin()">
+      <i class="ti ti-brand-google" style="font-size:22px;color:var(--blue)"></i>
+      <div><div>業務管理員（Google 登入）</div><div style="font-size:11px;color:var(--text2)">使用已加入管理員名單的 Google 帳號</div></div>
     </button>
-    <div id="admin-pwd-wrap" style="display:none;margin-top:-4px;margin-bottom:8px">
-      <input type="password" id="admin-pwd-input" placeholder="請輸入管理員密碼" style="margin-bottom:6px;height:36px" onkeydown="if(event.key==='Enter')adminPwdConfirm()">
-      <div id="admin-pwd-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤，請重新輸入</div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="adminPwdConfirm()"><i class="ti ti-login"></i> 確認登入</button>
-    </div>
     <div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px">
       <div class="mb10"><label>司機登入</label><select id="login-drv-sel" style="height:36px"></select></div>
       <div class="mb10"><label>密碼</label><input type="password" id="login-pwd" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter')loginDriver()"></div>
-      <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> 密碼錯誤</div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);margin-bottom:10px;cursor:pointer">
-        <input type="checkbox" id="login-remember" style="width:15px;height:15px"> 記住此設備，下次自動登入
-      </label>
-      <button class="btn btn-success" style="width:100%;justify-content:center" onclick="loginDriver()"><i class="ti ti-steering-wheel"></i> 司機登入</button>
+      <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:6px;display:none"><i class="ti ti-alert-circle"></i> <span id="login-err-msg">密碼錯誤</span></div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">登入後此裝置會自動記住，按「登出」才會解除。</div>
+      <button class="btn btn-success" style="width:100%;justify-content:center" onclick="loginDriver()" id="login-drv-btn"><i class="ti ti-steering-wheel"></i> 司機登入</button>
       <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text2)">司機可使用 <a href="driver.html" style="color:var(--blue)">專屬司機頁面</a> 登入（獨立網址）</div>
     </div>
   </div>
@@ -487,10 +482,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <!-- [修正] 自家司機欄位群組 -->
   <div id="dvf-own-fields">
     <div class="mb10">
-      <label>登入密碼 * <span style="font-size:11px;color:var(--text2)">（司機用此密碼登入 driver.html）</span></label>
+      <label>登入密碼 <span style="font-size:11px;color:var(--text2)">（至少 6 碼，僅由管理員設定；系統不會保存明碼）</span></label>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" id="dvf-pwd" placeholder="例：0000" style="flex:1;font-family:monospace;letter-spacing:2px">
-        <button type="button" class="btn btn-sm" style="flex-shrink:0;height:36px" onclick="dvfPwdRandom()" title="產生隨機4位數密碼"><i class="ti ti-refresh"></i> 隨機</button>
+        <input type="text" id="dvf-pwd" placeholder="至少 6 碼" autocomplete="off" style="flex:1;font-family:monospace;letter-spacing:2px">
+        <button type="button" class="btn btn-sm" style="flex-shrink:0;height:36px" onclick="dvfPwdRandom()" title="產生隨機6位數密碼"><i class="ti ti-refresh"></i> 隨機</button>
       </div>
       <div id="dvf-pwd-tip" style="font-size:11px;color:var(--text2);margin-top:3px"></div>
     </div>
@@ -629,8 +624,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 
 <script>
 // ══════════════════ FIREBASE ══════════════════
-firebase.initializeApp({apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDomain:"travel-booking-89df8.firebaseapp.com",projectId:"travel-booking-89df8",storageBucket:"travel-booking-89df8.firebasestorage.app",messagingSenderId:"436528685102",appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"});
+const FIREBASE_CONFIG={apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDomain:"travel-booking-89df8.firebaseapp.com",projectId:"travel-booking-89df8",storageBucket:"travel-booking-89df8.firebasestorage.app",messagingSenderId:"436528685102",appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"};
+firebase.initializeApp(FIREBASE_CONFIG);
 const db=firebase.firestore();
+const auth=firebase.auth();
+// ══ 權限設定 ══
+// 主管理員：寫死在程式與安全規則中，永遠不會被鎖在門外；其他管理員在「設定 → 管理員名單」管理
+const SUPER_ADMIN='peacess29@gmail.com';
+const SEED_ADMINS=['tourtaxi1025@gmail.com']; // 主管理員第一次登入時自動加入名單（之後可在名單中移除）
+const DRIVER_EMAIL_DOMAIN='driver.jaytour.app'; // 司機登入帳號用的內部 Email 網域（不需要真的存在）
 
 // ══════════════════ STATE ══════════════════
 let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
@@ -646,6 +648,8 @@ let reconSelYear=new Date().getFullYear(),reconSelMonth=new Date().getMonth();
 let hotelRooms={r2:0,r3:0,r4:0};
 // [修正] initListeners 防重複執行旗標
 let listenersInited=false;
+let adminsList=[];
+const _loaded=new Set();function markLoaded(k){_loaded.add(k);}
 let notifyReady=false; // 避免首次載入把所有既有客上/客下資料當成新回報而狂發通知
 
 // ══════════════════ TAIWAN HOLIDAYS ══════════════════
@@ -685,7 +689,7 @@ function getDates(tid){return[...new Set(getBks(tid).map(b=>b.date))].sort();}
 let busAssignMap={};
 // 外派司機專屬連結模式（?ext=token）：只載入該趟行程需要的資料，不載入任何公司全域資料
 const IS_EXT_MODE=new URLSearchParams(location.search).has('ext');
-if(!IS_EXT_MODE) db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.data():{};refresh();});
+function listenBusAssign(){db.collection('meta').doc('busAssign').onSnapshot(s=>{busAssignMap=s.exists?s.data():{};refresh();},e=>console.warn('[busAssign]',e.code));}
 async function setBusAssign(tourId,date,bookId,busIdx){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
   await db.collection('meta').doc('busAssign').set({[key]:busIdx},{merge:true});
@@ -811,9 +815,12 @@ function initListeners(){
   if(listenersInited)return;
   listenersInited=true;
   setSS('syncing','連線中');
-  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
-  db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  listenBusAssign();
+  db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('drivers');refresh();});
+  db.collection('admins').onSnapshot(s=>{adminsList=s.docs.map(d=>({id:d.id,...d.data()}));refresh();},()=>{});
+  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('tours');refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
+  db.collection('bookings').onSnapshot(s=>{bookings=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('bookings');refresh();});
+  db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('privates');refresh();});
   db.collection('dispatches').onSnapshot(s=>{
     const oldMap={};dispatches.forEach(d=>oldMap[d.id]=d);
     const newDispatches=s.docs.map(d=>({id:d.id,...d.data()}));
@@ -829,13 +836,14 @@ function initListeners(){
       });
     }
     dispatches=newDispatches;
+    markLoaded('dispatches');
     refresh();
     notifyReady=true;
   });
-  db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('hotels');refresh();});
+  db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('groupNightly');refresh();});
   db.collection('expenses').onSnapshot(s=>{expenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  db.collection('driverRecs').onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  db.collection('driverRecs').onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('driverRecs');refresh();});
   db.collection('fixedExpenses').onSnapshot(s=>{fixedExpenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('meta').doc('groupStatus').onSnapshot(s=>{groupStatus=s.exists?s.data():{};refresh();});
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;refresh();});
@@ -851,8 +859,13 @@ function initDriverListeners(drvId){
     .onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));refresh();setSS('ok','已同步 ✓')},()=>setSS('error','連線失敗'));
   // 派車（全部讀，顯示層過濾）— 包車團指派欄位不固定，不能用 where 過濾
   db.collection('dispatches').onSnapshot(s=>{dispatches=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
-  // 司機資料（renderDriverPage 需要用自己的 name/id 比對）
-  db.collection('drivers').onSnapshot(s=>{drivers=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
+  // 司機資料：只讀自己的那一筆（安全規則也只允許讀自己的）
+  db.collection('drivers').doc(drvId).onSnapshot(s=>{drivers=s.exists?[{id:s.id,...s.data()}]:[];refresh();});
+  // 帳號被停用或密碼被更換 → 立即登出
+  if(auth.currentUser)db.collection('driverAuth').doc(auth.currentUser.uid).onSnapshot(s=>{
+    if(!s.exists&&curRole==='driver'){alert('您的登入帳號已被停用或密碼已更換，請向管理員索取新密碼。');logout();}
+  },()=>{if(curRole==='driver'){logout();}});
+  listenBusAssign();
   // 包車團資料（顯示行程詳情需要）
   db.collection('privates').onSnapshot(s=>{privates=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   // 酒店資料（顯示住宿安排需要）
@@ -881,12 +894,18 @@ function refresh(){
   if(curPage==='p-reconcile')renderReconcile();
   if(curPage==='p-ext-report')renderExtReport();
   updateExtBadge();
+  scheduleExtSync();
 }
 
 // ══════════════════ AUTH ══════════════════
 function populateLoginSel(){
   const sel=document.getElementById('login-drv-sel');
   if(!sel)return;
+  // 公開的登入名單只含：司機ID、姓名、登入用內部Email（不含密碼或其他資料）
+  db.collection('meta').doc('driverLogin').get().then(s=>{
+    window._drvLoginList=(s.exists&&s.data().list)||[];
+    sel.innerHTML=window._drvLoginList.length?window._drvLoginList.map(d=>`<option value="${d.id}">${d.name}</option>`).join(''):'<option value="">（尚無可登入的司機）</option>';
+  }).catch(()=>{sel.innerHTML='<option value="">（名單載入失敗）</option>';});
   sel.innerHTML=drivers.filter(d=>d.type==='own').map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
 
@@ -894,37 +913,51 @@ function populateLoginSel(){
 let ADMIN_PASSWORD=null; // null = 尚未從 Firestore 載入
 let adminPwdLoaded=false;
 
-// 頁面載入時立即非同步抓密碼，存入記憶體，不寫入任何 JS 變數名稱讓人猜
-(IS_EXT_MODE?Promise.reject('ext'):db.collection('meta').doc('adminPassword').get())
-  .then(s=>{
-    if(s.exists && s.data().pwd){
-      ADMIN_PASSWORD=s.data().pwd;
-    }
-    adminPwdLoaded=true;
-  })
-  .catch(()=>{adminPwdLoaded=true;}); // Firestore 失敗時標記已嘗試，登入時再提示
-
-var ADMIN_DEVICE_KEY='adminDeviceTrusted_v1';
-
-function adminLogin(){
-  // 已記住裝置 → 直接登入（不需密碼）
-  if(localStorage.getItem(ADMIN_DEVICE_KEY)==='1'){
-    if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
-    loginAs('admin');return;
+// ══════════════════ 登入（Firebase Authentication） ══════════════════
+function showLoginErr(msg){const e=document.getElementById('login-err');document.getElementById('login-err-msg').textContent=msg;e.style.display='block';}
+async function adminGoogleLogin(){
+  const provider=new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  try{
+    await auth.signInWithPopup(provider);
+  }catch(e){
+    if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){await auth.signInWithRedirect(provider);return;}
+    if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request')return;
+    if(e.code==='auth/unauthorized-domain'){alert('此網址尚未加入 Firebase「授權網域」，請到 Firebase 後台 Authentication → 設定 → 授權網域 新增。');return;}
+    if(e.code==='auth/operation-not-allowed'){alert('Firebase 尚未啟用 Google 登入，請到 Firebase 後台 Authentication → 登入方式 啟用 Google。');return;}
+    alert('Google 登入失敗：'+(e.message||e.code));
   }
-  const wrap=document.getElementById('admin-pwd-wrap');
-  if(wrap.style.display==='none'){wrap.style.display='block';document.getElementById('admin-pwd-input').focus();}
 }
-function adminPwdConfirm(){
-  if(typeof db==='undefined'){alert('系統仍在連線中，請稍後再試');return;}
-  if(!adminPwdLoaded){alert('連線中，請稍候再試');return;}
-  if(!ADMIN_PASSWORD){alert('無法取得驗證資料，請重新整理頁面');return;}
-  const pwd=document.getElementById('admin-pwd-input').value;
-  if(pwd!==ADMIN_PASSWORD){document.getElementById('admin-pwd-err').style.display='block';document.getElementById('admin-pwd-input').value='';document.getElementById('admin-pwd-input').focus();return;}
-  localStorage.setItem(ADMIN_DEVICE_KEY,'1');
-  document.getElementById('admin-pwd-wrap').style.display='none';
-  document.getElementById('admin-pwd-err').style.display='none';
-  loginAs('admin');
+async function checkIsAdmin(user){
+  if(!user||!user.email||!user.emailVerified)return false;
+  const em=user.email.toLowerCase();
+  if(em===SUPER_ADMIN)return true;
+  try{const s=await db.collection('admins').doc(em).get();return s.exists;}catch(e){return false;}
+}
+async function getDriverIdForUser(user){
+  try{
+    const s=await db.collection('driverAuth').doc(user.uid).get();
+    return s.exists&&s.data().active!==false?s.data().driverId:'';
+  }catch(e){return '';}
+}
+function startAuthRouting(){
+  populateLoginSel();
+  auth.onAuthStateChanged(async user=>{
+    document.getElementById('login-checking').style.display='none';
+    if(curRole){ if(!user) location.reload(); return; } // 在系統內被登出（例如密碼被管理員更換）→ 回登入畫面
+    if(!user)return;
+    const isGoogle=user.providerData.some(pd=>pd.providerId==='google.com');
+    if(isGoogle){
+      if(await checkIsAdmin(user)){loginAs('admin');}
+      else{await auth.signOut();alert('此 Google 帳號（'+user.email+'）不在管理員名單中，請聯繫主管理員加入。');}
+      return;
+    }
+    const drvId=await getDriverIdForUser(user);
+    if(!drvId){await auth.signOut();showLoginErr('此帳號已停用或密碼已更換，請向管理員索取新密碼');return;}
+    let drv={id:drvId,name:'司機'};
+    try{const ds=await db.collection('drivers').doc(drvId).get();if(ds.exists)drv={id:ds.id,...ds.data()};}catch(e){}
+    enterDriverApp(drv);
+  });
 }
 function loginAs(role){
   curRole=role;curDriverId='';
@@ -933,6 +966,8 @@ function loginAs(role){
   document.getElementById('app-title').textContent='旅遊業務管理系統';
   buildNav('admin');
   initListeners();
+  seedAdmins();
+  db.collection('meta').doc('adminPassword').get().then(x=>{window._legacyAdminPwdGone=!x.exists;}).catch(()=>{});
   showPage('p-group');
   setTimeout(checkUrgentDispatch,2000);
   setTimeout(checkAutoBackup,3000);
@@ -950,33 +985,24 @@ function checkUrgentDispatch(){
     }
   }
 }
-function loginDriver(){
+async function loginDriver(){
+  document.getElementById('login-err').style.display='none';
   const drvId=document.getElementById('login-drv-sel').value;
   const pwd=document.getElementById('login-pwd').value;
-  const drv=drivers.find(d=>d.id===drvId);
-  if(!drv){document.getElementById('login-err').style.display='block';return;}
-  // 密碼為空 → 首次登入，任意密碼都接受（讓司機自行設定）
-  if(!drv.password){
-    // 暫存待設定的司機 id，跳出設定密碼 Modal
-    curDriverId=drvId;
-    document.getElementById('login-err').style.display='none';
-    document.getElementById('setpwd-new').value='';
-    document.getElementById('setpwd-confirm').value='';
-    document.getElementById('setpwd-err').style.display='none';
-    document.getElementById('m-setpwd').classList.add('open');
-    setTimeout(()=>document.getElementById('setpwd-new').focus(),100);
-    return;
+  const it=(window._drvLoginList||[]).find(x=>x.id===drvId);
+  if(!it){showLoginErr('請選擇司機');return;}
+  if(!pwd){showLoginErr('請輸入密碼');return;}
+  const btn=document.getElementById('login-drv-btn');btn.disabled=true;
+  try{
+    await auth.signInWithEmailAndPassword(it.email,pwd); // 成功後由 onAuthStateChanged 進入司機頁
+  }catch(e){
+    showLoginErr(e.code==='auth/too-many-requests'?'嘗試次數過多，請稍後再試':'密碼錯誤');
+    document.getElementById('login-pwd').value='';
   }
-  if(String(drv.password)!==String(pwd)){document.getElementById('login-err').style.display='block';return;}
-  enterDriverApp(drv);
+  btn.disabled=false;
 }
 function enterDriverApp(drv, remember){
   // remember=true → 綁定設備；undefined → 由勾選框決定；false → 不綁定
-  const chk = document.getElementById('login-remember');
-  const shouldRemember = (remember === true) || (remember === undefined && chk && chk.checked);
-  if(shouldRemember){
-    localStorage.setItem('driverDeviceTrusted_v1',JSON.stringify({id:drv.id,name:drv.name}));
-  }
   curRole='driver';curDriverId=drv.id;
   document.getElementById('login-err').style.display='none';
   document.getElementById('login-screen').style.display='none';
@@ -1008,22 +1034,14 @@ async function submitSetPwd(){
     errEl.style.display='block';
   }
 }
-function logout(unbind){
+function logout(){
   const wasDriver=curRole==='driver';
-  curRole='';curDriverId='';
-  localStorage.removeItem('adminDeviceTrusted_v1');
-  if(unbind) localStorage.removeItem('driverDeviceTrusted_v1');
-  listenersInited=false;
-  // 司機登出 → 直接跳回專屬司機頁面
-  if(wasDriver){
-    window.location.href='driver.html';
-    return;
-  }
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-pwd').value='';
-  document.getElementById('login-err').style.display='none';
-  document.getElementById('admin-pwd-wrap').style.display='none';
+  localStorage.removeItem('adminDeviceTrusted_v1');localStorage.removeItem('driverDeviceTrusted_v1');
+  curRole='';
+  auth.signOut().finally(()=>{
+    if(wasDriver)window.location.href='driver.html';
+    else window.location.href=location.pathname;
+  });
 }
 function buildNav(role){
   const nav=document.getElementById('main-nav');
@@ -1046,7 +1064,7 @@ function buildNav(role){
   } else {
     nav.innerHTML=`<button class="nav-tab active" onclick="showPage('p-driver',this)"><i class="ti ti-steering-wheel"></i> 我的記錄</button>`;
     // 司機 topbar 登出按鈕：一般登出（保留綁定）+ 解除綁定
-    const isBound = !!localStorage.getItem('driverDeviceTrusted_v1');
+    const isBound = false; // 改用 Firebase 登入後，裝置會自動記住，只需一般登出
     document.getElementById('topbar-logout-btns').innerHTML = isBound
       ? `<button class="btn btn-sm" onclick="logout()" title="登出但保留自動登入"><i class="ti ti-logout"></i> 登出</button>
          <button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="if(confirm('解除綁定後下次需重新輸入密碼，確定嗎？'))logout(true)" title="解除設備綁定"><i class="ti ti-device-mobile-off"></i> 解除綁定</button>`
@@ -3011,6 +3029,109 @@ function openDisp(id='',dateStr=''){
     }
   }
 }
+// ══════════════════ 外派分享快照（extViews） ══════════════════
+// 上鎖後，外派司機只能讀自己連結的快照。管理頁在資料變動時自動重建快照（內容沒變就不寫入）。
+function pick(o,keys){const r={};keys.forEach(k=>{if(o&&o[k]!==undefined)r[k]=o[k];});return r;}
+function hashStr(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)+str.length.toString(36);}
+function buildExtSnapshot(d){
+  const v={dispId:d.id,disp:pick(d,['label','start','end','startTime','endTime','car','carCount','outwage','driverName','driverType','privateId','privateBusIdx','groupTourId']),
+    privates:[],tours:[],bookings:[],hotels:[],recs:[],linkType:'',linkId:'',bookingIds:[],hotelAdvance:0};
+  const recKeys=['type','amount','date','incomeLinkType','incomeLinkId','remitLinkType','remitLinkId','relatedBookingIds'];
+  if(d.privateId){
+    const p=privates.find(x=>x.id===d.privateId);
+    if(p){
+      v.privates=[p];v.linkType='priv';v.linkId=p.id;
+      const hIds=new Set((p.nightlyHotels||[]).map(n=>n.hotelId).filter(Boolean));
+      v.hotels=hotels.filter(h=>hIds.has(h.id)).map(h=>pick(h,['id','name','area'])); // 不含酒店成本價
+      (p.nightlyHotels||[]).forEach((nh,i)=>{if((nh.paymentType||'company')==='driver')v.hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcNightQuote(p,nh,i);});
+      v.recs=driverRecs.filter(r=>(r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id)||(r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id))
+        .map(r=>({id:r.id,...pick(r,recKeys)}));
+    }
+  }else if(d.groupTourId){
+    const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
+    if(m){
+      const tourId=m[1],date=m[2],busIdx=parseInt(m[3]);
+      const t=tours.find(x=>x.id===tourId);
+      if(t)v.tours=[t];
+      const buses=buildBuses(bookings.filter(b=>b.tourId===tourId&&b.date===date),t?.busMax||8,tourId,date);
+      const bks=buses.find(b=>b.busIdx===busIdx)?.bookings||[];
+      v.bookings=bks.map(b=>({id:b.id,...pick(b,['name','count','tourId','date','roomCost','balance','balancePaid'])})); // 只含這台車乘客，不含電話
+      v.bookingIds=bks.map(b=>b.id);v.linkType='group';v.linkId=d.groupTourId;
+      const gn=getGroupNightly(tourId,date,busIdx);
+      (gn?.nightlyHotels||[]).forEach((nh,i)=>{if((nh.paymentType||'company')==='driver')v.hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcGroupNightQuote(gn,nh,i);});
+      v.recs=driverRecs.filter(r=>(r.type==='income'&&r.relatedBookingIds?.some(id=>v.bookingIds.includes(id)))||(r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===d.groupTourId))
+        .map(r=>({id:r.id,...pick(r,recKeys),...(r.relatedBookingIds?{relatedBookingIds:r.relatedBookingIds.filter(id=>v.bookingIds.includes(id))}:{})}));
+    }
+  }
+  return JSON.parse(JSON.stringify(v)); // 去掉 undefined，Firestore 不接受
+}
+let _extSyncCache={},_extKnownTokens=null,_extSyncTimer=null,_extSyncing=false,_extReportsListening=false;
+function adminDataReady(){return ['dispatches','privates','bookings','driverRecs','tours','hotels','groupNightly'].every(k=>_loaded.has(k));}
+function scheduleExtSync(){
+  if(curRole!=='admin')return;
+  clearTimeout(_extSyncTimer);_extSyncTimer=setTimeout(syncExtViews,2500);
+}
+async function writeExtView(d){
+  const v=buildExtSnapshot(d);const h=hashStr(JSON.stringify(v));
+  if(_extSyncCache[d.extToken]===h)return;
+  await db.collection('extViews').doc(d.extToken).set({...v,_hash:h,updatedAt:new Date().toISOString()});
+  _extSyncCache[d.extToken]=h;if(_extKnownTokens)_extKnownTokens.add(d.extToken);
+}
+async function syncExtViews(){
+  if(curRole!=='admin'||!adminDataReady()||_extSyncing)return;
+  _extSyncing=true;
+  try{
+    if(_extKnownTokens===null){
+      const s=await db.collection('extViews').get();
+      _extKnownTokens=new Set(s.docs.map(x=>x.id));
+      s.docs.forEach(x=>{_extSyncCache[x.id]=x.data()._hash||'';});
+    }
+    const active=dispatches.filter(d=>d.driverType==='out'&&d.extToken);
+    const activeTokens=new Set(active.map(d=>d.extToken));
+    for(const d of active)await writeExtView(d);
+    // 已刪除的派車、已換新的連結 → 刪除舊快照（舊連結失效）
+    for(const t of [..._extKnownTokens]){
+      if(!activeTokens.has(t)){await db.collection('extViews').doc(t).delete().catch(()=>{});_extKnownTokens.delete(t);delete _extSyncCache[t];}
+    }
+    if(!_extReportsListening)listenExtReports();
+  }catch(e){console.error('[extSync]',e);}
+  _extSyncing=false;
+}
+// 外派回報箱 → 自動入帳（兩位管理員同時開著也不會重複：入帳記錄 ID 固定為 ext_回報ID）
+function listenExtReports(){
+  _extReportsListening=true;
+  db.collectionGroup('reports').onSnapshot(s=>{
+    s.docs.forEach(x=>{const par=x.ref.parent.parent;if(par&&par.parent.id==='extViews'&&!x.data().imported)importExtReport(x);});
+  },e=>{console.error('[extReports]',e);_extReportsListening=false;});
+}
+const _importing=new Set();
+async function importExtReport(docSnap){
+  const rid=docSnap.id;if(_importing.has(rid))return;_importing.add(rid);
+  try{
+    const r=docSnap.data();const token=docSnap.ref.parent.parent.id;
+    const disp=dispatches.find(d=>d.extToken===token);
+    const rec=extReportToRec(rid,r);
+    const recId=rec.id;delete rec.id;
+    rec.driverId=disp?.driverId||'';
+    if(!rec.driverName)rec.driverName=disp?.driverName||'';
+    if(!rec.date)rec.date=localDateStr();
+    await db.collection('driverRecs').doc(recId).set(rec);
+    // 連動標記尾款已收（比照原本外派頁的行為）
+    if(r.type==='income'&&r.linkType==='group'){
+      for(const bid of (r.relatedBookingIds||[]))await db.collection('bookings').doc(bid).update({balancePaid:true}).catch(()=>{});
+    }
+    if(r.type==='income'&&r.linkType==='priv'){
+      const p=privates.find(x=>x.id===r.linkId);
+      if(p&&!p.balancePaid){
+        const total=(p.price||0)-(p.deposit||0);
+        const sum=driverRecs.filter(x=>x.type==='income'&&x.incomeLinkType==='priv'&&x.incomeLinkId===p.id&&x.id!==recId).reduce((a,x)=>a+(x.amount||0),0)+(r.amount||0);
+        if(total>0&&sum>=total)await db.collection('privates').doc(p.id).update({balancePaid:true});
+      }
+    }
+    await docSnap.ref.update({imported:true,importedAt:new Date().toISOString(),importedBy:auth.currentUser?.email||''});
+  }catch(e){console.error('[importExtReport]',e);_importing.delete(rid);}
+}
+
 // ── 外派司機專屬連結：一鍵產生＋分享 ──
 function newExtToken(){return uid()+uid();}
 async function ensureExtToken(dispId,forceNew=false){
@@ -3034,8 +3155,9 @@ async function openExtShare(dispId,forceNew=false){
   if(forceNew&&!confirm('重新產生後，舊連結會立即失效，確定嗎？'))return;
   setSS('syncing','產生連結中…');
   const token=await ensureExtToken(dispId,forceNew);
-  setSS('ok','已同步 ✓');
   const d=dispatches.find(x=>x.id===dispId)||d0;
+  try{await writeExtView(d);}catch(e){console.error(e);alert('分享快照建立失敗：'+(e.message||e.code));return;}
+  setSS('ok','已同步 ✓');
   const url=extLinkUrl(token),msg=extShareMessage(d,url);
   window._extShare={url,msg};
   const canShare=!!navigator.share;
@@ -6314,8 +6436,8 @@ function renderNotifyStatus(){
 }
 function renderSettings(){
   const el=document.getElementById('p-settings');
-  el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
-    ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>常用車輛</th><th>月薪</th><th>每趟</th><th>備註</th><th>密碼狀態</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td style="font-size:12px">${d.preferredCar?'<span class="badge badge-blue">'+d.preferredCar+'</span>':'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td>${d.password?'<span class="badge badge-green"><i class="ti ti-lock"></i> 已設定</span>':'<span class="badge badge-amber"><i class="ti ti-lock-open"></i> 未設定</span>'}<button class="btn btn-sm btn-danger" style="margin-left:6px;padding:2px 7px;font-size:11px" onclick="resetDriverPwd('${d.id}','${d.name}')"><i class="ti ti-refresh"></i> 重置</button></td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
+  el.innerHTML=adminListCardHtml()+securityCardHtml()+`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
+    ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>常用車輛</th><th>月薪</th><th>每趟</th><th>備註</th><th>登入帳號</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td style="font-size:12px">${d.preferredCar?'<span class="badge badge-blue">'+d.preferredCar+'</span>':'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td style="white-space:nowrap">${d.authUid?'<span class="badge badge-green"><i class="ti ti-lock"></i> 已開通</span>':(d.loginDisabled?'<span class="badge badge-red"><i class="ti ti-ban"></i> 已停用</span>':'<span class="badge badge-amber"><i class="ti ti-lock-open"></i> 未開通</span>')}<button class="btn btn-sm" style="margin-left:6px;padding:2px 7px;font-size:11px" onclick="setDriverPassword('${d.id}')"><i class="ti ti-key"></i> 設定密碼</button>${d.authUid?`<button class="btn btn-sm btn-danger" style="margin-left:4px;padding:2px 7px;font-size:11px" onclick="disableDriverLogin('${d.id}')"><i class="ti ti-ban"></i> 停用</button>`:''}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
   </div>
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','external')"><i class="ti ti-plus"></i> 新增</button></div>
     ${!drivers.filter(d=>d.type==='external').length?'<div class="empty" style="padding:0.5rem;font-size:13px">尚無外派司機資料</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>每天費用</th><th>地區</th><th>備註</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='external').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString()+'/天':'-'}</td><td style="font-size:12px">${d.area||'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
@@ -6578,7 +6700,7 @@ async function saveCostSetting(){await db.collection('meta').doc('costSettings')
 // [修正] toggleDvType 對應修正後的 Modal 結構
 // 產生隨機4位數密碼
 function dvfPwdRandom(){
-  const pwd=String(Math.floor(1000+Math.random()*9000));
+  const pwd=String(Math.floor(100000+Math.random()*900000));
   document.getElementById('dvf-pwd').value=pwd;
   const tip=document.getElementById('dvf-pwd-tip');
   if(tip) tip.textContent='已產生隨機密碼：'+pwd+'（請記錄後告知司機）';
@@ -6600,10 +6722,9 @@ function openDriver(id='',forceType=''){
   document.getElementById('dvf-own-fields').style.display=dtype==='own'?'block':'none';
   document.getElementById('dvf-ext-fields').style.display=dtype==='external'?'block':'none';
   const pwdInput=document.getElementById('dvf-pwd');
-  pwdInput.value=d?.password||'';
-  // 新增時顯示提示，編輯時顯示目前密碼
+  pwdInput.value='';
   const tip=document.getElementById('dvf-pwd-tip');
-  if(tip) tip.textContent=d?('目前密碼：'+d.password):'請設定預設密碼，司機初次登入後可自行更改';
+  if(tip) tip.textContent=d?(d.authUid?'已開通登入帳號。留空＝不變更；輸入新密碼＝更換（舊密碼立即失效）':'尚未開通登入帳號，輸入密碼即可開通'):'輸入至少 6 碼密碼即可開通登入帳號（可留空，之後再設定）';
   document.getElementById('dvf-salary').value=d?.salary||0;
   document.getElementById('dvf-per').value=d?.perTrip||0;
   document.getElementById('dvf-extper').value=d?.perTrip||0;
@@ -6623,12 +6744,11 @@ async function saveDriver(){
   const dtype=document.getElementById('dvf-type').value;
   if(!name)return alert('請填寫姓名');
   const pwd=String(document.getElementById('dvf-pwd').value).trim();
-  if(dtype==='own'&&!pwd)return alert('請填寫司機登入密碼');
+  if(pwd&&pwd.length<6)return alert('登入密碼至少需要 6 碼');
   setSS('syncing','儲存中…');
   const data={
     name,
     phone:document.getElementById('dvf-phone').value.trim(),
-    password:pwd,
     salary:parseInt(document.getElementById('dvf-salary').value)||0,
     perTrip:dtype==='external'?(parseInt(document.getElementById('dvf-extper').value)||0):(parseInt(document.getElementById('dvf-per').value)||0),
     area:document.getElementById('dvf-area').value.trim(),
@@ -6636,18 +6756,138 @@ async function saveDriver(){
     note:document.getElementById('dvf-note').value.trim(),
     type:dtype
   };
+  let savedId=eIds.driver;
   if(eIds.driver)await db.collection('drivers').doc(eIds.driver).update(data);
-  else await db.collection('drivers').doc(uid()).set(data);
+  else{savedId=uid();await db.collection('drivers').doc(savedId).set(data);}
   cm('driver');
+  try{
+    if(dtype==='own'&&pwd){
+      const fresh=await db.collection('drivers').doc(savedId).get();
+      await createDriverLogin({id:savedId,...fresh.data()},pwd);
+      alert('已設定「'+name+'」的登入密碼。\n請把密碼告訴司機（系統不會保存明碼）。');
+    }else{
+      await syncDriverLoginList(); // 姓名變更時同步登入名單
+    }
+  }catch(e){alert('司機資料已儲存，但登入帳號設定失敗：'+(e.message||e.code));}
+  setSS('ok','已同步 ✓');
 }
-async function delDriver(){if(!confirm('確定刪除？'))return;await db.collection('drivers').doc(eIds.driver).delete();cm('driver');}
-async function resetDriverPwd(id,name){
-  if(!confirm('確定重置「'+name+'」的密碼？\n重置後司機下次登入時可自行設定新密碼。'))return;
-  await db.collection('drivers').doc(id).update({password:''});
-  const idx=drivers.findIndex(d=>d.id===id);
-  if(idx>=0) drivers[idx].password='';
+async function delDriver(){
+  if(!confirm('確定刪除？'))return;
+  const d=drivers.find(x=>x.id===eIds.driver);
+  if(d?.authUid)await db.collection('driverAuth').doc(d.authUid).delete().catch(()=>{});
+  await db.collection('drivers').doc(eIds.driver).delete();
+  cm('driver');
+  await syncDriverLoginList().catch(()=>{});
+}
+// ══════════════════ 司機登入帳號（Firebase Authentication） ══════════════════
+// 做法：每位司機對應一個 Firebase 帳號（內部 Email＋管理員設定的密碼）；driverAuth/{uid} 記錄帳號屬於哪位司機
+// 更換密碼＝建立新帳號並刪除舊對應（免費方案無法從網頁修改他人密碼），舊帳號立即失去所有權限
+let _creatorApp=null;
+function creatorAuth(){
+  if(!_creatorApp)_creatorApp=firebase.initializeApp(FIREBASE_CONFIG,'driver-account-creator');
+  return _creatorApp.auth();
+}
+async function createDriverLogin(d,pwd){
+  setSS('syncing','設定登入帳號中…');
+  const ca=creatorAuth();
+  await ca.setPersistence(firebase.auth.Auth.Persistence.NONE); // 不影響目前管理員的登入狀態
+  const email=('d'+d.id+'.'+Date.now().toString(36)+'@'+DRIVER_EMAIL_DOMAIN).toLowerCase();
+  const cred=await ca.createUserWithEmailAndPassword(email,pwd);
+  const newUid=cred.user.uid;
+  await ca.signOut();
+  await db.collection('driverAuth').doc(newUid).set({driverId:d.id,email,active:true,createdAt:new Date().toISOString(),createdBy:auth.currentUser?.email||''});
+  if(d.authUid&&d.authUid!==newUid)await db.collection('driverAuth').doc(d.authUid).delete().catch(()=>{});
+  await db.collection('drivers').doc(d.id).update({authUid:newUid,authEmail:email,loginDisabled:false,password:firebase.firestore.FieldValue.delete()});
+  await syncDriverLoginList();
+  setSS('ok','已同步 ✓');
+}
+async function setDriverPassword(id){
+  const d=drivers.find(x=>x.id===id);if(!d)return;
+  const pwd=prompt(`設定「${d.name}」的登入密碼（至少 6 碼）\n\n設定後舊密碼立即失效，司機已登入的手機也會被登出。\n系統不會保存明碼，請自行記下並告訴司機。`,String(Math.floor(100000+Math.random()*900000)));
+  if(pwd===null)return;
+  const p=pwd.trim();
+  if(p.length<6){alert('密碼至少需要 6 碼');return;}
+  try{
+    await createDriverLogin(d,p);
+    alert(`已設定「${d.name}」的登入密碼：${p}\n請告訴司機，他在司機登入頁選自己的名字、輸入這組密碼即可。`);
+  }catch(e){
+    setSS('error','設定失敗');
+    if(e.code==='auth/operation-not-allowed')alert('Firebase 尚未啟用「電子郵件/密碼」登入，請先到 Firebase 後台 Authentication → 登入方式 啟用。');
+    else if(e.code==='auth/weak-password')alert('密碼強度不足，請換一組更長的密碼');
+    else alert('設定失敗：'+(e.message||e.code));
+  }
+}
+async function disableDriverLogin(id){
+  const d=drivers.find(x=>x.id===id);if(!d)return;
+  if(!confirm(`確定停用「${d.name}」的登入帳號？\n停用後他會立即被登出，並無法再讀取任何資料。\n（司機的歷史記錄會保留，之後可重新設定密碼恢復）`))return;
+  if(d.authUid)await db.collection('driverAuth').doc(d.authUid).delete().catch(()=>{});
+  await db.collection('drivers').doc(id).update({authUid:'',authEmail:'',loginDisabled:true});
+  await syncDriverLoginList();
+  alert(`已停用「${d.name}」的登入帳號。`);
+}
+// 公開登入名單（meta/driverLogin）：只放已開通的自家司機的 id、姓名、登入用內部 Email
+async function syncDriverLoginList(){
+  const s=await db.collection('drivers').get();
+  const list=s.docs.map(x=>({id:x.id,...x.data()})).filter(d=>d.type==='own'&&d.authUid&&d.authEmail).map(d=>({id:d.id,name:d.name||'',email:d.authEmail}));
+  await db.collection('meta').doc('driverLogin').set({list,updatedAt:new Date().toISOString()});
+}
+
+// ══════════════════ 管理員名單 ══════════════════
+async function seedAdmins(){
+  try{
+    if((auth.currentUser?.email||'').toLowerCase()!==SUPER_ADMIN)return;
+    const f=await db.collection('meta').doc('adminSeed').get();
+    if(f.exists)return;
+    for(const e of SEED_ADMINS)await db.collection('admins').doc(e.toLowerCase()).set({email:e.toLowerCase(),addedBy:SUPER_ADMIN,addedAt:new Date().toISOString()});
+    await db.collection('meta').doc('adminSeed').set({done:true,at:new Date().toISOString()});
+  }catch(e){console.warn('[seedAdmins]',e);}
+}
+function adminListCardHtml(){
+  const me=(auth.currentUser?.email||'').toLowerCase();
+  const rows=[{id:SUPER_ADMIN,fixed:true},...adminsList.filter(a=>a.id!==SUPER_ADMIN)];
+  return `<div class="card"><div class="card-title"><i class="ti ti-shield-lock"></i> 管理員名單（Google 帳號）</div>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>Google Email</th><th>身分</th><th></th></tr></thead><tbody>
+    ${rows.map(a=>`<tr><td>${a.id}${a.id===me?' <span class="badge badge-blue">目前登入</span>':''}</td><td>${a.fixed?'<span class="badge badge-green">主管理員</span>':'管理員'}</td><td>${a.fixed?'<span style="font-size:11px;color:var(--text2)">無法移除</span>':`<button class="btn btn-sm btn-danger" onclick="removeAdmin('${a.id}')"><i class="ti ti-trash"></i> 移除</button>`}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><input id="new-admin-email" type="email" placeholder="新增管理員的 Google Email" style="flex:1;min-width:200px;height:34px"><button class="btn btn-primary btn-sm" onclick="addAdmin()"><i class="ti ti-plus"></i> 新增</button></div>
+    <div style="font-size:11px;color:var(--text2);margin-top:6px">新增後，對方用這個 Google 帳號在登入頁按「業務管理員（Google 登入）」即可。移除後立即失去權限。</div>
+  </div>`;
+}
+async function addAdmin(){
+  const em=(document.getElementById('new-admin-email').value||'').trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))return alert('請輸入正確的 Email');
+  if(em===SUPER_ADMIN||adminsList.some(a=>a.id===em))return alert('此帳號已在名單中');
+  await db.collection('admins').doc(em).set({email:em,addedBy:auth.currentUser?.email||'',addedAt:new Date().toISOString()});
+  alert('已新增管理員：'+em);
+}
+async function removeAdmin(em){
+  if(em===SUPER_ADMIN)return;
+  if(!confirm('確定移除管理員「'+em+'」？移除後立即失去所有權限。'))return;
+  await db.collection('admins').doc(em).delete();
+}
+// ══════════════════ 系統安全（舊密碼資料清除） ══════════════════
+function securityCardHtml(){
+  const own=drivers.filter(d=>d.type==='own');
+  const legacy=drivers.filter(d=>d.password!==undefined).length;
+  const noAcc=own.filter(d=>!d.authUid&&!d.loginDisabled);
+  if(!legacy&&!noAcc.length&&window._legacyAdminPwdGone)return '';
+  return `<div class="card" style="border-color:var(--amber)"><div class="card-title"><i class="ti ti-alert-triangle"></i> 系統安全待辦</div>
+    <div style="font-size:13px;line-height:1.8">
+      ${noAcc.length?`<div>• 尚未開通登入帳號的自家司機：<strong>${noAcc.map(d=>d.name).join('、')}</strong>（在下方「自家司機」按「設定密碼」）</div>`:'<div>• ✅ 所有自家司機都已開通或停用</div>'}
+      ${legacy?`<div>• 仍存有舊的明碼密碼資料：${legacy} 筆司機</div>`:''}
+    </div>
+    <button class="btn btn-sm" style="margin-top:8px" onclick="purgeLegacySecrets()"><i class="ti ti-eraser"></i> 清除舊密碼資料（司機明碼密碼＋舊管理員密碼）</button>
+    <div style="font-size:11px;color:var(--text2);margin-top:4px">建議在所有司機都開通新帳號、安全規則上線後執行。清除後舊的登入方式完全失效。</div>
+  </div>`;
+}
+async function purgeLegacySecrets(){
+  if(!confirm('確定清除所有舊的明碼密碼資料？\n（司機的舊密碼欄位＋舊管理員密碼 meta/adminPassword）'))return;
+  const s=await db.collection('drivers').get();
+  for(const x of s.docs){if(x.data().password!==undefined)await x.ref.update({password:firebase.firestore.FieldValue.delete()});}
+  await db.collection('meta').doc('adminPassword').delete().catch(()=>{});
+  window._legacyAdminPwdGone=true;
+  alert('已清除舊密碼資料。');
   renderSettings();
-  alert(name+' 的密碼已重置，司機下次登入時可自行設定。');
 }
 
 function openHotel(id=''){
@@ -6665,17 +6905,7 @@ async function delHotel(){if(!confirm('確定刪除？'))return;await db.collect
 async function initDefaultDrivers(){ /* no-op */ }
 
 // 登入前只做輕量初始查詢（填充選單），不訂閱 onSnapshot
-if(!IS_EXT_MODE){
-db.collection('drivers').get().then(s=>{
-  drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-  populateLoginSel();
-});
-db.collection('tours').get().then(s=>{
-  tours=s.docs.map(d=>({id:d.id,...d.data()}));
-  if(document.getElementById('pub-screen').style.display!=='none')initPubPage();
-});
-db.collection('meta').doc('cars').get().then(s=>{if(s.exists&&s.data().list)carsList=s.data().list;});
-}
+
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
@@ -6685,55 +6915,31 @@ function enterExternalMode(token){
   document.getElementById('ext-screen').style.display='flex';
   const contentEl=document.getElementById('ext-content');
   contentEl.innerHTML='<div style="text-align:center;color:var(--text2)"><i class="ti ti-loader"></i> 載入中…</div>';
-  db.collection('dispatches').where('extToken','==',token).limit(1).get().then(async s=>{
-    if(s.empty){contentEl.innerHTML='<div class="empty">連結無效或已過期，請跟公司確認</div>';return;}
-    const d={id:s.docs[0].id,...s.docs[0].data()};
-    await loadExtTripData(d);
-    renderExternalSummary(d);
+  // 上鎖後外派司機沒有資料庫權限：只能讀取管理頁產生的「分享快照」extViews/{token}
+  db.collection('extViews').doc(token).get().then(async s=>{
+    if(!s.exists){contentEl.innerHTML='<div class="empty">連結無效或已過期，請跟公司確認</div>';return;}
+    const v=s.data();
+    window._extSnap=v;window._extToken=token;
+    privates=v.privates||[];tours=v.tours||[];bookings=v.bookings||[];hotels=v.hotels||[];groupNightlies=[];busAssignMap={};
+    driverRecs=(v.recs||[]).slice();
+    // 尚未被管理員入帳的回報，也要顯示為「已回報」
+    try{
+      const rs=await db.collection('extViews').doc(token).collection('reports').get();
+      const have=new Set(driverRecs.map(r=>r.id));
+      rs.docs.forEach(x=>{if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,x.data()));});
+    }catch(e){console.warn('[ext reports]',e);}
+    renderExternalSummary({id:v.dispId,...v.disp});
   }).catch(e=>{console.error(e);contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
 }
-// 外派連結：只抓「這一趟」需要的文件，不下載全公司的包車團／報名／酒店／司機資料
-async function loadExtTripData(d){
-  const docOf=snap=>snap.exists?{id:snap.id,...snap.data()}:null;
-  const hotelIds=new Set();
-  privates=[];tours=[];bookings=[];hotels=[];groupNightlies=[];driverRecs=[];
-  const recQueries=[];
-  if(d.privateId){
-    const p=docOf(await db.collection('privates').doc(d.privateId).get());
-    if(p){
-      privates=[p];
-      (p.nightlyHotels||[]).forEach(nh=>{if(nh.hotelId)hotelIds.add(nh.hotelId);});
-      recQueries.push(db.collection('driverRecs').where('incomeLinkId','==',p.id).get());
-      recQueries.push(db.collection('driverRecs').where('remitLinkId','==',p.id).get());
-    }
-  } else if(d.groupTourId){
-    const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
-    if(m){
-      const tourId=m[1],date=m[2];
-      const [ts,bs,gs,ba]=await Promise.all([
-        db.collection('tours').doc(tourId).get(),
-        db.collection('bookings').where('tourId','==',tourId).where('date','==',date).get(),
-        db.collection('groupNightly').doc(d.groupTourId).get(),
-        db.collection('meta').doc('busAssign').get()
-      ]);
-      const t=docOf(ts);if(t)tours=[t];
-      bookings=bs.docs.map(x=>({id:x.id,...x.data()}));
-      const gn=docOf(gs);if(gn){groupNightlies=[gn];(gn.nightlyHotels||[]).forEach(nh=>{if(nh.hotelId)hotelIds.add(nh.hotelId);});}
-      // 分車對照只保留這一天這團的部分
-      const prefix=tourId+'_'+date+'_';busAssignMap={};
-      if(ba.exists)Object.entries(ba.data()).forEach(([k,v])=>{if(k.startsWith(prefix))busAssignMap[k]=v;});
-      const ids=bookings.map(b=>b.id);
-      for(let i=0;i<ids.length;i+=10)recQueries.push(db.collection('driverRecs').where('relatedBookingIds','array-contains-any',ids.slice(i,i+10)).get());
-      recQueries.push(db.collection('driverRecs').where('remitLinkId','==',d.groupTourId).get());
-    }
-  }
-  const [hs,rs]=await Promise.all([
-    Promise.all([...hotelIds].map(id=>db.collection('hotels').doc(id).get())),
-    Promise.all(recQueries)
-  ]);
-  hotels=hs.map(docOf).filter(Boolean);
-  const seen=new Set();
-  rs.forEach(q=>q.docs.forEach(x=>{if(!seen.has(x.id)){seen.add(x.id);driverRecs.push({id:x.id,...x.data()});}}));
+function localDateStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+// 回報箱的單子 → 司機收支記錄的格式（外派頁顯示、管理頁入帳共用）
+function extReportToRec(rid,r){
+  const rec={id:'ext_'+rid,type:r.type,amount:r.amount||0,date:r.date||'',note:r.note||'',driverName:r.driverName||'',source:'ext-link',extReportId:rid};
+  if(r.type==='income'){
+    if(r.linkType==='group')rec.relatedBookingIds=r.relatedBookingIds||[];
+    else{rec.incomeLinkType='priv';rec.incomeLinkId=r.linkId;}
+  }else{rec.remitLinkType=r.linkType;rec.remitLinkId=r.linkId;}
+  return rec;
 }
 // 外派司機連結：行程資訊區塊（特殊需求裝備／貴賓聯絡方式／接送機／住宿安排／行程內容），A車與B/C車共用
 function extTripInfoHtml(p,d){
@@ -6775,21 +6981,23 @@ function extTripInfoHtml(p,d){
   `;
 }
 // 外派連結回報客收：建立一筆客收記錄（標記 source 供後台追蹤來源）
-async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds,incomeLinkType,incomeLinkId){
-  const id=uid();
-  const data={type:'income',driverId,driverName:driverName||'',date:new Date().toISOString().slice(0,10),amount,note:note||'外派司機回報客收',source:'ext-link'};
-  if(relatedBookingIds)data.relatedBookingIds=relatedBookingIds;
-  if(incomeLinkType){data.incomeLinkType=incomeLinkType;data.incomeLinkId=incomeLinkId;}
-  await db.collection('driverRecs').doc(id).set(data);
-  driverRecs=[...driverRecs,{id,...data}];
+// 外派司機回報：寫進該連結專屬的回報箱 extViews/{token}/reports，由管理頁自動入帳
+async function submitExtReport(r){
+  const v=window._extSnap;if(!v)throw new Error('no snapshot');
+  const data={...r,amount:Math.round(r.amount),date:localDateStr(),linkType:v.linkType,linkId:v.linkId,createdAt:new Date().toISOString(),imported:false};
+  const ref=db.collection('extViews').doc(window._extToken).collection('reports').doc();
+  await ref.set(data);
+  driverRecs=[...driverRecs,extReportToRec(ref.id,data)];
+}
+async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds){
+  const r={type:'income',amount,note:note||'外派司機回報客收',driverName:driverName||''};
+  if(relatedBookingIds&&relatedBookingIds.length)r.relatedBookingIds=relatedBookingIds;
+  await submitExtReport(r);
 }
 async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
   if(!confirm(`確定要回報「${name}」已收款 $${balance.toLocaleString()} 嗎？`))return;
-  await submitExtIncome(driverId,driverName,balance,'外派司機回報客收：'+name,[bookingId]);
-  // 連動標記這筆報名的尾款為已收，跟司機app的客收流程一致
-  await db.collection('bookings').doc(bookingId).update({balancePaid:true});
-  const bi=bookings.findIndex(b=>b.id===bookingId);
-  if(bi>=0) bookings[bi]={...bookings[bi],balancePaid:true};
+  try{await submitExtIncome(driverId,driverName,balance,'外派司機回報客收：'+name,[bookingId]);}
+  catch(e){alert('回報失敗，請檢查網路後再試');return;}
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
@@ -6797,32 +7005,19 @@ async function reportPrivIncome(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-inc-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
   if(!confirm(`確定要回報已收款 $${amt.toLocaleString()} 嗎？`))return;
-  await submitExtIncome(driverId,driverName,amt,'外派司機回報客收','','priv',privId);
-  // 累計回報金額若已達尾款總額，連動標記這團尾款為已收（比照司機app的客收流程）
-  const p=privates.find(x=>x.id===privId);
-  if(p){
-    const totalBalance=(p.price||0)-(p.deposit||0);
-    const priorTotal=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===privId).reduce((s,r)=>s+(r.amount||0),0);
-    if(!p.balancePaid&&priorTotal>=totalBalance&&totalBalance>0){
-      await db.collection('privates').doc(privId).update({balancePaid:true});
-      const pi=privates.findIndex(x=>x.id===privId);
-      if(pi>=0) privates[pi]={...privates[pi],balancePaid:true};
-    }
-  }
+  try{await submitExtIncome(driverId,driverName,amt,'外派司機回報客收');}
+  catch(e){alert('回報失敗，請檢查網路後再試');return;}
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
-async function submitExtRemit(driverId,driverName,amount,remitLinkType,remitLinkId){
-  const id=uid();
-  const data={type:'remit',driverId,driverName:driverName||'',date:new Date().toISOString().slice(0,10),amount,note:'外派司機回報回帳',source:'ext-link',remitLinkType,remitLinkId};
-  await db.collection('driverRecs').doc(id).set(data);
-  driverRecs=[...driverRecs,{id,...data}];
+async function submitExtRemit(driverId,driverName,amount){
+  await submitExtReport({type:'remit',amount,note:'外派司機回報回帳',driverName:driverName||''});
 }
 async function reportGroupRemit(groupTourId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
   if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
-  await submitExtRemit(driverId,driverName,amt,'group',groupTourId);
+  try{await submitExtRemit(driverId,driverName,amt);}catch(e){alert('回報失敗，請檢查網路後再試');return;}
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
@@ -6830,7 +7025,7 @@ async function reportPrivRemit(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
   if(!confirm(`確定要回報已回帳 $${amt.toLocaleString()} 嗎？`))return;
-  await submitExtRemit(driverId,driverName,amt,'priv',privId);
+  try{await submitExtRemit(driverId,driverName,amt);}catch(e){alert('回報失敗，請檢查網路後再試');return;}
   alert('已回報，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
@@ -6872,7 +7067,8 @@ function renderExternalSummary(d){
     }
     const balance=(p.price||0)-(p.deposit||0);
     let hotelAdvance=0;
-    (p.nightlyHotels||[]).forEach((nh,i)=>{
+    if(window._extSnap){hotelAdvance=window._extSnap.hotelAdvance||0;}
+    else (p.nightlyHotels||[]).forEach((nh,i)=>{
       if((nh.paymentType||'company')==='driver'){
         hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcNightQuote(p,nh,i);
       }
@@ -6907,12 +7103,13 @@ function renderExternalSummary(d){
     const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
     const buses=buildBuses(dateBks,t?.busMax||8,tourId,date);
     const myBus=buses.find(b=>b.busIdx===busIdx);
-    const bks=myBus?.bookings||[];
+    const bks=window._extSnap?bookings:(myBus?.bookings||[]); // 快照內只存這台車的乘客
     const custRows=bks.map(b=>({bookingId:b.id,name:b.name,count:b.count,balance:calcBookingBalance(b)}));
     const totalBalance=custRows.reduce((s,r)=>s+r.balance,0);
     const gn=getGroupNightly(tourId,date,busIdx);
     let hotelAdvance=0;
-    (gn?.nightlyHotels||[]).forEach((nh,i)=>{
+    if(window._extSnap){hotelAdvance=window._extSnap.hotelAdvance||0;}
+    else (gn?.nightlyHotels||[]).forEach((nh,i)=>{
       if((nh.paymentType||'company')==='driver'){
         hotelAdvance+=nh.driverPaid?(nh.driverPaidAmount||0):calcGroupNightQuote(gn,nh,i);
       }
@@ -7061,12 +7258,8 @@ function enterBookingMode(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('pub-screen').style.display='flex';
-  if(!listenersInited){
-    initListeners();
-    db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));initPubPage();});
-  } else {
-    initPubPage();
-  }
+  // 公開報名頁：只讀拼團行程（不登入、不載入其他資料）
+  db.collection('tours').onSnapshot(s=>{tours=s.docs.map(d=>({id:d.id,...d.data()}));initPubPage();});
 }
 // 支援 hash 延遲載入（某些行動瀏覽器）
 window.addEventListener('hashchange',()=>{
@@ -7078,48 +7271,9 @@ if(extToken){
   enterExternalMode(extToken);
 } else if(window.location.hash==='#booking'){
   enterBookingMode();
-} else if(window.location.hash==='#driver'){
-  // 來自 driver.html 的跳轉
-  const driverData=JSON.parse(sessionStorage.getItem('driverLogin')||'null');
-  if(driverData){
-    db.collection('drivers').get().then(s=>{
-      drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-      const drv=drivers.find(d=>d.id===driverData.id);
-      if(drv&&!curRole){
-        curRole='driver';curDriverId=driverData.id;
-        document.getElementById('login-screen').style.display='none';
-        document.getElementById('app').style.display='block';
-        document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-        buildNav('driver');initDriverListeners(driverData.id);showPage('p-driver');
-      }
-    });
-  } else { initDefaultDrivers(); }
 } else {
-  initDefaultDrivers();
-  // 自動登入：若裝置已記住管理員
-  if(localStorage.getItem('adminDeviceTrusted_v1')==='1'){
-    setTimeout(()=>loginAs('admin'),300);
-  } else {
-    // 自動登入：若裝置已記住司機
-    const savedDrv=localStorage.getItem('driverDeviceTrusted_v1');
-    if(savedDrv){
-      db.collection('drivers').get().then(s=>{
-        if(curRole)return;
-        drivers=s.docs.map(d=>({id:d.id,...d.data()}));
-        try{
-          const info=JSON.parse(savedDrv);
-          const drv=drivers.find(d=>d.id===info.id);
-          if(drv){
-            curRole='driver';curDriverId=drv.id;
-            document.getElementById('login-screen').style.display='none';
-            document.getElementById('app').style.display='block';
-            document.getElementById('app-title').textContent=drv.name+' — 司機頁面';
-            buildNav('driver');initDriverListeners(drv.id);showPage('p-driver');
-          }
-        }catch(e){localStorage.removeItem('driverDeviceTrusted_v1');}
-      });
-    }
-  }
+  // 管理員（Google）與司機（帳號密碼）都由 Firebase 登入狀態決定；裝置會自動記住登入
+  startAuthRouting();
 }
 
 // Firebase 載入失敗偵測

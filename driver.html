@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#fff;--bg2:#f6f6f6;--text:#1a1a1a;--text2:#666;--border:#e0e0e0;--border2:#ccc;--blue:#185FA5;--blue-l:#E6F1FB;--green:#3B6D11;--green-l:#EAF3DE;--green-d:#27500A;--red:#A32D2D;--red-l:#FCEBEB;}
@@ -42,87 +43,56 @@ select,input{width:100%;padding:9px 10px;border:1px solid var(--border2);border-
 <script>
 firebase.initializeApp({apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDomain:"travel-booking-89df8.firebaseapp.com",projectId:"travel-booking-89df8",storageBucket:"travel-booking-89df8.firebasestorage.app",messagingSenderId:"436528685102",appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"});
 const db=firebase.firestore();
-const DRV_KEY='driverDeviceTrusted_v1';
-let drivers=[];
-let redirected=false;
+const auth=firebase.auth();
+let drivers=[];   // 公開登入名單：{id,name,email}（不含密碼）
 let loaded=false;
 
-const unsubDrivers=db.collection('drivers').onSnapshot(s=>{
-  drivers=s.docs.map(d=>({id:d.id,...d.data()})).filter(d=>d.type==='own');
+function showForm(){
+  document.getElementById('loading-msg').style.display='none';
+  document.getElementById('login-form').style.display='block';
+}
+function showErr(msg){const e=document.getElementById('err-msg');e.innerHTML='<i class="ti ti-alert-circle"></i> '+msg;e.style.display='block';}
 
-  // 填充下拉選單
-  const sel=document.getElementById('drv-sel');
-  const prevId=sel.value;
-  sel.innerHTML=drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-  // 嘗試恢復之前選取的項目
-  if(prevId&&drivers.find(d=>d.id===prevId)) sel.value=prevId;
-
-  // 資料載入完成後才顯示表單
-  if(!loaded){
-    loaded=true;
-    document.getElementById('loading-msg').style.display='none';
-    document.getElementById('login-form').style.display='block';
-    document.getElementById('drv-pwd').focus();
+// 已登入（此裝置記住）→ 直接進司機頁
+auth.onAuthStateChanged(user=>{
+  if(user&&!user.providerData.some(p=>p.providerId==='google.com')){
+    window.location.href='index.html#driver';
+    return;
   }
-
-  // 若裝置已記住某位司機，自動跳轉（只執行一次）
-  if(!redirected){
-    const saved=localStorage.getItem(DRV_KEY);
-    if(saved){
-      try{
-        const info=JSON.parse(saved);
-        const drv=drivers.find(d=>d.id===info.id);
-        if(drv){
-          redirected=true;
-          unsubDrivers();
-          sessionStorage.setItem('driverLogin',JSON.stringify({id:drv.id,name:drv.name}));
-          window.location.href='index.html#driver';
-        }
-      }catch(e){localStorage.removeItem(DRV_KEY);}
-    }
-  }
-},err=>{
-  // Firestore 連線失敗時顯示錯誤
-  document.getElementById('loading-msg').textContent='⚠️ 連線失敗，請重新整理頁面';
+  if(!loaded)loadList();
 });
 
-function doLogin(){
+function loadList(){
+  db.collection('meta').doc('driverLogin').get().then(s=>{
+    drivers=(s.exists&&s.data().list)||[];
+    const sel=document.getElementById('drv-sel');
+    sel.innerHTML=drivers.length?drivers.map(d=>`<option value="${d.id}">${d.name}</option>`).join(''):'<option value="">（尚無可登入的司機，請聯繫管理員）</option>';
+    loaded=true;showForm();
+    document.getElementById('drv-pwd').focus();
+  }).catch(()=>{
+    document.getElementById('loading-msg').textContent='⚠️ 連線失敗，請重新整理頁面';
+  });
+}
+
+async function doLogin(){
   const errEl=document.getElementById('err-msg');
   errEl.style.display='none';
-
-  if(!loaded){
-    errEl.textContent='⏳ 資料尚未載入，請稍後再試';
-    errEl.style.display='block';
-    return;
-  }
-  if(!drivers.length){
-    errEl.textContent='⚠️ 目前無司機資料，請確認 Firestore 內有 drivers 集合';
-    errEl.style.display='block';
-    return;
-  }
-
+  if(!loaded){showErr('資料尚未載入，請稍後再試');return;}
   const id=document.getElementById('drv-sel').value;
   const pwd=document.getElementById('drv-pwd').value;
   const drv=drivers.find(d=>d.id===id);
-
-  if(!drv){
-    errEl.textContent='⚠️ 找不到此司機，請重新整理';
-    errEl.style.display='block';
-    return;
-  }
-
-  // 密碼比對（確保都是字串）
-  if(String(drv.password)!==String(pwd)){
-    errEl.textContent='🔒 密碼錯誤，請重新輸入';
-    errEl.style.display='block';
+  if(!drv){showErr('請選擇司機');return;}
+  if(!pwd){showErr('請輸入密碼');return;}
+  const btn=document.getElementById('login-btn');btn.disabled=true;
+  try{
+    await auth.signInWithEmailAndPassword(drv.email,pwd);
+    // 成功後 onAuthStateChanged 會自動跳轉到司機頁
+  }catch(e){
+    showErr(e.code==='auth/too-many-requests'?'嘗試次數過多，請稍後再試':'🔒 密碼錯誤，請重新輸入');
     document.getElementById('drv-pwd').value='';
     document.getElementById('drv-pwd').focus();
-    return;
+    btn.disabled=false;
   }
-
-  localStorage.setItem(DRV_KEY,JSON.stringify({id,name:drv.name}));
-  sessionStorage.setItem('driverLogin',JSON.stringify({id,name:drv.name}));
-  window.location.href='index.html#driver';
 }
 </script>
 </body>
