@@ -5467,7 +5467,7 @@ function renderDriverPage(){
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
             <div style="font-weight:700;font-size:15px">${p.name}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:2px">${p.start} ～ ${p.end}　｜　${p.pax||1}人　｜　${p.cars||1}輛</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px">${p.start} ～ ${p.end}　｜　<strong style="color:var(--text)">${p.pax||1} 人</strong>　｜　${p.cars||1}輛</div>
           </div>
           ${badge}
         </div>
@@ -5508,6 +5508,7 @@ function renderDriverPage(){
       let descHtml='';
       let nightlyHtml='';
       let extrasHtml='';
+      let busPax=0;
       if(t){
         // groupTourId: tId + '_' + date + '_bus' + N  或  tId + '_' + date（單車舊格式）
         const busMatch=d.groupTourId.match(/_bus(\d+)$/);
@@ -5516,6 +5517,7 @@ function renderDriverPage(){
         const buses=buildBuses(bks,t.busMax||8,t.id,dateStr);
         const myBus=buses.find(b=>b.busIdx===busIdx)||(buses.length===1?buses[0]:null);
         if(buses.length>1)busLabelHtml=`<span class="badge badge-blue">${String.fromCharCode(65+busIdx)}車</span>`;
+        busPax=myBus?(myBus.bookings||[]).reduce((s,b)=>s+(b.count||0),0):0;
         if(t.desc)descHtml=`<div style="margin-top:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">行程內容</div><pre style="font-family:inherit;white-space:pre-wrap;font-size:13px;margin:0;color:var(--text)">${t.desc}</pre></div>`;
         if((t.days||1)>1){
           const gn=getGroupNightly(t.id,dateStr,busIdx);
@@ -5584,7 +5586,7 @@ function renderDriverPage(){
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
           <div>
             <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px">🚌 ${tName} ${busLabelHtml}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:2px">${d.start}${d.start!==d.end?' ～ '+d.end:''}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px">${d.start}${d.start!==d.end?' ～ '+d.end:''}${t?'　｜　<strong style="color:var(--text)">'+(busPax?'本車 '+busPax+' 人':'尚無乘客')+'</strong>':''}</div>
           </div>
           ${badge}
         </div>
@@ -7330,7 +7332,7 @@ function extTripInfoHtml(p,d){
   return `
     <div style="font-size:12px;color:var(--text2)">行程</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${p.start}${p.start!==p.end?'～'+p.end:''}${d.car?'｜'+d.car:''}</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${p.start}${p.start!==p.end?'～'+p.end:''}｜<strong style="color:var(--text)">${p.pax||1} 人</strong>${(p.cars||1)>1?'｜共'+(p.cars||1)+'輛':''}${d.car?'｜'+d.car:''}</div>
     ${gearHtml}
     ${contactHtml}
     ${hotelHtml}
@@ -7489,7 +7491,7 @@ function renderExternalSummary(d){
     el.innerHTML=`
       <div style="font-size:12px;color:var(--text2)">行程</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}${d.car?'｜'+d.car:''}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}｜<strong style="color:var(--text)">本車 ${bks.reduce((s,b)=>s+(b.count||0),0)} 人</strong>${d.car?'｜'+d.car:''}</div>
       ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
         const reported=driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
