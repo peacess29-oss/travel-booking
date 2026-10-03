@@ -7304,7 +7304,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03d';
+const APP_VERSION='2026-10-03e';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7419,19 +7419,19 @@ async function reportPrivIncome(privId,driverId,driverName){
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
 async function submitExtRemit(driverId,driverName,amount,last5){
-  await submitExtReport({type:'remit',amount,note:'外派司機通知已回帳｜帳號後5碼 '+last5,driverName:driverName||''});
+  await submitExtReport({type:'remit',amount,note:'外派司機通知已回帳'+(last5?'｜帳號後5碼 '+last5:''),driverName:driverName||''});
 }
-// 讀取並檢查「您的帳號後5碼」
+// 讀取「您的帳號後5碼」（選填；有填就要是5位數字）。回傳 null＝格式錯誤，''＝沒填
 function getExtLast5(){
   const v=(document.getElementById('ext-remit-acct')?.value||'').trim();
-  if(!/^\d{5}$/.test(v)){alert('請輸入您的帳號後5碼（5位數字）');document.getElementById('ext-remit-acct')?.focus();return null;}
+  if(v&&!/^\d{5}$/.test(v)){alert('帳號後5碼請輸入5位數字，或留空不填');document.getElementById('ext-remit-acct')?.focus();return null;}
   return v;
 }
 async function reportGroupRemit(groupTourId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  const last5=getExtLast5();if(!last5)return;
-  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}（帳號後5碼 ${last5}）嗎？`))return;
+  const last5=getExtLast5();if(last5===null)return;
+  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}${last5?'（帳號後5碼 '+last5+'）':''} 嗎？`))return;
   try{await submitExtRemit(driverId,driverName,amt,last5);}catch(e){alert('通知失敗，請檢查網路後再試');return;}
   alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
@@ -7439,8 +7439,8 @@ async function reportGroupRemit(groupTourId,driverId,driverName){
 async function reportPrivRemit(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-remit-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  const last5=getExtLast5();if(!last5)return;
-  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}（帳號後5碼 ${last5}）嗎？`))return;
+  const last5=getExtLast5();if(last5===null)return;
+  if(!confirm(`確定要通知已回帳 $${amt.toLocaleString()}${last5?'（帳號後5碼 '+last5+'）':''} 嗎？`))return;
   try{await submitExtRemit(driverId,driverName,amt,last5);}catch(e){alert('通知失敗，請檢查網路後再試');return;}
   alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
@@ -7450,12 +7450,16 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
   const priorRemits=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitLinkType&&r.remitLinkId===remitLinkId);
   const priorTotal=priorRemits.reduce((s,r)=>s+(r.amount||0),0);
   const nameEsc=(driverName||'').replace(/'/g,"\\'");
+  // 公司已設定免回帳，或試算不需回帳（0或負數）→ 不顯示通知已回帳區塊
+  const waive=dispWaive(window._extDisp);
+  if(waive>0)return `<div style="font-size:12px;color:var(--green-d);margin:12px 0;padding:8px 10px;background:var(--green-l);border-radius:8px">✅ 公司已免除本團回帳${window._extDisp?.remitWaiveNote?'（'+window._extDisp.remitWaiveNote+'）':''}，不需要回帳或通知</div>`;
+  if(shouldRemit<=0&&!priorRemits.length)return '';
   return `
     <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已回帳</div>
     ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()+(r.acctLast5?'（後5碼 '+r.acctLast5+'）':'')).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="回帳金額">
-      <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="您的帳號後5碼" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
+      <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="帳號後5碼（選填）" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
       <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 通知</button>
     </div>
     <div style="font-size:11px;color:var(--text2);margin-bottom:14px">通知日期由系統自動記錄；送出前會再跳出確認視窗</div>
@@ -7671,6 +7675,7 @@ function renderExtReport(){
       <span class="card-title" style="margin:0"><i class="ti ti-bell"></i> 待確認回報 ${pending.length?`<span class="badge badge-red">${pending.length}</span>`:''}</span>
       ${pending.length?'<button class="btn btn-sm" onclick="checkAllExtRecs()"><i class="ti ti-checks"></i> 全部確認</button>':''}
     </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">按「確認」後會從這裡移除，記錄保留在下方「回報記錄」，金額也已自動入帳到「外派團次對帳」的已回報欄。</div>
     ${!pending.length?'<div class="empty" style="padding:1rem">沒有新的外派回報</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>通知時間</th><th>外派司機</th><th>行程</th><th>類型</th><th style="text-align:right">金額</th><th>帳號後5碼</th><th>備註</th><th></th></tr></thead><tbody>
     ${pending.map(r=>`<tr><td style="white-space:nowrap">${r.reportedAt?extFmtTime(r.reportedAt):(r.date||'-')}</td><td>${r.driverName||'-'}</td><td style="font-size:12px">${extRecTripLabel(r)}</td><td>${typeBadge(r)}</td><td style="text-align:right;font-weight:600">${fmt(r.amount)}</td><td style="font-weight:600">${r.acctLast5||'-'}</td><td style="font-size:12px;color:var(--text2)">${r.note||''}</td><td><button class="btn btn-sm" onclick="checkExtRec('${r.id}')"><i class="ti ti-check"></i> 確認</button></td></tr>`).join('')}
     </tbody></table></div>`}
@@ -7699,6 +7704,15 @@ function renderExtReport(){
       return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.extraAdvance||0)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right">${fmt(x.nightAllow)}</td><td style="text-align:right;color:${x.waive?'var(--green-d)':'var(--text3)'}" title="${x.d.remitWaiveNote||''}">${x.waive?fmt(x.waive):'-'}</td><td style="text-align:right;font-weight:600;color:${x.shouldRemit<0?'var(--amber-d)':'inherit'}">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} ${(diff>0||x.waive)?`<button class="btn btn-sm" title="減免應回帳（例如零頭），財務總表記為回帳減免" onclick="openRemitWaive('${x.d.id}')"><i class="ti ti-discount"></i> 免回帳</button>`:''} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
     }).join('')}
     </tbody></table></div>`}
+    ${(()=>{
+      // 回報記錄：本月所有外派連結回報（含已確認），依回報日期篩選
+      const hist=driverRecs.filter(r=>r.source==='ext-link'&&((r.date||'').startsWith(ym)||(r.reportedAt&&String(extFmtTime(r.reportedAt)).includes(ym))))
+        .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      return `<div style="font-size:13px;font-weight:700;margin:16px 0 6px"><i class="ti ti-history"></i> 回報記錄（${y}年${MONTHS[m]}，依回報日期）</div>
+      ${!hist.length?'<div class="empty" style="padding:1rem">本月沒有外派回報記錄</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>日期</th><th>外派司機</th><th>行程</th><th>類型</th><th style="text-align:right">金額</th><th>帳號後5碼</th><th>狀態</th><th>備註</th></tr></thead><tbody>
+      ${hist.map(r=>`<tr><td style="white-space:nowrap">${r.date||'-'}</td><td>${r.driverName||'-'}</td><td style="font-size:12px">${extRecTripLabel(r)}</td><td>${typeBadge(r)}</td><td style="text-align:right;font-weight:600">${fmt(r.amount)}</td><td>${r.acctLast5||'-'}</td><td>${r.adminChecked?'<span class="badge badge-green">已確認</span>':'<span class="badge badge-red">待確認</span>'}</td><td style="font-size:12px;color:var(--text2)">${r.note||''}</td></tr>`).join('')}
+      </tbody></table></div>`}`;
+    })()}
     <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿尾款代付－附加費用代付（拼團）－外派車資－外宿補貼（多車包車團的外宿補貼由A車統一扣，含B/C車）－免回帳；負數代表公司應付司機。「免回帳」的金額在財務總表記為「回帳減免」支出。</div>
   </div>`;
 }
