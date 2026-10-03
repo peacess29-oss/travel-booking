@@ -3234,6 +3234,19 @@ function openDisp(id='',dateStr=''){
 // 上鎖後，外派司機只能讀自己連結的快照。管理頁在資料變動時自動重建快照（內容沒變就不寫入）。
 function pick(o,keys){const r={};keys.forEach(k=>{if(o&&o[k]!==undefined)r[k]=o[k];});return r;}
 function hashStr(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)+str.length.toString(36);}
+// 拼團某車的住宿安排（外派連結用：只含酒店名稱/區域/房型與司機要付的尾款，不含成本價）
+function groupBusHotelRows(tourId,date,busIdx){
+  const gn=getGroupNightly(tourId,date,busIdx);
+  return (gn?.nightlyHotels||[]).map((n,i)=>{
+    if(!n.hotelId&&!n.finalQuote&&!n.r2&&!n.r3&&!n.r4&&!n.r5&&!n.r6)return null;
+    const h=hotels.find(x=>x.id===n.hotelId);
+    const nd=new Date(date);nd.setDate(nd.getDate()+i);
+    const rooms=[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');
+    const drv=isDriverPayNight(n);
+    return{dt:(nd.getMonth()+1)+'/'+nd.getDate(),name:h?h.name:'（未指定酒店）',area:h?.area||'',rooms,
+      driverPay:drv,due:drv?nightBalanceDue(calcGroupNightQuote(gn,n,i),n):0,paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0,hasDeposit:nightDeposit(n)>0};
+  }).filter(Boolean);
+}
 function buildExtSnapshot(d){
   const v={dispId:d.id,disp:pick(d,['label','start','end','startTime','endTime','car','carCount','outwage','nightAllowance','remitWaive','remitWaiveNote','driverName','driverType','privateId','privateBusIdx','groupTourId']),
     privates:[],tours:[],bookings:[],hotels:[],recs:[],linkType:'',linkId:'',bookingIds:[],hotelAdvance:0,
@@ -3263,6 +3276,7 @@ function buildExtSnapshot(d){
       v.bookingIds=bks.map(b=>b.id);v.linkType='group';v.linkId=d.groupTourId;
       const gn=getGroupNightly(tourId,date,busIdx);
       v.hotelAdvance=calcGroupHotelAdvance(gn);
+      v.groupHotels=groupBusHotelRows(tourId,date,busIdx); // 住宿安排
       v.extraItems=calcGroupBusExtras(t,buses.find(b=>b.busIdx===busIdx)?.seats||0); // 附加費用（司機代付）
       v.recs=driverRecs.filter(r=>(r.type==='income'&&r.relatedBookingIds?.some(id=>v.bookingIds.includes(id)))||(r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===d.groupTourId))
         .map(r=>({id:r.id,...pick(r,recKeys),...(r.relatedBookingIds?{relatedBookingIds:r.relatedBookingIds.filter(id=>v.bookingIds.includes(id))}:{})}));
@@ -7304,7 +7318,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03e';
+const APP_VERSION='2026-10-03f';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7421,10 +7435,10 @@ async function reportPrivIncome(privId,driverId,driverName){
 async function submitExtRemit(driverId,driverName,amount,last5){
   await submitExtReport({type:'remit',amount,note:'外派司機通知已回帳'+(last5?'｜帳號後5碼 '+last5:''),driverName:driverName||''});
 }
-// 讀取「您的帳號後5碼」（選填；有填就要是5位數字）。回傳 null＝格式錯誤，''＝沒填
+// 讀取並檢查「您的帳號後5碼」（必填，5位數字）
 function getExtLast5(){
   const v=(document.getElementById('ext-remit-acct')?.value||'').trim();
-  if(v&&!/^\d{5}$/.test(v)){alert('帳號後5碼請輸入5位數字，或留空不填');document.getElementById('ext-remit-acct')?.focus();return null;}
+  if(!/^\d{5}$/.test(v)){alert('請輸入您的帳號後5碼（5位數字）');document.getElementById('ext-remit-acct')?.focus();return null;}
   return v;
 }
 async function reportGroupRemit(groupTourId,driverId,driverName){
@@ -7459,7 +7473,7 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
     ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()+(r.acctLast5?'（後5碼 '+r.acctLast5+'）':'')).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="回帳金額">
-      <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="帳號後5碼（選填）" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
+      <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="您的帳號後5碼" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
       <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 通知</button>
     </div>
     <div style="font-size:11px;color:var(--text2);margin-bottom:14px">通知日期由系統自動記錄；送出前會再跳出確認視窗</div>
@@ -7561,6 +7575,11 @@ function renderExternalSummary(d){
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}｜<strong style="color:var(--text)">本車 ${bks.reduce((s,b)=>s+(b.count||0),0)} 人</strong>${d.car?'｜'+d.car:''}</div>
       ${t?.desc?`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">行程內容</div><pre style="font-family:inherit;white-space:pre-wrap;font-size:13px;margin:0;padding:8px 10px;background:var(--bg2);border-radius:8px;color:var(--text)">${t.desc}</pre></div>`:''}
+      ${(()=>{
+        const gh=window._extSnap?(window._extSnap.groupHotels||[]):groupBusHotelRows(tourId,date,busIdx);
+        if(!gh.length)return '';
+        return `<div style="font-size:12px;font-weight:600;margin-bottom:6px">住宿安排</div><table style="width:100%;border-collapse:collapse;margin-bottom:14px">${gh.map(r=>`<tr style="border-bottom:0.5px solid var(--border)"><td style="padding:5px 0;white-space:nowrap;color:var(--text2);font-size:12px;vertical-align:top">${r.dt}</td><td style="padding:5px 0 5px 10px;font-size:13px">${r.name}${r.area?'（'+r.area+'）':''}${r.rooms?'<div style="font-size:12px;color:var(--text2)">'+r.rooms+'</div>':''}${r.driverPay?`<div style="font-size:12px;font-weight:600;color:${r.paid?'var(--green-d)':'var(--red)'}">${r.paid?'✅ 已付酒店尾款 $'+(r.paidAmt||0).toLocaleString():'💵 請現場付酒店尾款 $'+(r.due||0).toLocaleString()}${r.hasDeposit?'（訂金公司已付）':''}</div>`:''}</td></tr>`).join('')}</table>`;
+      })()}
       ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
         const reported=driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
