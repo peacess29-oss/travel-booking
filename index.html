@@ -1402,6 +1402,14 @@ function addTourExtra(){
   window._tourExtras.push({name:'',mode:'per',price:0,tableSize:8});
   renderTourExtras();
 }
+// 拼團某一台車的附加費用明細（不含住宿），由該車司機現場代付；外派司機從回帳扣除
+function calcGroupBusExtras(tour,pax){
+  if(!tour?.extras?.length||!pax)return [];
+  return tour.extras.filter(e=>e.mode!=='room'&&e.price).map(e=>{
+    if(e.mode==='table'){const tables=Math.ceil(pax/(e.tableSize||8));return{name:e.name,detail:tables+'桌 × $'+e.price,amount:tables*e.price};}
+    return{name:e.name,detail:pax+'人 × $'+e.price,amount:pax*e.price};
+  });
+}
 // 計算某行程某天的附加費用總成本（不含住宿，住宿從bookings個別抓）
 function calcTourExtraCost(tour,pax){
   if(!tour?.extras?.length)return 0;
@@ -3255,6 +3263,7 @@ function buildExtSnapshot(d){
       v.bookingIds=bks.map(b=>b.id);v.linkType='group';v.linkId=d.groupTourId;
       const gn=getGroupNightly(tourId,date,busIdx);
       v.hotelAdvance=calcGroupHotelAdvance(gn);
+      v.extraItems=calcGroupBusExtras(t,buses.find(b=>b.busIdx===busIdx)?.seats||0); // 附加費用（司機代付）
       v.recs=driverRecs.filter(r=>(r.type==='income'&&r.relatedBookingIds?.some(id=>v.bookingIds.includes(id)))||(r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===d.groupTourId))
         .map(r=>({id:r.id,...pick(r,recKeys),...(r.relatedBookingIds?{relatedBookingIds:r.relatedBookingIds.filter(id=>v.bookingIds.includes(id))}:{})}));
     }
@@ -7487,7 +7496,15 @@ function renderExternalSummary(d){
     if(window._extSnap){hotelAdvance=window._extSnap.hotelAdvance||0;}
     else hotelAdvance=calcGroupHotelAdvance(gn);
     const outwage=d.outwage||0;
-    const shouldRemit=totalBalance-hotelAdvance-outwage-nightAllow;
+    // 附加費用（門票、餐食等，依本車人數計算）由司機現場代付
+    const extraItems=window._extSnap?(window._extSnap.extraItems||[]):calcGroupBusExtras(t,myBus?.seats||0);
+    const extraAdvance=extraItems.reduce((s,x)=>s+x.amount,0);
+    const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow;
+    const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
+        <div style="font-size:12px;color:var(--amber-d);margin-bottom:4px;font-weight:600">附加費用（請現場代付）</div>
+        ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px"><span>${x.name}　<span style="font-size:11px;color:var(--text2)">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding-top:4px;margin-top:4px;border-top:1px solid var(--amber)"><span>合計</span><strong>$${extraAdvance.toLocaleString()}</strong></div>
+      </div>`:'';
     el.innerHTML=`
       <div style="font-size:12px;color:var(--text2)">行程</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
@@ -7501,14 +7518,16 @@ function renderExternalSummary(d){
           :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
+      ${extrasHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收合計',totalBalance)}
         ${statBox('住宿尾款代付',hotelAdvance,'var(--red)')}
+        ${extraAdvance?statBox('附加費用代付',extraAdvance,'var(--red)'):''}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('外宿補貼',nightAllow,'var(--green)')}
         ${remitBox(shouldRemit)}
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－住宿尾款代付－外派車資－外宿補貼</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－住宿尾款代付${extraAdvance?'－附加費用代付':''}－外派車資－外宿補貼</div>
       ${extRemitSectionHtml('group',d.groupTourId,shouldRemit,d.driverId,d.driverName,'reportGroupRemit')}
       ${disclaimer}
     `;
@@ -7563,7 +7582,8 @@ function calcExtDispAccount(d){
     const remit=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===d.groupTourId).reduce((s,r)=>s+(r.amount||0),0);
     const outwage=d.outwage||0;
     const nightAllow=calcRemitNightAllowance(d);
-    return{label:(t?.name||d.label||'拼團')+'（'+date+'・'+String.fromCharCode(65+busIdx)+'車）',date,balance,hotelAdvance,outwage,nightAllow,shouldRemit:balance-hotelAdvance-outwage-nightAllow,income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(d.end||date)<new Date().toISOString().slice(0,10)};
+    const extraAdvance=calcGroupBusExtras(t,buses.find(b=>b.busIdx===busIdx)?.seats||0).reduce((s,x)=>s+x.amount,0);
+    return{extraAdvance,label:(t?.name||d.label||'拼團')+'（'+date+'・'+String.fromCharCode(65+busIdx)+'車）',date,balance,hotelAdvance,outwage,nightAllow,shouldRemit:balance-hotelAdvance-extraAdvance-outwage-nightAllow,income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(d.end||date)<new Date().toISOString().slice(0,10)};
   }
   return null;
 }
@@ -7621,16 +7641,16 @@ function renderExtReport(){
       <div class="stat-card"><div class="stat-label">尚未回帳</div><div class="stat-val" style="color:${owedTotal?'var(--red)':'var(--green)'}">${fmt(owedTotal)}</div></div>
     </div>
     ${companyOweTotal?`<div style="font-size:12px;color:var(--amber-d);margin-bottom:8px">🟠 公司應付外派司機（客收不足）合計 ${fmt(companyOweTotal)}，團結束後列入待請款清單</div>`:''}
-    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>外派司機</th><th style="text-align:right">應收尾款</th><th style="text-align:right">已回報收款</th><th style="text-align:right">住宿尾款代付</th><th style="text-align:right">外派車資</th><th style="text-align:right">外宿補貼</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回報回帳</th><th>狀態</th></tr></thead><tbody>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>外派司機</th><th style="text-align:right">應收尾款</th><th style="text-align:right">已回報收款</th><th style="text-align:right">住宿尾款代付</th><th style="text-align:right">附加費用代付</th><th style="text-align:right">外派車資</th><th style="text-align:right">外宿補貼</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回報回帳</th><th>狀態</th></tr></thead><tbody>
     ${rows.map(x=>{
       const diff=x.shouldRemit-x.remit;
       const coOwe=Math.max(-diff-(x.shortfallPaid||0),0); // 公司應付司機（客收不足）
       const st=diff<0?(coOwe?`<span class="badge badge-amber">公司應付 ${fmt(coOwe)}</span>`:'<span class="badge badge-green">✅ 已補付</span>'):x.shouldRemit===0?'<span class="badge badge-blue">無需回帳</span>':diff===0?'<span class="badge badge-green">✅ 已結清</span>':x.remit?`<span class="badge badge-amber">差 ${fmt(diff)}</span>`:'<span class="badge badge-red">未回帳</span>';
       const incColor=x.income<x.balance?'var(--amber-d)':'inherit';
-      return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right">${fmt(x.nightAllow)}</td><td style="text-align:right;font-weight:600;color:${x.shouldRemit<0?'var(--amber-d)':'inherit'}">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
+      return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.extraAdvance||0)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right">${fmt(x.nightAllow)}</td><td style="text-align:right;font-weight:600;color:${x.shouldRemit<0?'var(--amber-d)':'inherit'}">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
     }).join('')}
     </tbody></table></div>`}
-    <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿尾款代付－外派車資－外宿補貼（多車包車團的外宿補貼由A車統一扣，含B/C車）；負數代表公司應付司機。</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿尾款代付－附加費用代付（拼團）－外派車資－外宿補貼（多車包車團的外宿補貼由A車統一扣，含B/C車）；負數代表公司應付司機。</div>
   </div>`;
 }
 function enterBookingMode(){
