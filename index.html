@@ -7327,7 +7327,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03g';
+const APP_VERSION='2026-10-03i';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7476,6 +7476,12 @@ function extRecConfirmed(r){
 function extRecStatusHtml(r){
   return extRecConfirmed(r)?'<span style="color:var(--green-d)">✅ 公司已確認</span>':'<span style="color:var(--amber-d)">⏳ 待公司確認</span>';
 }
+// 外派連結：本團帳務是否已結清（公司已確認的回帳金額 ≥ 應回帳，或公司免回帳後不需回帳）→ 隱藏行程資料，只留帳務
+function extIsSettled(remitType,remitId,shouldRemit,waive){
+  const confirmed=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitType&&r.remitLinkId===remitId&&extRecConfirmed(r)).reduce((s,r)=>s+(r.amount||0),0);
+  return (shouldRemit>0&&confirmed>=shouldRemit)||(waive>0&&shouldRemit<=0);
+}
+const EXT_SETTLED_BANNER='<div style="font-size:13px;font-weight:600;color:var(--green-d);padding:10px 12px;background:var(--green-l);border-radius:8px;margin-bottom:14px">✅ 本團帳務已結清，謝謝您！辛苦了~</div>';
 // 已通知清單（每筆一行：日期、金額、後5碼、確認狀態）
 function extPriorListHtml(recs,withLast5){
   if(!recs.length)return '';
@@ -7547,8 +7553,9 @@ function renderExternalSummary(d){
     const shouldRemit=balance-hotelAdvance-outwage-nightAllow-waive;
     const priorReports=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id);
     const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
+    const settled=extIsSettled('priv',p.id,shouldRemit,waive);
     el.innerHTML=`
-      ${tripInfoHtml}
+      ${settled?`<div style="font-size:12px;color:var(--text2)">行程</div><div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name||'-'}</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start||''}${p.end&&p.end!==p.start?'～'+p.end:''}</div>${EXT_SETTLED_BANNER}`:tripInfoHtml}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收',balance)}
@@ -7562,7 +7569,7 @@ function renderExternalSummary(d){
       ${splitNote}
       <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
       ${extPriorListHtml(priorReports,false)}
-      <div style="display:flex;gap:6px;margin-bottom:14px">
+      <div style="display:${settled?'none':'flex'};gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
         <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
       </div>
@@ -7594,6 +7601,7 @@ function renderExternalSummary(d){
     const extraAdvance=extraItems.reduce((s,x)=>s+x.amount,0);
     const waive=dispWaive(d);
     const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow-waive;
+    const settled=extIsSettled('group',d.groupTourId,shouldRemit,waive);
     const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
         <div style="font-size:12px;color:var(--amber-d);margin-bottom:4px;font-weight:600">附加費用（請現場代付）</div>
         ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px"><span>${x.name}　<span style="font-size:11px;color:var(--text2)">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
@@ -7603,6 +7611,7 @@ function renderExternalSummary(d){
       <div style="font-size:12px;color:var(--text2)">行程</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}｜<strong style="color:var(--text)">本車 ${bks.reduce((s,b)=>s+(b.count||0),0)} 人</strong>${d.car?'｜'+d.car:''}</div>
+      ${settled?EXT_SETTLED_BANNER:`
       ${t?.desc?`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">行程內容</div><pre style="font-family:inherit;white-space:pre-wrap;font-size:13px;margin:0;padding:8px 10px;background:var(--bg2);border-radius:8px;color:var(--text)">${t.desc}</pre></div>`:''}
       ${(()=>{
         const gh=window._extSnap?(window._extSnap.groupHotels||[]):groupBusHotelRows(tourId,date,busIdx);
@@ -7618,6 +7627,7 @@ function renderExternalSummary(d){
           :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
+`}
       ${extrasHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收合計',totalBalance)}
