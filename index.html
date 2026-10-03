@@ -846,6 +846,7 @@ function initListeners(){
   });
   db.collection('hotels').onSnapshot(s=>{hotels=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('hotels');refresh();});
   db.collection('groupNightly').onSnapshot(s=>{groupNightlies=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('groupNightly');refresh();});
+  listenAppVersion();
   db.collection('expenses').onSnapshot(s=>{expenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('driverRecs').onSnapshot(s=>{driverRecs=s.docs.map(d=>({id:d.id,...d.data()}));markLoaded('driverRecs');refresh();});
   db.collection('fixedExpenses').onSnapshot(s=>{fixedExpenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
@@ -3240,7 +3241,7 @@ function pick(o,keys){const r={};keys.forEach(k=>{if(o&&o[k]!==undefined)r[k]=o[
 function hashStr(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)+str.length.toString(36);}
 // 拼團某車的住宿安排（外派連結用：只含酒店名稱/區域/房型與司機要付的尾款，不含成本價）
 function groupBusHotelRows(tourId,date,busIdx){
-  const gn=getGroupNightly(tourId,date,busIdx);
+  const {gn,fromTemplate}=getGroupNightlyForDisplay(tourId,date,busIdx);
   return (gn?.nightlyHotels||[]).map((n,i)=>{
     if(!n.hotelId&&!n.finalQuote&&!n.r2&&!n.r3&&!n.r4&&!n.r5&&!n.r6)return null;
     const h=hotels.find(x=>x.id===n.hotelId);
@@ -3248,7 +3249,7 @@ function groupBusHotelRows(tourId,date,busIdx){
     const rooms=[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');
     const drv=isDriverPayNight(n);
     return{dt:(nd.getMonth()+1)+'/'+nd.getDate(),name:h?h.name:'（未指定酒店）',area:h?.area||'',rooms,
-      driverPay:drv,due:drv?nightBalanceDue(calcGroupNightQuote(gn,n,i),n):0,paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0,hasDeposit:nightDeposit(n)>0};
+      driverPay:drv&&!fromTemplate,due:drv&&!fromTemplate?nightBalanceDue(calcGroupNightQuote(gn,n,i),n):0,paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0,hasDeposit:nightDeposit(n)>0};
   }).filter(Boolean);
 }
 function buildExtSnapshot(d){
@@ -3294,10 +3295,14 @@ function scheduleExtSync(){
   if(curRole!=='admin')return;
   clearTimeout(_extSyncTimer);_extSyncTimer=setTimeout(syncExtViews,2500);
 }
+let _extVerCache={}; // 每個快照最後是哪個版本的管理頁寫的
 async function writeExtView(d){
+  if(window._appOutdated)return; // 本頁是舊版：不寫，避免把新版快照蓋回舊格式
+  if((_extVerCache[d.extToken]||'')>APP_VERSION){window._appOutdated=true;showOutdatedBanner();return;}
   const v=buildExtSnapshot(d);const h=hashStr(JSON.stringify(v));
   if(_extSyncCache[d.extToken]===h)return;
-  await db.collection('extViews').doc(d.extToken).set({...v,_hash:h,updatedAt:new Date().toISOString()});
+  await db.collection('extViews').doc(d.extToken).set({...v,_hash:h,_ver:APP_VERSION,updatedAt:new Date().toISOString()});
+  _extVerCache[d.extToken]=APP_VERSION;
   _extSyncCache[d.extToken]=h;if(_extKnownTokens)_extKnownTokens.add(d.extToken);
 }
 async function syncExtViews(){
@@ -3307,7 +3312,7 @@ async function syncExtViews(){
     if(_extKnownTokens===null){
       const s=await db.collection('extViews').get();
       _extKnownTokens=new Set(s.docs.map(x=>x.id));
-      s.docs.forEach(x=>{_extSyncCache[x.id]=x.data()._hash||'';});
+      s.docs.forEach(x=>{_extSyncCache[x.id]=x.data()._hash||'';_extVerCache[x.id]=x.data()._ver||'';});
     }
     const active=dispatches.filter(d=>d.driverType==='out'&&d.extToken);
     const activeTokens=new Set(active.map(d=>d.extToken));
@@ -3325,10 +3330,27 @@ async function syncExtViews(){
   }catch(e){console.error('[extSync]',e);}
   _extSyncing=false;
 }
+// ══ 版本檢查：多個管理頁同時開著時，舊版頁面會停止寫入外派快照並提示重新整理 ══
+function showOutdatedBanner(){
+  if(document.getElementById('outdated-banner'))return;
+  const b=document.createElement('div');b.id='outdated-banner';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#A32D2D;color:#fff;padding:10px 14px;font-size:14px;text-align:center;cursor:pointer';
+  b.innerHTML='⚠️ 系統已更新，這個頁面是舊版本。請點這裡重新整理，否則外派連結資料可能被舊版覆蓋。';
+  b.onclick=()=>location.reload();
+  document.body.appendChild(b);
+}
+function listenAppVersion(){
+  db.collection('meta').doc('appVersion').onSnapshot(s=>{
+    const v=s.exists?(s.data().v||''):'';
+    if(v>APP_VERSION){window._appOutdated=true;showOutdatedBanner();}
+    else if(v<APP_VERSION){db.collection('meta').doc('appVersion').set({v:APP_VERSION,at:new Date().toISOString()}).catch(()=>{});}
+  },()=>{});
+}
 // 手動重建所有外派連結快照（除錯用：外派連結資料沒更新時按一下）
 async function forceExtSync(){
   if(!adminDataReady()){alert('資料尚未載入完成，請稍後再試');return;}
   if(_extSyncing){alert('正在更新中，請稍後再按');return;}
+  if(window._appOutdated){alert('這個管理頁是舊版本，請先重新整理（Ctrl+Shift+R）再按');return;}
   _extSyncCache={};_extKnownTokens=null; // 清除快取，強制全部重寫
   setSS('syncing','重建外派連結中…');
   await syncExtViews();
@@ -3993,6 +4015,14 @@ function calcPrivDispWage(privateId){
 // ══════════════════ 拼團住宿排程（多天行程）══════════════════
 function groupNightlyId(tourId,date,busIdx){return tourId+'_'+date+'_bus'+busIdx;}
 function getGroupNightly(tourId,date,busIdx){return groupNightlies.find(g=>g.id===groupNightlyId(tourId,date,busIdx))||null;}
+// 顯示用：這個出發日還沒建立住宿排程時，改用行程設定的「住宿範本」（只用來顯示酒店/房型，不計成本、不計代付）
+function getGroupNightlyForDisplay(tourId,date,busIdx){
+  const gn=getGroupNightly(tourId,date,busIdx);
+  if(gn&&(gn.nightlyHotels||[]).some(n=>n.hotelId||n.r2||n.r3||n.r4||n.r5||n.r6))return {gn,fromTemplate:false};
+  const t=tours.find(x=>x.id===tourId);
+  if(t?.nightlyHotels?.some(n=>n.hotelId))return {gn:{tourId,date,busIdx,nightlyHotels:t.nightlyHotels.map(n=>({...n,paymentType:'company'}))},fromTemplate:true};
+  return {gn,fromTemplate:false};
+}
 function openGroupNightly(tourId,date,busIdx){
   const t=tours.find(x=>x.id===tourId);if(!t)return;
   eIds.gn={tourId,date,busIdx};
@@ -5601,7 +5631,7 @@ function renderDriverPage(){
         busPax=myBus?(myBus.bookings||[]).reduce((s,b)=>s+(b.count||0),0):0;
         if(t.desc)descHtml=`<div style="margin-top:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">行程內容</div><pre style="font-family:inherit;white-space:pre-wrap;font-size:13px;margin:0;color:var(--text)">${t.desc}</pre></div>`;
         if((t.days||1)>1){
-          const gn=getGroupNightly(t.id,dateStr,busIdx);
+          const gn=getGroupNightlyForDisplay(t.id,dateStr,busIdx).gn; // 尚未建立住宿排程時顯示行程範本
           const nights=(gn?.nightlyHotels||[]).map((n,i)=>{
             if(!n.hotelId&&!n.finalQuote&&!n.r2&&!n.r3&&!n.r4&&!n.r5&&!n.r6)return'';
             const h=hotels.find(x=>x.id===n.hotelId);
@@ -7344,7 +7374,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03j';
+const APP_VERSION='2026-10-04b';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7621,8 +7651,8 @@ function renderExternalSummary(d){
     const settled=extIsSettled('group',d.groupTourId,shouldRemit,waive);
     const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
         <div style="font-size:12px;color:var(--amber-d);margin-bottom:4px;font-weight:600">附加費用（請現場代付）</div>
-        ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px"><span>${x.name}　<span style="font-size:11px;color:var(--text2)">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
-        <div style="display:flex;justify-content:space-between;font-size:13px;padding-top:4px;margin-top:4px;border-top:1px solid var(--amber)"><span>合計</span><strong>$${extraAdvance.toLocaleString()}</strong></div>
+        ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px;color:#5C3A00"><span>${x.name}　<span style="font-size:11px;color:#8A6A3A">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding-top:4px;margin-top:4px;border-top:1px solid var(--amber);color:#5C3A00"><span>合計</span><strong>$${extraAdvance.toLocaleString()}</strong></div>
       </div>`:'';
     el.innerHTML=`
       <div style="font-size:12px;color:var(--text2)">行程</div>
