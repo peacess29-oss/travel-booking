@@ -7374,7 +7374,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-04b';
+const APP_VERSION='2026-10-04c';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7524,7 +7524,9 @@ function extRecStatusHtml(r){
   return extRecConfirmed(r)?'<span style="color:var(--green-d)">✅ 公司已確認</span>':'<span style="color:var(--amber-d)">⏳ 待公司確認</span>';
 }
 // 外派連結：本團帳務是否已結清（公司已確認的回帳金額 ≥ 應回帳，或公司免回帳後不需回帳）→ 隱藏行程資料，只留帳務
-function extIsSettled(remitType,remitId,shouldRemit,waive){
+function extIsSettled(remitType,remitId,shouldRemit,waive,endDate){
+  // 行程還沒結束（含當天）一律不算結清，行程資料照常顯示
+  if(!endDate||endDate>=localDateStr())return false;
   const confirmed=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitType&&r.remitLinkId===remitId&&extRecConfirmed(r)).reduce((s,r)=>s+(r.amount||0),0);
   return (shouldRemit>0&&confirmed>=shouldRemit)||(waive>0&&shouldRemit<=0);
 }
@@ -7600,7 +7602,7 @@ function renderExternalSummary(d){
     const shouldRemit=balance-hotelAdvance-outwage-nightAllow-waive;
     const priorReports=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id);
     const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
-    const settled=extIsSettled('priv',p.id,shouldRemit,waive);
+    const settled=extIsSettled('priv',p.id,shouldRemit,waive,p.end||p.start||d.end);
     el.innerHTML=`
       ${settled?`<div style="font-size:12px;color:var(--text2)">行程</div><div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name||'-'}</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start||''}${p.end&&p.end!==p.start?'～'+p.end:''}</div>${EXT_SETTLED_BANNER}`:tripInfoHtml}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
@@ -7648,7 +7650,9 @@ function renderExternalSummary(d){
     const extraAdvance=extraItems.reduce((s,x)=>s+x.amount,0);
     const waive=dispWaive(d);
     const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow-waive;
-    const settled=extIsSettled('group',d.groupTourId,shouldRemit,waive);
+    // 拼團結束日：派車結束日，沒有的話用出發日＋天數推算
+    const grpEnd=d.end||(()=>{const x=new Date(date);x.setDate(x.getDate()+Math.max((t?.days||1)-1,0));return x.toISOString().slice(0,10);})();
+    const settled=extIsSettled('group',d.groupTourId,shouldRemit,waive,grpEnd);
     const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
         <div style="font-size:12px;color:var(--amber-d);margin-bottom:4px;font-weight:600">附加費用（請現場代付）</div>
         ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px;color:#5C3A00"><span>${x.name}　<span style="font-size:11px;color:#8A6A3A">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
