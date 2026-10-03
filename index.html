@@ -3235,7 +3235,7 @@ function openDisp(id='',dateStr=''){
 function pick(o,keys){const r={};keys.forEach(k=>{if(o&&o[k]!==undefined)r[k]=o[k];});return r;}
 function hashStr(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)+str.length.toString(36);}
 function buildExtSnapshot(d){
-  const v={dispId:d.id,disp:pick(d,['label','start','end','startTime','endTime','car','carCount','outwage','nightAllowance','driverName','driverType','privateId','privateBusIdx','groupTourId']),
+  const v={dispId:d.id,disp:pick(d,['label','start','end','startTime','endTime','car','carCount','outwage','nightAllowance','remitWaive','remitWaiveNote','driverName','driverType','privateId','privateBusIdx','groupTourId']),
     privates:[],tours:[],bookings:[],hotels:[],recs:[],linkType:'',linkId:'',bookingIds:[],hotelAdvance:0,
     remitNight:calcRemitNightAllowance(d), // 從回帳扣的外宿補貼（包車團A車含B/C車）
     nightSplit:d.privateId&&(d.privateBusIdx??0)===0?privNightAllowanceSplit(d.privateId):[]};
@@ -3653,6 +3653,27 @@ function privNightAllowanceSplit(privateId){
   return dispatches.filter(x=>x.privateId===privateId&&(x.privateBusIdx??0)!==0&&(x.nightAllowance||0)>0)
     .map(x=>({bus:String.fromCharCode(65+(x.privateBusIdx||0)),driverName:x.driverName||'-',amount:x.nightAllowance}));
 }
+// ══ 免回帳（管理員減免外派司機應回帳金額，例如零頭）：存在派車記錄 remitWaive，財務總表記為「回帳減免」成本 ══
+function dispWaive(d){return Math.max(0,parseInt(d&&d.remitWaive)||0);}
+function calcWaiveDisps(y,m,isYear){return dispatches.filter(d=>dispWaive(d)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m)));}
+async function openRemitWaive(dispId){
+  const d=dispatches.find(x=>x.id===dispId);if(!d)return;
+  const a=calcExtDispAccount(d);if(!a)return;
+  const cur=dispWaive(d);
+  const remain=Math.max(a.shouldRemit-a.remit,0);
+  const v=prompt('免回帳金額（元）\n目前尚未回帳 $'+remain.toLocaleString()+(cur?'，已免除 $'+cur.toLocaleString():'')+'\n輸入 0 可取消免回帳',String(cur+remain));
+  if(v===null)return;
+  const amt=Math.max(0,parseInt(v)||0);
+  let note=d.remitWaiveNote||'';
+  if(amt>0){const n=prompt('免回帳原因（選填，例如：零頭）',note);if(n===null)return;note=n.trim();}
+  const upd=amt>0?{remitWaive:amt,remitWaiveNote:note,remitWaiveDate:new Date().toISOString().slice(0,10)}:{remitWaive:0,remitWaiveNote:'',remitWaiveDate:''};
+  setSS('syncing','儲存中…');
+  try{
+    await db.collection('dispatches').doc(dispId).update(upd);
+    const i=dispatches.findIndex(x=>x.id===dispId);if(i>=0)dispatches[i]={...dispatches[i],...upd};
+    renderExtReport();scheduleExtSync();
+  }catch(e){alert('更新失敗，請稍後再試');}
+}
 // 包車團負責帳務的A車派車記錄
 function getPrivAccountDispatch(p){return dispatches.find(d=>d.privateId===p.id&&(d.privateBusIdx??0)===0&&d.driverId)||null;}
 
@@ -3828,9 +3849,11 @@ function buildPrivCostBreakdown(p){
   const hotel={total:sum(hotelRows),rows:hotelRows};
   const misc={total:sum(miscRows),rows:miscRows};
   const ins=p.insCost||0;
-  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+ins;
+  const waiveRows=dispatches.filter(d=>d.privateId===p.id&&dispWaive(d)>0).map(d=>({date:d.remitWaiveDate||d.start,label:'外派 '+(d.driverName||'')+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''),amount:dispWaive(d)}));
+  const waive={total:sum(waiveRows),rows:waiveRows};
+  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+ins+waive.total;
   const profit=(p.price||0)-totalCost;
-  return{price:p.price||0,wage,outwage,night,hotel,misc,ins,totalCost,profit};
+  return{price:p.price||0,wage,outwage,night,hotel,misc,ins,waive,totalCost,profit};
 }
 function toggleCostSec(id){
   const el=document.getElementById('cfcost-'+id);
@@ -3892,6 +3915,7 @@ function renderCashFlowContent(p){
       ${renderCostRow('外宿補貼',cb.night.total,cb.night.rows,'night')}
       ${renderCostRow('酒店費用',cb.hotel.total,cb.hotel.rows,'hotel')}
       ${renderCostRow('雜支（油錢/停車/寄鋪等）',cb.misc.total,cb.misc.rows,'misc')}
+      ${cb.waive.total?renderCostRow('回帳減免',cb.waive.total,cb.waive.rows,'waive'):''}
       <div style="display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--border)"><span style="font-size:13px">旅遊險</span><span style="font-weight:600;color:var(--red)">$${cb.ins.toLocaleString()}</span></div>
       <div style="display:flex;justify-content:space-between;padding:10px 4px 2px"><span style="font-size:13px;font-weight:600">總成本</span><span style="font-weight:700;color:var(--red)">$${cb.totalCost.toLocaleString()}</span></div>
       <div style="display:flex;justify-content:space-between;padding:4px">
@@ -4163,9 +4187,11 @@ function buildGroupCostBreakdown(tourId,date,busIdx){
   const misc={total:sum(miscRows),rows:miscRows};
   const extra={total:sum(extraRows),rows:extraRows};
   const ins={total:sum(insRows),rows:insRows};
-  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+extra.total+ins.total;
+  const waiveRows=disp&&dispWaive(disp)>0?[{date:disp.remitWaiveDate||disp.start,label:'外派 '+(disp.driverName||'')+(disp.remitWaiveNote?'（'+disp.remitWaiveNote+'）':''),amount:dispWaive(disp)}]:[];
+  const waive={total:sum(waiveRows),rows:waiveRows};
+  const totalCost=wage.total+outwage.total+night.total+hotel.total+misc.total+extra.total+ins.total+waive.total;
   const profit=price-totalCost;
-  return{price,wage,outwage,night,hotel,misc,extra,ins,totalCost,profit};
+  return{price,wage,outwage,night,hotel,misc,extra,ins,waive,totalCost,profit};
 }
 function openGroupCashFlow(tourId,date,busIdx){
   const t=tours.find(x=>x.id===tourId);if(!t)return;
@@ -4186,6 +4212,7 @@ function openGroupCashFlow(tourId,date,busIdx){
       ${renderCostRow('雜支（油錢/停車/寄鋪等）',cb.misc.total,cb.misc.rows,'g-misc')}
       ${renderCostRow('附加費用',cb.extra.total,cb.extra.rows,'g-extra')}
       ${renderCostRow('旅遊險',cb.ins.total,cb.ins.rows,'g-ins')}
+      ${cb.waive.total?renderCostRow('回帳減免',cb.waive.total,cb.waive.rows,'g-waive'):''}
       <div style="display:flex;justify-content:space-between;padding:10px 4px 2px"><span style="font-size:13px;font-weight:600">總成本</span><span style="font-weight:700;color:var(--red)">$${cb.totalCost.toLocaleString()}</span></div>
       <div style="display:flex;justify-content:space-between;padding:4px">
         <span style="font-size:14px;font-weight:700">毛利</span>
@@ -4219,8 +4246,9 @@ function calcGI(y,m,isYear){return tours.map(t=>{
     if(hasNewData)return s+buses.reduce((ss,bus)=>ss+calcGroupHotelExpense(t.id,date,bus.busIdx),0);
     return s+dateBks.reduce((ss,b)=>ss+(b.roomCost||0),0);
   },0);
-  const totalCost=wageData.wage+wageData.outwage+insCost+extraCost+roomCost;
-  return{name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bksInPeriod.reduce((s,b)=>s+b.count,0),cnt:bksInPeriod.length,wage:wageData.wage,outwage:wageData.outwage,insCost,extraCost,roomCost,totalCost,extras:t.extras||[]};
+  const waiveCost=dispatches.filter(d=>d.groupTourId&&dates.some(dt=>d.groupTourId.startsWith(t.id+'_'+dt+'_'))).reduce((s,d)=>s+dispWaive(d),0);
+  const totalCost=wageData.wage+wageData.outwage+insCost+extraCost+roomCost+waiveCost;
+  return{waiveCost,name:t.name,depPaid,balPaid,collected:depPaid+balPaid,pax:bksInPeriod.reduce((s,b)=>s+b.count,0),cnt:bksInPeriod.length,wage:wageData.wage,outwage:wageData.outwage,insCost,extraCost,roomCost,totalCost,extras:t.extras||[]};
 }).filter(x=>x.collected>0||x.cnt>0);}
 function calcPI(y,m,isYear){
   // 定金以 depositDate 歸月（有記錄則用之，否則 fallback 出發月）
@@ -4246,8 +4274,9 @@ function calcPI(y,m,isYear){
   const hotelCost=calcPrivHotelExpense(p);
   const miscCost=calcPrivMisc(p);
   const insCost=p.insCost||0;
-  const totalCost=ownDriverCost+outDriverCost+nightAllowanceCost+hotelCost+miscCost+insCost;
-  return{name:p.name,type:p.type,price:p.price,deposit:p.deposit,collected,
+  const waiveCost=dispatches.filter(d=>d.privateId===p.id).reduce((s,d)=>s+dispWaive(d),0);
+  const totalCost=ownDriverCost+outDriverCost+nightAllowanceCost+hotelCost+miscCost+insCost+waiveCost;
+  return{waiveCost,name:p.name,type:p.type,price:p.price,deposit:p.deposit,collected,
     ownDriverCost,outDriverCost,nightAllowanceCost,hotelCost,miscCost,insCost,
     cost:totalCost,pax:p.pax||0,outsource:isOut,id:p.id};
 });}
@@ -4339,7 +4368,8 @@ function exportFinanceExcel(){
   const tnight=dispatches.filter(d=>(d.nightAllowance||0)>0&&(isYear?inYear(d.start,y):inMonth(d.start,y,m))).reduce((s,d)=>s+(d.nightAllowance||0),0);
   const tpiHotel=privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))).reduce((s,p)=>s+calcPrivHotelExpense(p),0)+calcManualHotelExpense(y,m,isYear)+calcAllGroupHotelExpense(y,m,isYear);
   const dispCost=calcDispCost(y,m,isYear);
-  const te=tme+tde+tfe+tnight+tpiHotel+dispCost.wage+dispCost.outwage,np=ti-te;
+  const twaive=calcWaiveDisps(y,m,isYear).reduce((s,d)=>s+dispWaive(d),0);
+  const te=tme+tde+tfe+tnight+tpiHotel+dispCost.wage+dispCost.outwage+twaive,np=ti-te;
   const wb=XLSX.utils.book_new();
   const titleStr=isYear?y+'年年報':y+'年'+MONTHS[m]+'月報';
 
@@ -4362,6 +4392,7 @@ function exportFinanceExcel(){
     ['　手動支出','$'+tme.toLocaleString()],
     ['　司機記錄支出','$'+tde.toLocaleString()],
     ['　固定支出','$'+tfe.toLocaleString()],
+    ['　回帳減免','$'+twaive.toLocaleString()],
     [],
     ['淨利潤','$'+np.toLocaleString()],
     ['利潤率',ti?Math.round(np/ti*100)+'%':'—'],
@@ -4418,6 +4449,7 @@ function exportFinanceExcel(){
     .sort((a,b)=>a.start>b.start?1:-1)
     .forEach(d=>expData.push([d.start,'外派費用','派車：'+(d.note||d.label||'-'),d.car||'',d.driverName||'',d.outwage||0]));
   privates.filter(p=>(isYear?inYear(p.start,y):inMonth(p.start,y,m))&&calcPrivHotelExpense(p)>0).forEach(p=>expData.push([p.start||'-','酒店費用','包車團：'+p.name,'','',calcPrivHotelExpense(p)]));
+  calcWaiveDisps(y,m,isYear).sort((a,b)=>a.start>b.start?1:-1).forEach(d=>expData.push([d.start,'回帳減免','免回帳：'+(d.label||'-')+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''),d.car||'',d.driverName||'',dispWaive(d)]));
   expData.push(['合計','','','','',te]);
   const ws4=XLSX.utils.aoa_to_sheet(expData);
   ws4['!cols']=[{wch:12},{wch:10},{wch:20},{wch:10},{wch:10},{wch:10}];
@@ -4469,13 +4501,16 @@ function renderFinance(){
   const dispCost=calcDispCost(y,m,isYear);
   if(dispCost.wage)expBycat['salary']=(expBycat['salary']||0)+dispCost.wage;
   if(dispCost.outwage)expBycat['outsource']=(expBycat['outsource']||0)+dispCost.outwage;
+  // 回帳減免（免回帳金額，依派車出發日）
+  const waiveTotal=calcWaiveDisps(y,m,isYear).reduce((s,d)=>s+dispWaive(d),0);
+  if(waiveTotal)expBycat['waive']=(expBycat['waive']||0)+waiveTotal;
   const te=Object.values(expBycat).reduce((s,v)=>s+v,0);
   const np=ti-te,pr=ti?Math.round(np/ti*100):0;
   // 毛利
   const giProfit=gi.reduce((s,x)=>s+(x.collected-x.totalCost),0);
   const piProfit=pi.reduce((s,x)=>s+(x.collected-x.cost),0);
   // 年報月趨勢
-  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const dc=calcDispCost(y,mi,false);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0)+dc.wage+dc.outwage+calcManualHotelExpense(y,mi,false)+calcAllGroupHotelExpense(y,mi,false);return{income:i,exp:e,profit:i-e};}):null;
+  const monthly=isYear?Array.from({length:12},(_,mi)=>{const i=calcGI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcPI(y,mi,false).reduce((s,x)=>s+x.collected,0)+calcDI(y,mi,false).reduce((s,r)=>s+r.amount,0);const dc=calcDispCost(y,mi,false);const e=calcME(y,mi,false).reduce((s,x)=>s+x.amount,0)+calcDE(y,mi,false).reduce((s,r)=>s+r.amount,0)+calcFE(y,mi,false).reduce((s,f)=>s+f.eff,0)+dc.wage+dc.outwage+calcManualHotelExpense(y,mi,false)+calcAllGroupHotelExpense(y,mi,false)+calcWaiveDisps(y,mi,false).reduce((s,d)=>s+dispWaive(d),0);return{income:i,exp:e,profit:i-e};}):null;
   const maxBar=monthly?Math.max(...monthly.map(d=>Math.max(d.income,d.exp)),1):1;
   function finCard(id,label,val,color,icon){
     return `<div class="fin-card${color==='red'?' fin-card-exp':''}" onclick="toggleFinSection('${id}')" style="cursor:pointer"><div class="fin-card-label"><i class="ti ${icon}"></i> ${label}</div><div class="fin-card-val" style="color:var(--${color})">${val===0?'—':'$'+val.toLocaleString()}</div><div class="fin-card-arrow" id="arr-${id}">▾</div></div>`;
@@ -4489,6 +4524,7 @@ function renderFinance(){
     {id:'urea',label:'尿素'},{id:'parking',label:'停車費'},{id:'toll',label:'過路費'},
     {id:'maint',label:'保養/維修'},{id:'inspection',label:'驗車'},{id:'storage',label:'寄鋪'},
     {id:'fixed',label:'固定支出'},{id:'ad',label:'廣告行銷'},{id:'misc',label:'其他雜支'},
+    {id:'waive',label:'回帳減免'},
   ];
   el.innerHTML=`
   <style>
@@ -4575,6 +4611,7 @@ function renderFinance(){
           ...dr.sort((a,b)=>a.date>b.date?1:-1).map(r=>`<tr data-cat="exp-${sec.id}"><td>${r.date}</td><td style="font-size:11px">${r.car||'-'}</td><td style="font-size:11px">${r.driverName||'-'}</td><td style="color:var(--text2);font-size:11px">司機記錄：${r.note||'-'}</td><td style="text-align:right;color:var(--red);font-weight:600">$${r.amount.toLocaleString()}</td><td></td></tr>`),
           ...fr.map(f=>`<tr data-cat="exp-${sec.id}"><td>固定</td><td style="font-size:11px">${f.car||'-'}</td><td style="font-size:11px">-</td><td style="color:var(--text2);font-size:11px">${f.name}（${f.cycle==='monthly'?'每月':'每年'}）</td><td style="text-align:right;color:var(--red);font-weight:600">$${f.eff.toLocaleString()}</td><td></td></tr>`),
           ...piHotelRows,...piGroupHotelRows,...piManualHotelRows,...piNightRows,...piSalaryRows,...piOutsourceRows,
+          ...(sec.id==='waive'?calcWaiveDisps(y,m,isYear).sort((a,b)=>a.start>b.start?1:-1).map(d=>`<tr data-cat="exp-waive"><td>${d.start||'-'}</td><td style="font-size:11px">${d.car||'-'}</td><td style="font-size:11px">${d.driverName||'-'}</td><td style="font-size:11px">免回帳：${d.label||'-'}${d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''}</td><td style="text-align:right;color:var(--red);font-weight:600">$${dispWaive(d).toLocaleString()}</td><td></td></tr>`):[]),
         ];
       }).flat();
       const allRows=[...depRows,...balRows,...expRowsAll];
@@ -7267,7 +7304,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03c';
+const APP_VERSION='2026-10-03d';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7459,7 +7496,8 @@ function renderExternalSummary(d){
     if(window._extSnap){hotelAdvance=window._extSnap.hotelAdvance||0;}
     else hotelAdvance=calcPrivHotelAdvance(p);
     const outwage=d.outwage||0;
-    const shouldRemit=balance-hotelAdvance-outwage-nightAllow;
+    const waive=dispWaive(d);
+    const shouldRemit=balance-hotelAdvance-outwage-nightAllow-waive;
     const priorReports=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id);
     const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
     el.innerHTML=`
@@ -7470,9 +7508,10 @@ function renderExternalSummary(d){
         ${statBox('住宿尾款代付',hotelAdvance,'var(--red)')}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('外宿補貼',nightAllow,'var(--green)')}
+        ${waive?statBox('公司免回帳',waive,'var(--green)'):''}
         ${remitBox(shouldRemit)}
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
       <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
       ${priorReports.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorReports.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
@@ -7506,7 +7545,8 @@ function renderExternalSummary(d){
       ?window._extSnap.extraItems
       :calcGroupBusExtras(t,window._extSnap?busPaxCount:(myBus?.seats||0));
     const extraAdvance=extraItems.reduce((s,x)=>s+x.amount,0);
-    const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow;
+    const waive=dispWaive(d);
+    const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow-waive;
     const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
         <div style="font-size:12px;color:var(--amber-d);margin-bottom:4px;font-weight:600">附加費用（請現場代付）</div>
         ${extraItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px"><span>${x.name}　<span style="font-size:11px;color:var(--text2)">(${x.detail})</span></span><strong style="color:var(--amber-d)">$${x.amount.toLocaleString()}</strong></div>`).join('')}
@@ -7533,9 +7573,10 @@ function renderExternalSummary(d){
         ${extraAdvance?statBox('附加費用代付',extraAdvance,'var(--red)'):''}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('外宿補貼',nightAllow,'var(--green)')}
+        ${waive?statBox('公司免回帳',waive,'var(--green)'):''}
         ${remitBox(shouldRemit)}
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－住宿尾款代付${extraAdvance?'－附加費用代付':''}－外派車資－外宿補貼</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－住宿尾款代付${extraAdvance?'－附加費用代付':''}－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${extRemitSectionHtml('group',d.groupTourId,shouldRemit,d.driverId,d.driverName,'reportGroupRemit')}
       ${disclaimer}
     `;
@@ -7574,7 +7615,7 @@ function calcExtDispAccount(d){
     const remit=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id).reduce((s,r)=>s+(r.amount||0),0);
     const outwage=d.outwage||0;
     const nightAllow=calcRemitNightAllowance(d);
-    return{label:p.name+'（'+(p.start||'')+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start||d.start,balance,hotelAdvance,outwage,nightAllow,shouldRemit:balance-hotelAdvance-outwage-nightAllow,income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(p.end||d.end||'')<new Date().toISOString().slice(0,10)};
+    return{label:p.name+'（'+(p.start||'')+(p.end&&p.end!==p.start?'~'+p.end:'')+'）',date:p.start||d.start,balance,hotelAdvance,outwage,nightAllow,waive:dispWaive(d),shouldRemit:balance-hotelAdvance-outwage-nightAllow-dispWaive(d),income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(p.end||d.end||'')<new Date().toISOString().slice(0,10)};
   }
   if(d.groupTourId){
     const m=d.groupTourId.match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);if(!m)return null;
@@ -7591,7 +7632,7 @@ function calcExtDispAccount(d){
     const outwage=d.outwage||0;
     const nightAllow=calcRemitNightAllowance(d);
     const extraAdvance=calcGroupBusExtras(t,buses.find(b=>b.busIdx===busIdx)?.seats||0).reduce((s,x)=>s+x.amount,0);
-    return{extraAdvance,label:(t?.name||d.label||'拼團')+'（'+date+'・'+String.fromCharCode(65+busIdx)+'車）',date,balance,hotelAdvance,outwage,nightAllow,shouldRemit:balance-hotelAdvance-extraAdvance-outwage-nightAllow,income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(d.end||date)<new Date().toISOString().slice(0,10)};
+    return{extraAdvance,label:(t?.name||d.label||'拼團')+'（'+date+'・'+String.fromCharCode(65+busIdx)+'車）',date,balance,hotelAdvance,outwage,nightAllow,waive:dispWaive(d),shouldRemit:balance-hotelAdvance-extraAdvance-outwage-nightAllow-dispWaive(d),income,remit,shortfallPaid:d.shortfallPaid||0,isEnded:(d.end||date)<new Date().toISOString().slice(0,10)};
   }
   return null;
 }
@@ -7649,16 +7690,16 @@ function renderExtReport(){
       <div class="stat-card"><div class="stat-label">尚未回帳</div><div class="stat-val" style="color:${owedTotal?'var(--red)':'var(--green)'}">${fmt(owedTotal)}</div></div>
     </div>
     ${companyOweTotal?`<div style="font-size:12px;color:var(--amber-d);margin-bottom:8px">🟠 公司應付外派司機（客收不足）合計 ${fmt(companyOweTotal)}，團結束後列入待請款清單</div>`:''}
-    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>外派司機</th><th style="text-align:right">應收尾款</th><th style="text-align:right">已回報收款</th><th style="text-align:right">住宿尾款代付</th><th style="text-align:right">附加費用代付</th><th style="text-align:right">外派車資</th><th style="text-align:right">外宿補貼</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回報回帳</th><th>狀態</th></tr></thead><tbody>
+    <div class="tbl-wrap"><table class="xtable"><thead><tr><th>行程</th><th>外派司機</th><th style="text-align:right">應收尾款</th><th style="text-align:right">已回報收款</th><th style="text-align:right">住宿尾款代付</th><th style="text-align:right">附加費用代付</th><th style="text-align:right">外派車資</th><th style="text-align:right">外宿補貼</th><th style="text-align:right">免回帳</th><th style="text-align:right">應回帳</th><th style="text-align:right">已回報回帳</th><th>狀態</th></tr></thead><tbody>
     ${rows.map(x=>{
       const diff=x.shouldRemit-x.remit;
       const coOwe=Math.max(-diff-(x.shortfallPaid||0),0); // 公司應付司機（客收不足）
       const st=diff<0?(coOwe?`<span class="badge badge-amber">公司應付 ${fmt(coOwe)}</span>`:'<span class="badge badge-green">✅ 已補付</span>'):x.shouldRemit===0?'<span class="badge badge-blue">無需回帳</span>':diff===0?'<span class="badge badge-green">✅ 已結清</span>':x.remit?`<span class="badge badge-amber">差 ${fmt(diff)}</span>`:'<span class="badge badge-red">未回帳</span>';
       const incColor=x.income<x.balance?'var(--amber-d)':'inherit';
-      return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.extraAdvance||0)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right">${fmt(x.nightAllow)}</td><td style="text-align:right;font-weight:600;color:${x.shouldRemit<0?'var(--amber-d)':'inherit'}">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
+      return `<tr><td style="font-size:12px">${x.label}</td><td>${x.d.driverName||'-'}</td><td style="text-align:right">${fmt(x.balance)}</td><td style="text-align:right;color:${incColor}">${fmt(x.income)}</td><td style="text-align:right">${fmt(x.hotelAdvance)}</td><td style="text-align:right">${fmt(x.extraAdvance||0)}</td><td style="text-align:right">${fmt(x.outwage)}</td><td style="text-align:right">${fmt(x.nightAllow)}</td><td style="text-align:right;color:${x.waive?'var(--green-d)':'var(--text3)'}" title="${x.d.remitWaiveNote||''}">${x.waive?fmt(x.waive):'-'}</td><td style="text-align:right;font-weight:600;color:${x.shouldRemit<0?'var(--amber-d)':'inherit'}">${fmt(x.shouldRemit)}</td><td style="text-align:right">${fmt(x.remit)}</td><td style="white-space:nowrap">${st} ${(diff>0||x.waive)?`<button class="btn btn-sm" title="減免應回帳（例如零頭），財務總表記為回帳減免" onclick="openRemitWaive('${x.d.id}')"><i class="ti ti-discount"></i> 免回帳</button>`:''} <button class="btn btn-sm" title="傳送外派司機連結" onclick="openExtShare('${x.d.id}')"><i class="ti ti-link"></i></button></td></tr>`;
     }).join('')}
     </tbody></table></div>`}
-    <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿尾款代付－附加費用代付（拼團）－外派車資－外宿補貼（多車包車團的外宿補貼由A車統一扣，含B/C車）；負數代表公司應付司機。</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:8px">＊依派車出發日篩選月份；多車包車團只列A車（帳務由A車負責）。應回帳＝應收尾款－住宿尾款代付－附加費用代付（拼團）－外派車資－外宿補貼（多車包車團的外宿補貼由A車統一扣，含B/C車）－免回帳；負數代表公司應付司機。「免回帳」的金額在財務總表記為「回帳減免」支出。</div>
   </div>`;
 }
 function enterBookingMode(){
