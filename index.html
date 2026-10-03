@@ -3311,7 +3311,12 @@ async function syncExtViews(){
     }
     const active=dispatches.filter(d=>d.driverType==='out'&&d.extToken);
     const activeTokens=new Set(active.map(d=>d.extToken));
-    for(const d of active)await writeExtView(d);
+    // 每一筆分開處理：某一筆寫入失敗時不影響其他外派連結更新
+    window._extSyncErrors=[];
+    for(const d of active){
+      try{await writeExtView(d);}
+      catch(e){console.error('[extSync] 快照更新失敗',d.id,d.label,e);window._extSyncErrors.push((d.driverName||'')+' '+(d.label||d.id)+'：'+(e.message||e));}
+    }
     // 已刪除的派車、已換新的連結 → 刪除舊快照（舊連結失效）
     for(const t of [..._extKnownTokens]){
       if(!activeTokens.has(t)){await db.collection('extViews').doc(t).delete().catch(()=>{});_extKnownTokens.delete(t);delete _extSyncCache[t];}
@@ -3319,6 +3324,18 @@ async function syncExtViews(){
     if(!_extReportsListening)listenExtReports();
   }catch(e){console.error('[extSync]',e);}
   _extSyncing=false;
+}
+// 手動重建所有外派連結快照（除錯用：外派連結資料沒更新時按一下）
+async function forceExtSync(){
+  if(!adminDataReady()){alert('資料尚未載入完成，請稍後再試');return;}
+  if(_extSyncing){alert('正在更新中，請稍後再按');return;}
+  _extSyncCache={};_extKnownTokens=null; // 清除快取，強制全部重寫
+  setSS('syncing','重建外派連結中…');
+  await syncExtViews();
+  const errs=window._extSyncErrors||[];
+  const n=dispatches.filter(d=>d.driverType==='out'&&d.extToken).length;
+  alert(errs.length?('已更新，但有 '+errs.length+' 筆失敗：\n'+errs.join('\n')):('已重建 '+n+' 個外派連結，司機重新整理連結即可看到最新資料'));
+  setSS('ok','已同步');
 }
 // 外派回報箱 → 自動入帳（兩位管理員同時開著也不會重複：入帳記錄 ID 固定為 ext_回報ID）
 function listenExtReports(){
@@ -7327,7 +7344,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03i';
+const APP_VERSION='2026-10-03j';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7349,7 +7366,7 @@ function enterExternalMode(token){
     }catch(e){console.warn('[ext reports]',e);}
     renderExternalSummary({id:v.dispId,...v.disp});
     // 版本標記：用來確認司機手機載入的是不是最新版（舊版會被瀏覽器快取）
-    contentEl.insertAdjacentHTML('beforeend','<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:16px">版本 '+APP_VERSION+'</div>');
+    contentEl.insertAdjacentHTML('beforeend','<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:16px">版本 '+APP_VERSION+'｜資料更新 '+(v.updatedAt?extFmtTime(v.updatedAt):'-')+'</div>');
   }).catch(e=>{console.error(e);contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
 }
 function localDateStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -7740,7 +7757,7 @@ function renderExtReport(){
   </div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派團次對帳</span>
+      <span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派團次對帳 <button class="btn btn-sm" style="margin-left:6px" title="外派連結顯示的資料沒更新時按這裡" onclick="forceExtSync()"><i class="ti ti-refresh"></i> 重建外派連結</button></span>
       <div style="display:flex;gap:8px">
         <select onchange="setExtRepSel(extRepYear,parseInt(this.value))" style="height:34px;font-size:13px">${MONTHS.map((mn,i)=>`<option value="${i}"${i===m?' selected':''}>${mn}</option>`).join('')}</select>
         <select onchange="setExtRepSel(parseInt(this.value),extRepMonth)" style="height:34px;font-size:13px">${years.map(yy=>`<option value="${yy}"${yy===y?' selected':''}>${yy}年</option>`).join('')}</select>
