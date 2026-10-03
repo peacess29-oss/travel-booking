@@ -7267,6 +7267,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
+const APP_VERSION='2026-10-03c';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7287,6 +7288,8 @@ function enterExternalMode(token){
       rs.docs.forEach(x=>{if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,x.data()));});
     }catch(e){console.warn('[ext reports]',e);}
     renderExternalSummary({id:v.dispId,...v.disp});
+    // 版本標記：用來確認司機手機載入的是不是最新版（舊版會被瀏覽器快取）
+    contentEl.insertAdjacentHTML('beforeend','<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:16px">版本 '+APP_VERSION+'</div>');
   }).catch(e=>{console.error(e);contentEl.innerHTML='<div class="empty">載入失敗，請檢查網路連線後重新整理</div>';});
 }
 function localDateStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -7497,7 +7500,11 @@ function renderExternalSummary(d){
     else hotelAdvance=calcGroupHotelAdvance(gn);
     const outwage=d.outwage||0;
     // 附加費用（門票、餐食等，依本車人數計算）由司機現場代付
-    const extraItems=window._extSnap?(window._extSnap.extraItems||[]):calcGroupBusExtras(t,myBus?.seats||0);
+    // 外派頁：快照有就用快照；舊快照沒有這欄時，直接用快照內的行程設定＋本車乘客人數計算（不必等管理頁重建快照）
+    const busPaxCount=bks.reduce((s,b)=>s+(b.count||0),0);
+    const extraItems=(window._extSnap&&window._extSnap.extraItems&&window._extSnap.extraItems.length)
+      ?window._extSnap.extraItems
+      :calcGroupBusExtras(t,window._extSnap?busPaxCount:(myBus?.seats||0));
     const extraAdvance=extraItems.reduce((s,x)=>s+x.amount,0);
     const shouldRemit=totalBalance-hotelAdvance-extraAdvance-outwage-nightAllow;
     const extrasHtml=extraItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px">
