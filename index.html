@@ -559,6 +559,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div id="rf-extra-diff" style="display:none;font-size:12px;color:var(--red);margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:6px"></div>
   </div>
   <!-- 回帳公司：選擇要回帳入帳的團次（尚未結清的團） -->
+  <div id="rf-acct-sec" style="display:none;margin-bottom:10px">
+    <label>回帳帳號後5碼 *</label>
+    <input type="text" id="rf-acct" inputmode="numeric" maxlength="5" placeholder="您匯款帳號的後5碼" oninput="this.value=this.value.replace(/\D/g,'').slice(0,5)">
+  </div>
   <div id="rf-remit-sec" style="display:none;margin-bottom:10px">
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">選擇要回帳的團次（尚未結清的團，不選則依日期自動歸戶）</div>
     <div id="rf-remit-items"></div>
@@ -3252,7 +3256,7 @@ function buildExtSnapshot(d){
     privates:[],tours:[],bookings:[],hotels:[],recs:[],linkType:'',linkId:'',bookingIds:[],hotelAdvance:0,
     remitNight:calcRemitNightAllowance(d), // 從回帳扣的外宿補貼（包車團A車含B/C車）
     nightSplit:d.privateId&&(d.privateBusIdx??0)===0?privNightAllowanceSplit(d.privateId):[]};
-  const recKeys=['type','amount','date','incomeLinkType','incomeLinkId','remitLinkType','remitLinkId','relatedBookingIds'];
+  const recKeys=['type','amount','date','incomeLinkType','incomeLinkId','remitLinkType','remitLinkId','relatedBookingIds','adminChecked','acctLast5','source'];
   if(d.privateId){
     const p=privates.find(x=>x.id===d.privateId);
     if(p){
@@ -3738,11 +3742,11 @@ function buildPrivCashFlow(p){
   });
   if(driverIds.length){
     driverRecs.filter(r=>r.type==='remit'&&!r.remitLinkType&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     // 回帳公司：明確選擇連結到這團的記錄（不限日期範圍，常見於團結束後幾天才回帳）
     driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
@@ -4087,11 +4091,11 @@ function buildGroupCashFlow(tourId,date,busIdx){
   });
   if(driverId){
     driverRecs.filter(r=>r.type==='remit'&&!r.remitLinkType&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     // 回帳公司：明確選擇連結到這車次的記錄（不限日期範圍，常見於團結束後幾天才回帳）
     driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&r.driverId===driverId).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
@@ -5780,7 +5784,7 @@ function getLastKm(carId,excId=''){const recs=driverRecs.filter(r=>r.car===carId
 function openRec(id='',defaultType=''){
   eIds.rec=id||null;const r=id?driverRecs.find(x=>x.id===id):null;
   document.getElementById('mr-title').textContent=id?'編輯記錄':'新增記錄';document.getElementById('btn-del-rec').style.display=id?'inline-flex':'none';
-  document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||(defaultType||'income');document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';
+  document.getElementById('rf-date').value=r?.date||new Date().toISOString().slice(0,10);document.getElementById('rf-type').value=r?.type||(defaultType||'income');document.getElementById('rf-amt').value=r?.amount||'';document.getElementById('rf-note').value=r?.note||'';document.getElementById('rf-acct').value=r?.acctLast5||'';
   // 新增記錄時預設常用車輛；編輯時保留原本選的車輛
   const drv0=drivers.find(d=>d.id===curDriverId);
   // 優先序：1. 編輯時原本的車 2. 設定的常用車輛 3. 最近一筆記錄的車
@@ -5961,6 +5965,7 @@ function toggleRecFields(){
   document.getElementById('rf-hotel-sec').style.display=t==='hotel'?'block':'none';
   document.getElementById('rf-extras-sec').style.display=(t==='other'&&!eIds.rec)?'block':'none';
   document.getElementById('rf-remit-sec').style.display=(t==='remit'&&!eIds.rec)?'block':'none';
+  document.getElementById('rf-acct-sec').style.display=t==='remit'?'block':'none';
   if(t==='remit'&&!eIds.rec)renderRemitItems();
   document.getElementById('rf-amt-label').textContent=t==='hotel'?'實付金額（元）':'金額（元）';
   const advanceEligible=['fuel','urea','parking','toll','maint','inspection','storage','other'].includes(t);
@@ -6394,6 +6399,9 @@ async function saveRec(){
   const fundVal=advanceEligible2?getFundValue():'';
   if(advanceEligible2&&!fundVal)return alert('請選擇此筆支出的款項來源：客收支付／自行代墊需請款／公司直接支付');
   if(fundVal==='cash'&&!document.getElementById('rf-advance-link')?.value)return alert('「客收支付」需選擇要連結的團次');
+  // 回帳公司：帳號後5碼必填（管理員對帳用）
+  const acctLast5=(document.getElementById('rf-acct')?.value||'').trim();
+  if(type==='remit'&&!/^\d{5}$/.test(acctLast5))return alert('請輸入回帳帳號後5碼（5位數字）');
   const drv=drivers.find(d=>d.id===curDriverId);setSS('syncing','儲存中…');
   // 收集勾選的尾款項目 id，存進記錄以便刪除時反查
   const balEl2=document.getElementById('rf-balance-items');
@@ -6423,6 +6431,7 @@ async function saveRec(){
   const existingRec=eIds.rec?driverRecs.find(x=>x.id===eIds.rec):null;
   const enteredAmount=parseInt(document.getElementById('rf-amt').value)||0;
   const data={date,type,amount:enteredAmount,driverId:curDriverId,driverName:drv?.name||'',car:document.getElementById('rf-car').value,note:document.getElementById('rf-note').value.trim(),mileage,fuelLiters:parseFloat(document.getElementById('rf-liters').value)||0,maintType:type==='maint'?(document.getElementById('rf-maint')?.value||'oil'):'',relatedBookingIds,relatedPrivateIds,incomeLinkType,incomeLinkId,advance:isAdvance,companyDirect,advanceLinkType,advanceLinkId,advanceSettled:isAdvance?!!existingRec?.advanceSettled:false};
+  if(type==='remit')data.acctLast5=acctLast5;
   if(type==='hotel'){
     if(hotelSel){
       if(hotelSel.kind==='group'){
@@ -7318,7 +7327,7 @@ async function initDefaultDrivers(){ /* no-op */ }
 
 // 判斷是否公開報名頁
 // 外派司機專屬連結：唯讀查詢畫面，不需登入
-const APP_VERSION='2026-10-03f';
+const APP_VERSION='2026-10-03g';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -7459,6 +7468,23 @@ async function reportPrivRemit(privId,driverId,driverName){
   alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
+// 外派連結：某筆通知是否已被公司確認（外派回報要管理員按確認；公司自己登打的記錄視為已確認）
+function extRecConfirmed(r){
+  const fromExt=r.source==='ext-link'||String(r.id||'').startsWith('ext_');
+  return fromExt?!!r.adminChecked:true;
+}
+function extRecStatusHtml(r){
+  return extRecConfirmed(r)?'<span style="color:var(--green-d)">✅ 公司已確認</span>':'<span style="color:var(--amber-d)">⏳ 待公司確認</span>';
+}
+// 已通知清單（每筆一行：日期、金額、後5碼、確認狀態）
+function extPriorListHtml(recs,withLast5){
+  if(!recs.length)return '';
+  const total=recs.reduce((s,r)=>s+(r.amount||0),0);
+  return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;padding:6px 10px;background:var(--bg2);border-radius:8px">
+    <div style="margin-bottom:2px">已通知（合計 $${total.toLocaleString()}）：</div>
+    ${recs.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(r=>`<div>${r.date||'-'}　$${(r.amount||0).toLocaleString()}${withLast5&&r.acctLast5?'（後5碼 '+r.acctLast5+'）':''}　${extRecStatusHtml(r)}</div>`).join('')}
+  </div>`;
+}
 // 外派連結：回報已回帳區塊（含歷史回報清單），拼團／包車團共用
 function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driverName,onclickFn){
   const priorRemits=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitLinkType&&r.remitLinkId===remitLinkId);
@@ -7470,9 +7496,12 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
   if(shouldRemit<=0&&!priorRemits.length)return '';
   return `
     <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已回帳</div>
-    ${priorRemits.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorRemits.map(r=>r.date+' $'+(r.amount||0).toLocaleString()+(r.acctLast5?'（後5碼 '+r.acctLast5+'）':'')).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+    ${extPriorListHtml(priorRemits,true)}
+    ${shouldRemit>0?(priorTotal>=shouldRemit
+      ?`<div style="font-size:13px;font-weight:600;color:var(--green-d);margin-bottom:8px">✅ 已回帳完成（應回帳 $${shouldRemit.toLocaleString()}）</div>`
+      :`<div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px">尚差 $${(shouldRemit-priorTotal).toLocaleString()} 未回帳</div>`):''}
     <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit,0)}" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="回帳金額">
+      <input type="number" id="ext-remit-amt" value="${Math.max(shouldRemit-priorTotal,0)}" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="回帳金額">
       <input type="text" id="ext-remit-acct" inputmode="numeric" maxlength="5" style="flex:1;min-width:0;height:34px;font-size:13px" placeholder="您的帳號後5碼" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)">
       <button class="btn btn-primary btn-sm" onclick="${onclickFn}('${remitLinkId}','${driverId}','${nameEsc}')"><i class="ti ti-send"></i> 通知</button>
     </div>
@@ -7532,7 +7561,7 @@ function renderExternalSummary(d){
       <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
       <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
-      ${priorReports.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">已通知：${priorReports.map(r=>r.date+' $'+(r.amount||0).toLocaleString()).join('、')}（合計 $${priorTotal.toLocaleString()}）</div>`:''}
+      ${extPriorListHtml(priorReports,false)}
       <div style="display:flex;gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
         <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
@@ -7582,10 +7611,10 @@ function renderExternalSummary(d){
       })()}
       ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
-        const reported=driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
+        const repRec=driverRecs.find(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
-        const action=reported
-          ?`<span style="color:var(--green);font-size:12px"><i class="ti ti-check"></i> 已通知</span>`
+        const action=repRec
+          ?`<div style="font-size:12px;white-space:nowrap"><span style="color:var(--green)"><i class="ti ti-check"></i> 已通知</span><div style="font-size:11px">${extRecStatusHtml(repRec)}</div></div>`
           :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
