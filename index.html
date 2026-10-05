@@ -597,6 +597,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 </div></div>
 
 <!-- 現金流水 -->
+<div class="overlay" id="m-writeoff"><div class="modal" style="width:440px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="wo-title"><i class="ti ti-receipt-off"></i> 消帳</span><button class="btn btn-sm" onclick="cm('writeoff')"><i class="ti ti-x"></i></button></div>
+  <div id="wo-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('writeoff')">取消</button><button class="btn btn-primary" onclick="saveWriteOff()"><i class="ti ti-check"></i> 確認消帳</button></div></div>
+</div></div>
 <div class="overlay" id="m-cashflow"><div class="modal" style="width:640px;max-width:95vw">
   <div class="mh"><span class="mh-title" id="cf-title"><i class="ti ti-cash"></i> 現金流水</span><button class="btn btn-sm" onclick="cm('cashflow')"><i class="ti ti-x"></i></button></div>
   <div id="cf-content"></div>
@@ -1180,7 +1185,7 @@ function renderGroup(){
   const unsettledG=getUnsettledGroups();
   const unsettledGHtml=unsettledG.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
     <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 司機尚未回帳（${unsettledG.length}筆）</div>
-    <ul style="padding-left:16px;margin:0">${unsettledG.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openGroupCashFlow('${x.t.id}','${x.date}',${x.busIdx})"><strong>${x.t.name}</strong>（${x.date} ${String.fromCharCode(65+x.busIdx)}車）　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+    <ul style="padding-left:16px;margin:0">${unsettledG.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openGroupCashFlow('${x.t.id}','${x.date}',${x.busIdx})"><strong>${x.t.name}</strong>（${x.date} ${String.fromCharCode(65+x.busIdx)}車）　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳 <button class="btn btn-sm" style="margin-left:6px;padding:1px 8px;font-size:12px" onclick="event.stopPropagation();openWriteOff('group','${x.t.id}','${x.date}',${x.busIdx})"><i class="ti ti-receipt-off"></i> 消帳</button></li>`).join('')}</ul>
   </div>`:'';
 
   el.innerHTML=`
@@ -1716,7 +1721,7 @@ function renderPrivate(){
   const unsettled=getUnsettledPrivs();
   const unsettledHtml=unsettled.length?`<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
     <div style="font-weight:600;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> 司機尚未回帳（${unsettled.length}筆）</div>
-    <ul style="padding-left:16px;margin:0">${unsettled.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openCashFlow('${x.p.id}')"><strong>${x.p.name}</strong>　結束於 ${x.p.end}　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳</li>`).join('')}</ul>
+    <ul style="padding-left:16px;margin:0">${unsettled.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="openCashFlow('${x.p.id}')"><strong>${x.p.name}</strong>　結束於 ${x.p.end}　尚有現金 <span style="font-weight:600">$${x.cf.cashBalance.toLocaleString()}</span> 未回帳 <button class="btn btn-sm" style="margin-left:6px;padding:1px 8px;font-size:12px" onclick="event.stopPropagation();openWriteOff('priv','${x.p.id}')"><i class="ti ti-receipt-off"></i> 消帳</button></li>`).join('')}</ul>
   </div>`:'';
   el.innerHTML=`
   ${unsettledHtml}
@@ -3731,6 +3736,86 @@ async function openRemitWaive(dispId){
     renderExtReport();scheduleExtSync();
   }catch(e){alert('更新失敗，請稍後再試');}
 }
+// ══ 消帳（管理員後台處理掛帳）：補登回帳（司機已交錢，記一筆回帳公司）／減免（只限外派，記為回帳減免成本） ══
+function writeOffCtx(kind,a,b,c){
+  if(kind==='priv'){
+    const p=privates.find(x=>x.id===a);if(!p)return null;
+    const disp=dispatches.find(d=>d.privateId===p.id&&(d.privateBusIdx??0)===0)||null;
+    const own=getPrivAccountDispatch(p);
+    const driverId=disp?.driverType==='out'?'':(own?.driverId||getPrivDriverIds(p)[0]||'');
+    return{kind,label:p.name+'（結束於 '+(p.end||p.start||'')+'）',cf:buildPrivCashFlow(p),disp,isOut:disp?.driverType==='out',driverId,
+      driverName:disp?.driverName||drivers.find(d=>d.id===driverId)?.name||'',linkType:'priv',linkId:p.id};
+  }
+  const t=tours.find(x=>x.id===a);if(!t)return null;
+  const disp=getGroupDispatch(a,b,c)||null;
+  const driverId=disp?.driverType==='out'?'':(disp?.driverId||'');
+  return{kind,label:t.name+'（'+b+' '+String.fromCharCode(65+c)+'車）',cf:buildGroupCashFlow(a,b,c),disp,isOut:disp?.driverType==='out',driverId,
+    driverName:disp?.driverName||drivers.find(d=>d.id===driverId)?.name||'',linkType:'group',linkId:a+'_'+b+'_bus'+c,args:[a,b,c]};
+}
+function openWriteOff(kind,a,b,c){
+  const x=writeOffCtx(kind,a,b,c);if(!x)return;
+  const remain=Math.max(x.cf.cashBalance,0);
+  if(!remain){alert('這團目前沒有未回帳金額');return;}
+  window._wo=x;
+  const today=localDateStr();
+  document.getElementById('wo-title').innerHTML=`<i class="ti ti-receipt-off"></i> 消帳 － ${x.label}`;
+  document.getElementById('wo-content').innerHTML=`
+    <div style="font-size:13px;margin-bottom:10px">司機：<strong>${x.driverName||'-'}</strong>${x.isOut?' <span class="badge badge-amber">外派</span>':''}　目前未回帳 <strong style="color:var(--red)">$${remain.toLocaleString()}</strong></div>
+    <label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer">
+      <input type="radio" name="wo-mode" value="remit" checked onchange="woModeChanged()">
+      <span><strong>補登回帳</strong><br><span style="font-size:12px;color:var(--text2)">司機已經把錢交給公司，只是沒記。會新增一筆「回帳公司（管理員補登）」，營收成本不變。</span></span>
+    </label>
+    <label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;${x.isOut?'cursor:pointer':'opacity:.5'}">
+      <input type="radio" name="wo-mode" value="waive" ${x.isOut?'':'disabled'} onchange="woModeChanged()">
+      <span><strong>減免（公司不收）</strong><br><span style="font-size:12px;color:var(--text2)">${x.isOut?'財務總表記為「回帳減免」成本。':'只限外派司機，自家司機不能減免。'}</span></span>
+    </label>
+    <div class="fg2"><div><label>金額（元）</label><input id="wo-amt" type="number" min="1" value="${remain}"></div><div id="wo-date-wrap"><label>回帳日期</label><input id="wo-date" type="date" value="${today}"></div></div>
+    <div id="wo-acct-wrap"><label>帳號後5碼（選填）</label><input id="wo-acct" maxlength="5" inputmode="numeric" placeholder="例如 12345"></div>
+    <div><label>原因／備註</label><input id="wo-note" placeholder="例如：現金已當面交給會計"></div>`;
+  om('writeoff');
+}
+function woModeChanged(){
+  const m=document.querySelector('input[name="wo-mode"]:checked')?.value;
+  document.getElementById('wo-date-wrap').style.display=m==='remit'?'':'none';
+  document.getElementById('wo-acct-wrap').style.display=m==='remit'?'':'none';
+}
+async function saveWriteOff(){
+  const x=window._wo;if(!x)return;
+  const mode=document.querySelector('input[name="wo-mode"]:checked')?.value||'remit';
+  const amt=parseInt(document.getElementById('wo-amt').value)||0;
+  const note=document.getElementById('wo-note').value.trim();
+  if(amt<=0)return alert('請輸入金額');
+  const remain=Math.max(x.cf.cashBalance,0);
+  if(amt>remain&&!confirm('金額 $'+amt.toLocaleString()+' 大於未回帳 $'+remain.toLocaleString()+'，消帳後會變成公司應付司機，確定嗎？'))return;
+  setSS('syncing','儲存中…');
+  try{
+    if(mode==='waive'){
+      if(!x.isOut||!x.disp)return alert('減免只限外派司機');
+      const upd={remitWaive:dispWaive(x.disp)+amt,remitWaiveNote:note||x.disp.remitWaiveNote||'管理員消帳',remitWaiveDate:localDateStr()};
+      await db.collection('dispatches').doc(x.disp.id).update(upd);
+      const i=dispatches.findIndex(d=>d.id===x.disp.id);if(i>=0)dispatches[i]={...dispatches[i],...upd};
+      scheduleExtSync();
+    }else{
+      const date=document.getElementById('wo-date').value||localDateStr();
+      const acct=(document.getElementById('wo-acct').value||'').replace(/\D/g,'');
+      const rec={date,type:'remit',amount:amt,driverId:x.driverId||'',driverName:x.driverName||'',car:x.disp?.car||'',
+        note:'管理員補登'+(note?'：'+note:''),remitLinkType:x.linkType,remitLinkId:x.linkId,adminEntry:true,
+        relatedBookingIds:[],relatedPrivateIds:[],advance:false,companyDirect:false,advanceSettled:false};
+      if(acct.length===5)rec.acctLast5=acct;
+      const rid=uid();
+      await db.collection('driverRecs').doc(rid).set(rec);
+      if(!driverRecs.some(r=>r.id===rid))driverRecs.push({id:rid,...rec});
+    }
+    setSS('ok','已同步 ✓');
+    cm('writeoff');
+    // 現金流水視窗開著的話重新整理
+    if(document.getElementById('m-cashflow')?.classList.contains('open')){
+      if(x.kind==='priv'){const p=privates.find(q=>q.id===x.linkId);if(p)renderCashFlowContent(p);}
+      else openGroupCashFlow(...x.args);
+    }
+    refresh();
+  }catch(e){console.error(e);setSS('error','儲存失敗');alert('儲存失敗，請稍後再試');}
+}
 // 包車團負責帳務的A車派車記錄
 function getPrivAccountDispatch(p){return dispatches.find(d=>d.privateId===p.id&&(d.privateBusIdx??0)===0&&d.driverId)||null;}
 
@@ -3800,7 +3885,7 @@ function buildPrivCashFlow(p){
     });
   }
   // 回帳公司：明確連結到這團的記錄（含外派連結回報，外派回報沒有 driverId，所以不能用司機ID過濾）
-  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&(driverIds.includes(r.driverId)||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
+  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&(driverIds.includes(r.driverId)||r.adminEntry||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
     events.push({id:r.id,date:r.date,label:'回帳公司'+(r.source==='ext-link'?'（外派回報）':'')+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
   });
   (p.nightlyHotels||[]).forEach((nh,i)=>{
@@ -3956,7 +4041,7 @@ function cashFlowRowsHtml(events){
   }).join('');
 }
 // 現金流水總覽卡片（包車團/拼團共用）
-function cashFlowOverviewHtml(cf,extraNote){
+function cashFlowOverviewHtml(cf,extraNote,writeOffCall){
   const statusHtml=cf.isEnded
     ? (cf.owedByCompany?`<span style="color:var(--amber-d);font-weight:600">🟠 公司應付司機 $${cf.owedByCompany.toLocaleString()}（已列待請款）</span>`:cf.settled?'<span style="color:var(--green);font-weight:600">✅ 已結清</span>':`<span style="color:var(--red);font-weight:600">⚠️ 尚有現金 $${cf.cashBalance.toLocaleString()} 未回帳</span>`)
     : '<span style="color:var(--text2)">團次進行中</span>';
@@ -3969,14 +4054,14 @@ function cashFlowOverviewHtml(cf,extraNote){
       <div class="stat-card"><div class="stat-label">司機手上剩餘現金</div><div class="stat-val" style="font-size:15px">$${cf.cashBalance.toLocaleString()}</div></div>
     </div>
     ${extraNote?`<div style="font-size:12px;color:var(--text2);margin-bottom:4px">${extraNote}</div>`:''}
-    <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}</div>
+    <div style="padding:8px;background:var(--bg2);border-radius:6px;text-align:center">回帳狀態：${statusHtml}${writeOffCall&&cf.isEnded&&cf.cashBalance>0?` <button class="btn btn-sm" style="margin-left:8px" onclick="${writeOffCall}"><i class="ti ti-receipt-off"></i> 消帳</button>`:''}</div>
   </div>`;
 }
 function renderCashFlowContent(p){
   const cf=buildPrivCashFlow(p);
   const cb=buildPrivCostBreakdown(p);
   document.getElementById('cf-content').innerHTML=`
-    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」')}
+    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」',`openWriteOff('priv','${p.id}')`)}
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
@@ -4171,7 +4256,7 @@ function buildGroupCashFlow(tourId,date,busIdx){
     });
   }
   // 回帳公司：明確連結到這車次的記錄（含外派連結回報，外派回報沒有 driverId）
-  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&((driverId&&r.driverId===driverId)||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
+  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&((driverId&&r.driverId===driverId)||r.adminEntry||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
     events.push({id:r.id,date:r.date,label:'回帳公司'+(r.source==='ext-link'?'（外派回報）':'')+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
   });
   const gn=getGroupNightly(tourId,date,busIdx);
@@ -4291,7 +4376,7 @@ function openGroupCashFlow(tourId,date,busIdx){
   const cb=buildGroupCostBreakdown(tourId,date,busIdx);
   document.getElementById('cf-title').innerHTML=`<i class="ti ti-cash"></i> 現金流水 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
   document.getElementById('cf-content').innerHTML=`
-    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」')}
+    ${cashFlowOverviewHtml(cf,'完整成本與毛利見下方「成本明細與毛利」',`openWriteOff('group','${tourId}','${date}',${busIdx})`)}
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700;color:var(--text2)"><i class="ti ti-calculator"></i> 成本明細與毛利</div>
