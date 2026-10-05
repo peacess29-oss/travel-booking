@@ -3771,6 +3771,9 @@ function calcPrivMisc(p){
 // 組合單一包車團的現金流水：客收(既有income記錄關聯)、回帳公司、代付支出(日期區間)、住宿代付
 function buildPrivCashFlow(p){
   const driverIds=getPrivDriverIds(p);
+  // 帳務車（A車）派車記錄；外派司機的 driverId 是空的，所以另外用 privateBusIdx 找
+  const aDisp=dispatches.find(d=>d.privateId===p.id&&(d.privateBusIdx??0)===0)||null;
+  const isOutAcct=!!(aDisp&&aDisp.driverType==='out');
   const events=[];
   driverRecs.filter(r=>r.type==='income'&&r.relatedPrivateIds?.includes(p.id)).forEach(r=>{
     events.push({id:r.id,date:r.date,label:'客收'+(r.note?'（'+r.note+'）':''),amount:r.amount,kind:'income'});
@@ -3784,9 +3787,6 @@ function buildPrivCashFlow(p){
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     // 回帳公司：明確選擇連結到這團的記錄（不限日期範圍，常見於團結束後幾天才回帳）
-    driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&driverIds.includes(r.driverId)).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
-    });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&driverIds.includes(r.driverId)&&r.date>=p.start&&r.date<=p.end).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
@@ -3799,6 +3799,10 @@ function buildPrivCashFlow(p){
       events.push({id:r.id,date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
+  // 回帳公司：明確連結到這團的記錄（含外派連結回報，外派回報沒有 driverId，所以不能用司機ID過濾）
+  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='priv'&&r.remitLinkId===p.id&&(driverIds.includes(r.driverId)||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
+    events.push({id:r.id,date:r.date,label:'回帳公司'+(r.source==='ext-link'?'（外派回報）':'')+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+  });
   (p.nightlyHotels||[]).forEach((nh,i)=>{
     if((nh.paymentType||'company')!=='driver')return;
     let nightDate=p.start||'';
@@ -3810,10 +3814,21 @@ function buildPrivCashFlow(p){
     if(nh.driverPaid){
       const diff=(nh.driverPaidAmount||0)-quote;
       events.push({id:nh.driverRecId||'',date:nightDate,label:'住宿尾款代付'+(hotel?'-'+hotel.name:'')+depNote,amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+    } else if(isOutAcct){
+      // 外派司機無法在系統勾選已代付，比照外派連結的應回帳公式，直接依報價尾款扣除
+      events.push({date:nightDate,label:'住宿尾款代付（外派，依報價）'+(hotel?'-'+hotel.name:'')+depNote,amount:-quote,kind:'hotel',quote});
     } else {
       events.push({date:nightDate,label:'住宿尾款（尚未代付）'+(hotel?'-'+hotel.name:'')+depNote,amount:0,kind:'hotel-pending',quote});
     }
   });
+  // 外派車資：外派司機從客收直接扣下自己的車資，不需回帳
+  if(isOutAcct&&(aDisp.outwage||0)>0){
+    events.push({date:p.end||p.start||'',label:'外派車資（'+(aDisp.driverName||'外派')+'，從回帳扣除）',amount:-aDisp.outwage,kind:'outwage'});
+  }
+  // 公司免回帳（僅外派）
+  if(isOutAcct&&dispWaive(aDisp)>0){
+    events.push({date:aDisp.remitWaiveDate||p.end||p.start||'',label:'公司免回帳'+(aDisp.remitWaiveNote?'（'+aDisp.remitWaiveNote+'）':''),amount:-dispWaive(aDisp),kind:'waive'});
+  }
   // 外宿補貼：從回帳扣除（多車包車團由A車統一扣，含B/C車司機補貼）
   const nightAllow=dispatches.filter(d=>d.privateId===p.id).reduce((s,d)=>s+(d.nightAllowance||0),0);
   if(nightAllow){
@@ -3821,7 +3836,7 @@ function buildPrivCashFlow(p){
     events.push({date:p.end||p.start||'',label:'外宿補貼（從回帳扣除）'+(split.length?'（含'+split.map(x=>x.bus+'車'+x.driverName+' $'+x.amount.toLocaleString()).join('、')+'，請現場轉交）':''),amount:-nightAllow,kind:'allowance'});
   }
   // 公司補付司機（客收不足，經待請款清單付款）
-  const accDisp=getPrivAccountDispatch(p);
+  const accDisp=getPrivAccountDispatch(p)||aDisp;
   if(accDisp&&(accDisp.shortfallPaid||0)>0){
     events.push({date:accDisp.shortfallPaidDate||p.end||'',label:'公司補付司機（待請款）',amount:accDisp.shortfallPaid,kind:'payout'});
   }
@@ -4123,6 +4138,7 @@ function buildGroupCashFlow(tourId,date,busIdx){
   const t=tours.find(x=>x.id===tourId);
   const disp=getGroupDispatch(tourId,date,busIdx);
   const driverId=disp?.driverId||'';
+  const isOutAcct=!!(disp&&disp.driverType==='out');
   const rangeStart=date,rangeEnd=disp?.end||date;
   const dateBks=bookings.filter(b=>b.tourId===tourId&&b.date===date);
   const buses=buildBuses(dateBks,t?.busMax||8,tourId,date);
@@ -4141,9 +4157,6 @@ function buildGroupCashFlow(tourId,date,busIdx){
       events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
     });
     // 回帳公司：明確選擇連結到這車次的記錄（不限日期範圍，常見於團結束後幾天才回帳）
-    driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&r.driverId===driverId).forEach(r=>{
-      events.push({id:r.id,date:r.date,label:'回帳公司'+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
-    });
     driverRecs.filter(r=>CASHFLOW_EXP_TYPES.includes(r.type)&&!r.advance&&!r.companyDirect&&r.driverId===driverId&&r.date>=rangeStart&&r.date<=rangeEnd).forEach(r=>{
       events.push({id:r.id,date:r.date,label:(TYPE_N[r.type]||r.type)+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
@@ -4157,6 +4170,10 @@ function buildGroupCashFlow(tourId,date,busIdx){
       events.push({id:r.id,date:r.date,label:'代付外派司機薪資'+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'expense'});
     });
   }
+  // 回帳公司：明確連結到這車次的記錄（含外派連結回報，外派回報沒有 driverId）
+  driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType==='group'&&r.remitLinkId===(tourId+'_'+date+'_bus'+busIdx)&&((driverId&&r.driverId===driverId)||r.source==='ext-link'||String(r.id||'').startsWith('ext_'))).forEach(r=>{
+    events.push({id:r.id,date:r.date,label:'回帳公司'+(r.source==='ext-link'?'（外派回報）':'')+(r.acctLast5?'（帳號後5碼 '+r.acctLast5+'）':'')+(r.note?'（'+r.note+'）':''),amount:-r.amount,kind:'remit'});
+  });
   const gn=getGroupNightly(tourId,date,busIdx);
   (gn?.nightlyHotels||[]).forEach((nh,i)=>{
     if((nh.paymentType||'company')!=='driver')return;
@@ -4168,10 +4185,20 @@ function buildGroupCashFlow(tourId,date,busIdx){
     if(nh.driverPaid){
       const diff=(nh.driverPaidAmount||0)-quote;
       events.push({id:nh.driverRecId||'',date:nightDate,label:'住宿尾款代付'+(hotel?'-'+hotel.name:'')+depNote,amount:-(nh.driverPaidAmount||0),kind:'hotel',quote,diff:diff!==0?diff:null});
+    } else if(isOutAcct){
+      events.push({date:nightDate,label:'住宿尾款代付（外派，依報價）'+(hotel?'-'+hotel.name:'')+depNote,amount:-quote,kind:'hotel',quote});
     } else {
       events.push({date:nightDate,label:'住宿尾款（尚未代付）'+(hotel?'-'+hotel.name:'')+depNote,amount:0,kind:'hotel-pending',quote});
     }
   });
+  if(isOutAcct){
+    // 附加費用：外派司機現場代付，比照外派連結應回帳公式扣除
+    const extraAdv=calcGroupBusExtras(t,myBus?.seats||0).reduce((s,x)=>s+x.amount,0);
+    if(extraAdv>0)events.push({date:rangeEnd||date,label:'附加費用代付（外派，從回帳扣除）',amount:-extraAdv,kind:'expense'});
+    // 外派車資：外派司機從客收直接扣下自己的車資
+    if((disp.outwage||0)>0)events.push({date:rangeEnd||date,label:'外派車資（'+(disp.driverName||'外派')+'，從回帳扣除）',amount:-disp.outwage,kind:'outwage'});
+    if(dispWaive(disp)>0)events.push({date:disp.remitWaiveDate||rangeEnd||date,label:'公司免回帳'+(disp.remitWaiveNote?'（'+disp.remitWaiveNote+'）':''),amount:-dispWaive(disp),kind:'waive'});
+  }
   // 外宿補貼：從回帳扣除
   if(disp&&(disp.nightAllowance||0)>0){
     events.push({date:rangeEnd||date,label:'外宿補貼（從回帳扣除）',amount:-disp.nightAllowance,kind:'allowance'});
