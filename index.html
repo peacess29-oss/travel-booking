@@ -1799,7 +1799,7 @@ function renderPrivate(){
         if(!p.nightlyHotels?.length) return `<span style="color:var(--text2);font-size:12px">${p.hotelName||'-'}</span>`;
         return p.nightlyHotels.map((n,i)=>{
           const h=hotels.find(x=>x.id===n.hotelId);
-          const name=h?h.name:n.hotelId?'?':'-';
+          const name=n.selfBooked?'客人自訂':h?h.name:n.hotelId?'?':'-';
           const color=n.booked?'var(--blue)':'var(--text2)';
           return `<span style="color:${color};font-size:12px" title="${n.booked?'第'+(i+1)+'晚已訂房確認':''}">${n.booked?'✓ ':''}${name}</span>`;
         }).join('<br>');
@@ -2389,10 +2389,22 @@ function renderNightlyPicker(){
     const r5rate=hotel?getHotelRoomRate(hotel,nightDate,'r5'):0;
     const r6rate=hotel?getHotelRoomRate(hotel,nightDate,'r6'):0;
     const noRateCard=hotel&&!(hotel.r2||hotel.r3||hotel.r4||hotel.r5||hotel.r6||hotel.r2wk||hotel.r3wk||hotel.r4wk||hotel.r5wk||hotel.r6wk);
+    const selfChk=`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;white-space:nowrap"><input type="checkbox" ${nh.selfBooked?'checked':''} onchange="setNightSelf(${i},this.checked)" style="width:14px;height:14px"> 客人自訂住宿</label>`;
+    if(nh.selfBooked){
+      // 客人自訂：不選酒店、不計成本，只記客人入住的酒店給司機看
+      rows+=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px dashed var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>${selfChk}
+        </div>
+        <input value="${escH(nh.selfHotel||'')}" placeholder="客人入住酒店名稱或地址（選填，司機頁會顯示）" style="height:32px;font-size:13px" onchange="setNightMeta(${i},'selfHotel',this.value.trim())">
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">這晚由客人自行訂房，不列入訂房明細，住宿成本 $0</div>
+      </div>`;
+      continue;
+    }
     rows+=`<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="font-weight:700;font-size:13px;min-width:60px">第${i+1}晚${nightDate?' ('+nightDate+(isWk?' 假日':'')+')':''}</span>
-        <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>
+        <select style="flex:1;min-width:160px;height:34px;font-size:13px" onchange="setNightHotel(${i},this.value)">${hotelOpts.replace(`value="${nh.hotelId}"`,`value="${nh.hotelId}" selected`)}</select>${selfChk}
       </div>
       ${importHintHtml(i,nh)}
       ${hotel?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px">
@@ -2440,6 +2452,16 @@ async function setNightHotel(i,hid){
     return;
   }
   nightlyHotels[i].hotelId=hid;renderNightlyPicker();
+}
+function setNightSelf(i,on){
+  const nh=nightlyHotels[i];if(!nh)return;
+  if(on){
+    if((nh.hotelId||nh.booked||nightDeposit(nh)||nh.hotelPaid||nh.driverPaid)&&!confirm('這晚已選酒店或有訂房／付款記錄，改成「客人自訂住宿」會清除這晚的酒店、房型與付款資料，確定嗎？')){renderNightlyPicker();return;}
+    nightlyHotels[i]={...nh,selfBooked:true,hotelId:'',r2:0,r3:0,r4:0,r5:0,r6:0,finalQuote:0,booked:false,hotelDeposit:0,noDeposit:false,hotelPaid:false,paymentType:'company',bedNote:''};
+  }else{
+    nightlyHotels[i]={...nh,selfBooked:false};
+  }
+  renderNightlyPicker();
 }
 function setNightRooms(i,type,val){nightlyHotels[i][type]=parseInt(val)||0;updateNightlyTotal();refreshNightBalance(i);}
 function setNightMeta(i,key,val){
@@ -2531,7 +2553,7 @@ function printPriv(id){
   if(p.type==='car+hotel'&&p.nightlyHotels?.length){
     const rows=p.nightlyHotels.map((n,i)=>{
       const h=hotels.find(x=>x.id===n.hotelId);
-      const name=h?h.name:(n.hotelId||'-');
+      const name=n.selfBooked?'客人自訂'+(n.selfHotel?'（'+escH(n.selfHotel)+'）':''):h?h.name:(n.hotelId||'-');
       const area=h?.area||'';
       const d=p.start?(()=>{const dt=new Date(p.start);dt.setDate(dt.getDate()+i);return(dt.getMonth()+1)+'/'+(dt.getDate());})():'';
       const rooms=[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');
@@ -5697,7 +5719,7 @@ function renderDriverPage(){
       if(p.type==='car+hotel'&&p.nightlyHotels?.length){
         const rows=p.nightlyHotels.map((n,i)=>{
           const h=hotels.find(x=>x.id===n.hotelId);
-          const name=h?h.name:(n.hotelId||'-');
+          const name=n.selfBooked?'客人自訂'+(n.selfHotel?'（'+escH(n.selfHotel)+'）':''):h?h.name:(n.hotelId||'-');
           const area=h?.area||'';
           const dt=new Date(p.start);dt.setDate(dt.getDate()+i);
           const dateStr=(dt.getMonth()+1)+'/'+(dt.getDate());
@@ -7185,7 +7207,7 @@ function getRoomCheckTrips(){
     if(!needHotel)return;
     const nights=p.end&&p.end>p.start?hbDaysBetween(p.start,p.end):Math.max(0,(p.days||1)-1);
     if(!nights)return;
-    const cells=[];for(let i=0;i<nights;i++){const nh=(p.nightlyHotels||[])[i];cells.push(!nh||!nh.hotelId?'nh':nh.booked?'ok':'no');}
+    const cells=[];for(let i=0;i<nights;i++){const nh=(p.nightlyHotels||[])[i];cells.push(nh&&nh.selfBooked?'self':!nh||!nh.hotelId?'nh':nh.booked?'ok':'no');}
     out.push({src:'priv',id:p.id,start:p.start,title:p.name||'',sub:'包車・'+(nights+1)+'天'+nights+'夜',cells,formed:true,open:`openPriv('${p.id}')`});
   });
   tours.forEach(t=>{
@@ -7201,7 +7223,7 @@ function getRoomCheckTrips(){
       });
     });
   });
-  out.forEach(x=>{x.daysLeft=hbDaysBetween(today,x.start);x.complete=x.cells.every(c=>c==='ok');});
+  out.forEach(x=>{x.daysLeft=hbDaysBetween(today,x.start);x.complete=x.cells.every(c=>c==='ok'||c==='self');});
   return out.sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }
 function roomCheckGapText(cells){
@@ -7209,9 +7231,9 @@ function roomCheckGapText(cells){
   return [no.length?'第'+no.join('、')+'晚未訂':'',nh.length?'第'+nh.join('、')+'晚沒選酒店':''].filter(Boolean).join('、');
 }
 function roomCheckCellsHtml(cells){
-  const st={ok:'background:var(--green-l);color:var(--green-d)',no:'background:var(--red-l);color:var(--red-d)',nh:'border:1px dashed var(--text3);color:var(--text3)'};
-  const ic={ok:'<i class="ti ti-check"></i>',no:'<i class="ti ti-x"></i>',nh:'?'};
-  return cells.map((c,i)=>`<span title="第${i+1}晚" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;font-size:12px;margin-right:3px;${st[c]}">${ic[c]}</span>`).join('');
+  const st={ok:'background:var(--green-l);color:var(--green-d)',no:'background:var(--red-l);color:var(--red-d)',nh:'border:1px dashed var(--text3);color:var(--text3)',self:'background:var(--bg2);color:var(--text2);border:1px solid var(--border)'};
+  const ic={ok:'<i class="ti ti-check"></i>',no:'<i class="ti ti-x"></i>',nh:'?',self:'自'};
+  return cells.map((c,i)=>`<span title="第${i+1}晚${c==='self'?'：客人自訂':''}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;font-size:12px;margin-right:3px;${st[c]}">${ic[c]}</span>`).join('');
 }
 function roomCheckRowHtml(x){
   const urgent=!x.complete&&x.daysLeft<=14;
@@ -7227,7 +7249,7 @@ function roomCheckViewHtml(){
   const inc=trips.filter(x=>!x.complete),done=trips.filter(x=>x.complete);
   const sec=(title,color,icon,list)=>list.length?`<div style="font-size:13px;font-weight:700;color:${color};margin:12px 0 4px"><i class="ti ${icon}"></i> ${title}（${list.length} 團）</div>${list.map(roomCheckRowHtml).join('')}`:'';
   return `<div style="display:flex;gap:14px;font-size:12px;color:var(--text2);margin-bottom:4px;flex-wrap:wrap">
-      <span>${roomCheckCellsHtml(['ok'])}已訂房</span><span>${roomCheckCellsHtml(['no'])}未訂房</span><span>${roomCheckCellsHtml(['nh'])}還沒選酒店</span><span>點任一團可直接打開住宿排程</span></div>
+      <span>${roomCheckCellsHtml(['ok'])}已訂房</span><span>${roomCheckCellsHtml(['no'])}未訂房</span><span>${roomCheckCellsHtml(['nh'])}還沒選酒店</span><span>${roomCheckCellsHtml(['self'])}客人自訂</span><span>點任一團可直接打開住宿排程</span></div>
     ${sec('14 天內出發，還沒訂齊','var(--red)','ti-alert-triangle',inc.filter(x=>x.daysLeft<=14))}
     ${sec('15–30 天內出發，還沒訂齊','var(--amber-d)','ti-clock',inc.filter(x=>x.daysLeft>14&&x.daysLeft<=30))}
     ${sec('30 天以後出發，還沒訂齊','var(--text2)','ti-calendar',inc.filter(x=>x.daysLeft>30))}
@@ -7871,7 +7893,7 @@ function extTripInfoHtml(p,d){
   if(p.type==='car+hotel'&&p.nightlyHotels?.length){
     const rows=p.nightlyHotels.map((n,i)=>{
       const h=hotels.find(x=>x.id===n.hotelId);
-      const name=h?h.name:(n.hotelId||'-');
+      const name=n.selfBooked?'客人自訂'+(n.selfHotel?'（'+escH(n.selfHotel)+'）':''):h?h.name:(n.hotelId||'-');
       const area=h?.area||'';
       const dt=p.start?(()=>{const x=new Date(p.start);x.setDate(x.getDate()+i);return(x.getMonth()+1)+'/'+x.getDate();})():'';
       // 司機現場付尾款的晚數：顯示應付金額（多車包車團只顯示給A車）
