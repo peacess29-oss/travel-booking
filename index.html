@@ -191,6 +191,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
   <div id="p-finance" class="page"></div>
   <div id="p-balance" class="page"></div>
   <div id="p-hotel-stat" class="page"></div>
+  <div id="p-hotel-book" class="page"></div>
   <div id="p-vehicle-status" class="page"></div>
   <div id="p-payroll" class="page"></div>
   <div id="p-checkin" class="page"></div>
@@ -351,6 +352,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
     <div><label>電話</label><input id="pf-phone" placeholder="0912345678"></div>
     <div><label>帳號（手動輸入）</label><input id="pf-contact" placeholder="LINE ID / 微信號…"></div>
   </div>
+  <div class="fg2"><div><label>業務（訂房文字用）</label><select id="pf-sales"></select></div></div>
   <div class="divider"></div>
   <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">特殊需求裝備</div>
   <div class="fg3">
@@ -597,6 +599,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 </div></div>
 
 <!-- 現金流水 -->
+<div class="overlay" id="m-hbcopy"><div class="modal" style="width:480px;max-width:95vw">
+  <div class="mh"><span class="mh-title" id="hbc-title"><i class="ti ti-copy"></i> 訂房文字</span><button class="btn btn-sm" onclick="cm('hbcopy')"><i class="ti ti-x"></i></button></div>
+  <div id="hbc-content"></div>
+  <div class="mf"><div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="cm('hbcopy')">關閉</button><button class="btn btn-primary" onclick="hbDoCopy()"><i class="ti ti-copy"></i> 複製</button></div></div>
+</div></div>
 <div class="overlay" id="m-writeoff"><div class="modal" style="width:440px;max-width:95vw">
   <div class="mh"><span class="mh-title" id="wo-title"><i class="ti ti-receipt-off"></i> 消帳</span><button class="btn btn-sm" onclick="cm('writeoff')"><i class="ti ti-x"></i></button></div>
   <div id="wo-content"></div>
@@ -644,7 +651,7 @@ const SEED_ADMINS=['tourtaxi1025@gmail.com']; // 主管理員第一次登入時�
 const DRIVER_EMAIL_DOMAIN='driver.jaytour.app'; // 司機登入帳號用的內部 Email 網域（不需要真的存在）
 
 // ══════════════════ STATE ══════════════════
-let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
+let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},salesStaff={list:[],defaultId:''},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
 let curPage='p-group',curRole='',curDriverId='',eIds={};
 let pvSearchQ='';
 let balMonth='';
@@ -857,6 +864,7 @@ function initListeners(){
   db.collection('fixedExpenses').onSnapshot(s=>{fixedExpenses=s.docs.map(d=>({id:d.id,...d.data()}));refresh();});
   db.collection('meta').doc('groupStatus').onSnapshot(s=>{groupStatus=s.exists?s.data():{};refresh();});
   db.collection('meta').doc('cars').onSnapshot(s=>{if(s.exists&&s.data().list)carsList=s.data().list;refresh();});
+  db.collection('meta').doc('salesStaff').onSnapshot(s=>{salesStaff=s.exists?{list:[],defaultId:'',...s.data()}:{list:[],defaultId:''};refresh();},()=>{});
   db.collection('meta').doc('costSettings').onSnapshot(s=>{if(s.exists)costSettings={...costSettings,...s.data()};});
 }
 // [司機隔離] 司機登入時只訂閱必要資料
@@ -897,6 +905,7 @@ function refresh(){
   if(curPage==='p-settings')renderSettings();
   if(curPage==='p-customers')renderCustomers();
   if(curPage==='p-hotel-stat')renderHotelStat();
+  if(curPage==='p-hotel-book')renderHotelBook();
   if(curPage==='p-vehicle-status')renderVehicleStatus();
   if(curPage==='p-payroll')renderPayroll();
   if(curPage==='p-checkin')renderCheckin();
@@ -1061,6 +1070,7 @@ function buildNav(role){
     <button class="nav-tab" onclick="showPage('p-dispatch',this)"><i class="ti ti-calendar-week"></i> 派車總表</button>
     <button class="nav-tab" onclick="showPage('p-finance',this)"><i class="ti ti-chart-bar"></i> 財務報表</button>
     <button class="nav-tab" onclick="showPage('p-balance',this)"><i class="ti ti-cash"></i> 尾款收款</button>
+    <button class="nav-tab" onclick="showPage('p-hotel-book',this)"><i class="ti ti-bed"></i> 訂房明細</button>
     <button class="nav-tab" onclick="showPage('p-hotel-stat',this)"><i class="ti ti-building"></i> 酒店統計</button>
     <button class="nav-tab" onclick="showPage('p-vehicle-status',this)"><i class="ti ti-car"></i> 車輛狀況</button>
     <button class="nav-tab" onclick="showPage('p-payroll',this)"><i class="ti ti-report-money"></i> 薪資結算</button>
@@ -1095,6 +1105,7 @@ function showPage(id, tabEl){
   else if(id==='p-finance')renderFinance();
   else if(id==='p-balance')renderBalance();
   else if(id==='p-hotel-stat')renderHotelStat();
+  else if(id==='p-hotel-book')renderHotelBook();
   else if(id==='p-vehicle-status')renderVehicleStatus();
   else if(id==='p-payroll')renderPayroll();
   else if(id==='p-checkin')renderCheckin();
@@ -1884,6 +1895,7 @@ function openPriv(id=''){
   document.getElementById('pf-nights').value=p?.hotelNights||0;
   document.getElementById('pf-ins').value=p?.insCost||0;
   document.getElementById('pf-phone').value=p?.phone||'';document.getElementById('pf-contact').value=p?.contact||'';
+  document.getElementById('pf-sales').innerHTML=salesOptsHtml(p?.salesId||'');
   document.getElementById('pf-ch').value=p?.channel||'WhatsApp';document.getElementById('pf-note').value=p?.note||'';  document.getElementById('pf-itinerary').value=p?.itinerary||'';
   document.getElementById('pf-carseat').value=p?.carSeat||0;
   document.getElementById('pf-booster').value=p?.booster||0;
@@ -2399,6 +2411,10 @@ function renderNightlyPicker(){
         <div><label style="font-size:11px">公司已付訂金（元）</label><input type="number" value="${nh.hotelDeposit||0}" min="0" placeholder="0" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'hotelDeposit',parseInt(this.value)||0)"></div>
         <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setNightMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">✅ 司機已代付 $${(nh.driverPaidAmount||0).toLocaleString()}</span>`:'<span style="font-size:11px;color:var(--amber-d)">⏳ 等待司機現場代付</span>')}</div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:6px;margin-top:6px">
+        <div style="display:flex;align-items:center;padding-top:18px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.noDeposit?'checked':''} onchange="setNightMeta(${i},'noDeposit',this.checked)" style="width:14px;height:14px"> 免訂金</label></div>
+        <div><label style="font-size:11px">床型備註</label><input value="${escH(nh.bedNote||'')}" placeholder="例如：2大床" style="height:30px;font-size:12px" onchange="setNightMeta(${i},'bedNote',this.value.trim())"></div>
+      </div>
       <div id="pf-nbal-${i}" style="font-size:12px;margin-top:4px">${nightBalanceTextHtml(calcNightQuote({start:startDate},nh,i),nh)}</div>
       <div style="font-size:12px;color:${nh.finalQuote?'var(--green-d)':(noRateCard?'var(--red)':'var(--green-d)')};margin-top:4px">${nh.finalQuote?'✅ '+(noRateCard?'住宿總價':'最終報價')+': $'+nh.finalQuote.toLocaleString():(noRateCard?'⚠️ 尚未填寫住宿總價，此晚成本將計為 $0':'（若已取得最終報價請填入，試算時優先採用）')}</div>`:''}
     </div>`;
@@ -2492,7 +2508,7 @@ async function savePriv(){
   const iCost=parseInt(document.getElementById('pf-ins').value)||0;
   const firstHotel=nightlyHotels.length?hotels.find(h=>h.id===nightlyHotels[0]?.hotelId):null;
   const hotelSummary=nightlyHotels.filter(n=>n.hotelId).map((n,i)=>{const h=hotels.find(x=>x.id===n.hotelId);return h?`第${i+1}晚:${h.name}`:''}).filter(Boolean).join(', ');
-  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),itinerary:document.getElementById('pf-itinerary').value.trim(),
+  const data={name,type:document.getElementById('pf-type').value,start,end,days,pax:parseInt(document.getElementById('pf-pax').value)||1,cars,outsource:isOut,price:parseInt(document.getElementById('pf-price').value)||0,deposit:parseInt(document.getElementById('pf-dep').value)||0,driverDayRate:dr,driverNightRate:nr,driverNights:dn,ownDriverDayRate:odr,ownDriverNightRate:onr,ownDriverNights:odn,driverCost:dCost,hotelId:firstHotel?.id||'',hotelNights:isHotel?hn:0,hotelRooms:{r2:0,r3:0,r4:0},hotelCost:isHotel?hCost:0,hotelName:isHotel?(hotelSummary||firstHotel?.name||''):'',nightlyHotels:isHotel?nightlyHotels:[],insCost:iCost,needInsurance:document.getElementById('pf-ins-chk')?.checked||false,channel:document.getElementById('pf-ch').value,salesId:document.getElementById('pf-sales')?.value||getDefaultSalesId(),phone:document.getElementById('pf-phone').value.trim(),contact:document.getElementById('pf-contact').value.trim(),note:document.getElementById('pf-note').value.trim(),itinerary:document.getElementById('pf-itinerary').value.trim(),
     pickup:document.getElementById('pf-pickup').checked,
     pickupTime:document.getElementById('pf-pickup-time').value,
     pickupFlight:document.getElementById('pf-pickup-flight').value.trim(),
@@ -4138,6 +4154,7 @@ function openGroupNightly(tourId,date,busIdx){
   while(arr.length<nights)arr.push(blank());
   arr=arr.slice(0,nights);
   window._gnNightly=arr;
+  window._gnSales=existing?.salesId||getDefaultSalesId();
   document.getElementById('gn-title').innerHTML=`<i class="ti ti-building"></i> 住宿排程 － ${t.name}（${date} ${String.fromCharCode(65+busIdx)}車）`;
   renderGroupNightlyContent();
   om('groupnightly');
@@ -4146,7 +4163,8 @@ function renderGroupNightlyContent(){
   const{date}=eIds.gn;
   const arr=window._gnNightly||[];
   const hotelOpts=cur=>buildHotelOptsHtml(cur);
-  document.getElementById('gn-content').innerHTML=arr.length?arr.map((nh,i)=>{
+  const salesSel=arr.length?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><label style="font-size:12px;white-space:nowrap;margin:0">業務（訂房文字用）</label><select style="height:32px;font-size:13px;max-width:200px" onchange="window._gnSales=this.value">${salesOptsHtml(window._gnSales)}</select></div>`:'';
+  document.getElementById('gn-content').innerHTML=salesSel+(arr.length?arr.map((nh,i)=>{
     let nightDate=date;
     if(date){const d=new Date(date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
     const hotel=hotels.find(h=>h.id===nh.hotelId);
@@ -4177,9 +4195,13 @@ function renderGroupNightlyContent(){
         <div><label style="font-size:11px">公司已付訂金（元）</label><input type="number" value="${nh.hotelDeposit||0}" min="0" placeholder="0" style="height:30px;font-size:12px" onchange="setGnMeta(${i},'hotelDeposit',parseInt(this.value)||0)"></div>
         <div style="display:flex;align-items:center;gap:4px;padding-top:18px">${(nh.paymentType||'company')==='company'?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="setGnMeta(${i},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付款給酒店</label>`:(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">✅ 司機已代付 $${(nh.driverPaidAmount||0).toLocaleString()}</span>`:'<span style="font-size:11px;color:var(--amber-d)">⏳ 等待司機現場代付</span>')}</div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:6px;margin-top:6px">
+        <div style="display:flex;align-items:center;padding-top:18px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="checkbox" ${nh.noDeposit?'checked':''} onchange="setGnMeta(${i},'noDeposit',this.checked)" style="width:14px;height:14px"> 免訂金</label></div>
+        <div><label style="font-size:11px">床型備註</label><input value="${escH(nh.bedNote||'')}" placeholder="例如：2大床" style="height:30px;font-size:12px" onchange="setGnMeta(${i},'bedNote',this.value.trim())"></div>
+      </div>
       <div id="gn-nbal-${i}" style="font-size:12px;margin-top:4px">${nightBalanceTextHtml(calcGroupNightQuote({date},nh,i),nh)}</div>`:''}
     </div>`;
-  }).join(''):'<div class="empty">此行程為一日遊，無需住宿排程</div>';
+  }).join(''):'<div class="empty">此行程為一日遊，無需住宿排程</div>');
 }
 function setGnHotel(i,hid){window._gnNightly[i].hotelId=hid;renderGroupNightlyContent();}
 function setGnRoom(i,k,v){window._gnNightly[i][k]=parseInt(v)||0;refreshGnBalance(i);}
@@ -4196,7 +4218,7 @@ async function saveGroupNightly(){
   const{tourId,date,busIdx}=eIds.gn;
   const id=groupNightlyId(tourId,date,busIdx);
   setSS('syncing','儲存中…');
-  await db.collection('groupNightly').doc(id).set({tourId,date,busIdx,nightlyHotels:window._gnNightly||[]});
+  await db.collection('groupNightly').doc(id).set({tourId,date,busIdx,nightlyHotels:window._gnNightly||[],salesId:window._gnSales||getDefaultSalesId()});
   cm('groupnightly');
 }
 // 該晚報價（司機/公司實付與報價比對用）
@@ -7011,9 +7033,240 @@ function renderNotifyStatus(){
   const p=Notification.permission;
   el.innerHTML=p==='granted'?'<span style="color:var(--green)">✅ 已開啟通知</span>':p==='denied'?'<span style="color:var(--red)">❌ 已封鎖通知，請至瀏覽器設定手動允許</span>':'<span style="color:var(--text2)">尚未開啟通知</span>';
 }
+// ══════════════════ 訂房明細（包車團＋拼團每晚住宿：訂房／訂金／尾款追蹤、複製訂房文字）══════════════════
+// 業務名單存在 meta/salesStaff {list:[{id,name,phone}],defaultId}，只有管理員讀寫
+const SALES_DEFAULT=[{id:'s_su',name:'蘇修毅',phone:'0933775201'}];
+function getSalesList(){return (salesStaff&&salesStaff.list&&salesStaff.list.length)?salesStaff.list:SALES_DEFAULT;}
+function getDefaultSalesId(){const l=getSalesList();return (salesStaff&&salesStaff.defaultId&&l.some(s=>s.id===salesStaff.defaultId))?salesStaff.defaultId:(l[0]?.id||'');}
+function salesOptsHtml(cur){const l=getSalesList();const sel=cur&&l.some(s=>s.id===cur)?cur:getDefaultSalesId();return l.map(s=>`<option value="${s.id}"${s.id===sel?' selected':''}>${escH(s.name)}</option>`).join('');}
+const HB_ROOM_LONG={r2:'二人房',r3:'三人房',r4:'四人房',r5:'五人房',r6:'六人房'};
+function hbRoomsText(nh,long){return ['r2','r3','r4','r5','r6'].filter(k=>(nh[k]||0)>0).map(k=>long?HB_ROOM_LONG[k]+'*'+nh[k]:k.slice(1)+'人×'+nh[k]).join('、')||(long?'':'未填房型');}
+function hbRoomSig(nh){return ['r2','r3','r4','r5','r6'].map(k=>nh[k]||0).join(',')+'|'+(nh.bedNote||'');}
+function hbAddDays(ds,n){if(!ds)return '';const d=new Date(ds);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function rocDate(ds){if(!ds)return '';const[y,m,d]=ds.split('-').map(Number);return (y-1911)+'.'+m+'.'+d;}
+function hbStatus(nh){
+  if(!nh.booked)return 'un';
+  if(!nh.noDeposit&&!nightDeposit(nh))return 'dep';
+  if(isDriverPayNight(nh))return nh.driverPaid?'done':'drv';
+  return nh.hotelPaid?'done':'bal';
+}
+const HB_ST={un:['未訂房','badge-red'],dep:['待付訂金','badge-amber'],bal:['待付尾款','badge-amber'],drv:['尾款司機現場付','badge-blue'],done:['已付清','badge-green']};
+const HB_ST_ORDER=['un','dep','bal','drv','done'];
+function hbBadge(s){return `<span class="badge ${HB_ST[s][1]}" style="white-space:nowrap">${HB_ST[s][0]}</span>`;}
+function gnBlankNight(){return{hotelId:'',r2:0,r3:0,r4:0,r5:0,r6:0,finalQuote:0,booked:false,paymentType:'company',hotelPaid:false,hotelDeposit:0,driverPaid:false,driverPaidAmount:0,driverRecId:''};}
+// 所有包車團＋拼團（多天行程、每天每車）的每一晚住宿
+function getHotelBookEntries(){
+  const out=[];
+  privates.forEach(p=>{
+    if(!p.start)return;
+    (p.nightlyHotels||[]).forEach((nh,i)=>{
+      if(!nh||!nh.hotelId)return;
+      out.push({key:'priv:'+p.id,src:'priv',pid:p.id,i,date:hbAddDays(p.start,i),nh,quote:calcNightQuote(p,nh,i),title:p.name||'',pax:p.pax||0,salesId:p.salesId||'',rep:p.name||''});
+    });
+  });
+  tours.forEach(t=>{
+    const nights=Math.max(0,(t.days||1)-1);if(!nights)return;
+    getDates(t.id).forEach(d=>{
+      buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d).forEach(bus=>{
+        const{gn,fromTemplate}=getGroupNightlyForDisplay(t.id,d,bus.busIdx);
+        const real=getGroupNightly(t.id,d,bus.busIdx);
+        const arr=gn?.nightlyHotels||[];
+        for(let i=0;i<nights;i++){
+          const raw=arr[i];if(!raw||!raw.hotelId)continue;
+          const nh=fromTemplate?{...gnBlankNight(),...raw,booked:false,hotelPaid:false,hotelDeposit:0,noDeposit:false}:raw;
+          out.push({key:'group:'+groupNightlyId(t.id,d,bus.busIdx),src:'group',tourId:t.id,gdate:d,busIdx:bus.busIdx,i,date:hbAddDays(d,i),nh,fromTemplate,
+            quote:calcGroupNightQuote({date:d},nh,i),title:t.name+'（'+d+' '+bus.label+'車）',pax:bus.seats,salesId:real?.salesId||'',
+            rep:'旅光 '+t.name+' '+d+' '+bus.label+'車',formed:isFormed(t,d)});
+        }
+      });
+    });
+  });
+  return out;
+}
+let hbFilter='all',hbView='date',hbFrom='',hbQuery='';
+function setHbFilter(f){hbFilter=f;renderHotelBook();}
+function setHbView(v){hbView=v;renderHotelBook();}
+function renderHotelBook(){
+  const el=document.getElementById('p-hotel-book');if(!el)return;
+  const today=localDateStr();
+  if(!hbFrom)hbFrom=today;
+  const fmt=v=>'$'+(v||0).toLocaleString();
+  const q=hbQuery.trim().toLowerCase();
+  const hName=id=>hotels.find(h=>h.id===id)?.name||'(未知酒店)';
+  // 範圍：起始日之後的晚數＋已過去但錢還沒處理完的晚數
+  const all=getHotelBookEntries().filter(e=>{
+    const s=hbStatus(e.nh);
+    if(!(e.date>=hbFrom||s==='dep'||s==='bal'))return false;
+    if(q&&!(e.title.toLowerCase().includes(q)||hName(e.nh.hotelId).toLowerCase().includes(q)))return false;
+    return true;
+  }).sort((a,b)=>a.date.localeCompare(b.date)||hName(a.nh.hotelId).localeCompare(hName(b.nh.hotelId))||a.title.localeCompare(b.title));
+  all.forEach(e=>e.st=hbStatus(e.nh));
+  window._hbEntries=all;
+  const cnt=s=>all.filter(e=>e.st===s).length;
+  const in7=hbAddDays(today,7),monthEnd=today.slice(0,7)+'-31';
+  const balDue=e=>e.st==='bal'?nightBalanceDue(e.quote,e.nh):0;
+  const due7=all.filter(e=>e.date<=in7).reduce((s,e)=>s+balDue(e),0);
+  const dueMonth=all.filter(e=>e.date<=monthEnd).reduce((s,e)=>s+balDue(e),0);
+  const chips=[['all','全部',all.length],...HB_ST_ORDER.map(s=>[s,HB_ST[s][0],cnt(s)])].map(([k,l,n])=>`<button class="btn btn-sm${hbFilter===k?' btn-primary':''}" onclick="setHbFilter('${k}')">${l} ${n}</button>`).join('');
+  const shown=hbFilter==='all'?all:all.filter(e=>e.st===hbFilter);
+  const srcTag=e=>e.src==='priv'?'<span class="badge badge-blue">包車</span>':`<span class="badge" style="background:#EEEDFE;color:#3C3489">拼團</span>${e.formed===false?' <span class="badge" style="font-size:10px;background:var(--bg2);color:var(--text2)">未成團</span>':''}`;
+  let body='';
+  if(!all.length)body='<div class="empty">這個範圍內沒有住宿晚數</div>';
+  else if(hbView==='date'){
+    body=!shown.length?'<div class="empty">這個狀態沒有晚數</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>入住</th><th>酒店／團</th><th>房型・床型備註</th><th>已訂房</th><th>訂金</th><th>尾款</th><th>狀態</th></tr></thead><tbody>${shown.map(e=>{
+      const idx=all.indexOf(e),nh=e.nh,drv=isDriverPayNight(nh),bal=nightBalanceDue(e.quote,nh);
+      const balCell=drv?(nh.driverPaid?`<span style="font-size:12px;color:var(--green-d)">司機已付 ${fmt(nh.driverPaidAmount)}</span>`:`<span style="font-size:12px;color:var(--text2)">司機現場付 ${fmt(bal)}</span>`)
+        :`<label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="checkbox" ${nh.hotelPaid?'checked':''} onchange="hbSet(${idx},'hotelPaid',this.checked)" style="width:14px;height:14px"> 已付 ${fmt(bal)}</label>`;
+      return `<tr>
+        <td style="white-space:nowrap;font-size:12px">${e.date}${e.date<today?'<div style="font-size:11px;color:var(--red)">已過</div>':''}</td>
+        <td style="font-size:12px"><div style="font-weight:600">${escH(hName(nh.hotelId))}</div><div>${srcTag(e)} ${escH(e.title)}</div>${e.fromTemplate?'<div style="font-size:11px;color:var(--text3)">（行程住宿範本，尚未建立此車排程）</div>':''}</td>
+        <td style="font-size:12px;min-width:130px">${hbRoomsText(nh)}<input value="${escH(nh.bedNote||'')}" placeholder="床型備註，例如：2大床" style="height:28px;font-size:12px;margin-top:4px" onchange="hbSet(${idx},'bedNote',this.value.trim())"></td>
+        <td><input type="checkbox" ${nh.booked?'checked':''} onchange="hbSet(${idx},'booked',this.checked)" style="width:16px;height:16px" title="已訂房確認"></td>
+        <td style="min-width:110px"><input type="number" min="0" value="${nightDeposit(nh)||''}" placeholder="訂金" ${nh.noDeposit?'disabled':''} style="height:28px;font-size:12px;width:90px" onchange="hbSet(${idx},'hotelDeposit',parseInt(this.value)||0)">
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:3px;cursor:pointer;white-space:nowrap"><input type="checkbox" ${nh.noDeposit?'checked':''} onchange="hbSet(${idx},'noDeposit',this.checked)" style="width:13px;height:13px"> 免訂金</label></td>
+        <td>${balCell}</td>
+        <td>${hbBadge(e.st)}</td></tr>`;}).join('')}</tbody></table></div>`;
+  }else{
+    // 依酒店：同一團、同一家酒店、連續晚數且房型相同 → 合併成一筆入住
+    const groups={};
+    all.forEach(e=>{(groups[e.key+'|'+e.nh.hotelId]=groups[e.key+'|'+e.nh.hotelId]||[]).push(e);});
+    const stays=[];
+    Object.values(groups).forEach(arr=>{
+      arr.sort((a,b)=>a.i-b.i);let cur=null;
+      arr.forEach(e=>{const sig=hbRoomSig(e.nh);if(cur&&e.i===cur.last.i+1&&sig===cur.sig){cur.nights.push(e);cur.last=e;}else{cur={nights:[e],last:e,sig};stays.push(cur);}});
+    });
+    stays.forEach(s=>{s.first=s.nights[0];s.checkin=s.first.date;s.checkout=hbAddDays(s.last.date,1);s.hotelId=s.first.nh.hotelId;s.sts=[...new Set(s.nights.map(e=>e.st))];});
+    const vis=hbFilter==='all'?stays:stays.filter(s=>s.sts.includes(hbFilter));
+    window._hbStays=vis;
+    const byHotel={};vis.forEach((s,k)=>{(byHotel[s.hotelId]=byHotel[s.hotelId]||[]).push(k);});
+    const hotelIds=Object.keys(byHotel).sort((a,b)=>vis[byHotel[a][0]].checkin.localeCompare(vis[byHotel[b][0]].checkin));
+    body=!vis.length?'<div class="empty">這個狀態沒有晚數</div>':hotelIds.map(hid=>{
+      const ks=byHotel[hid].sort((a,b)=>vis[a].checkin.localeCompare(vis[b].checkin));
+      return `<div class="card" style="margin-bottom:10px;padding:10px 14px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px"><i class="ti ti-building"></i> ${escH(hName(hid))}</div>
+        ${ks.map(k=>{const s=vis[k],n=s.nights.length;return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border);flex-wrap:wrap">
+          <div style="font-size:13px;min-width:0"><span style="font-weight:600">${s.checkin} 入住 → ${s.checkout}${n>=2?' (共'+n+'晚)':''}</span><div style="font-size:12px;margin-top:2px">${srcTag(s.first)} ${escH(s.first.title)}・${hbRoomsText(s.first.nh)}${s.first.nh.bedNote?'（'+escH(s.first.nh.bedNote)+'）':''}・${s.first.pax}人</div></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${HB_ST_ORDER.filter(x=>s.sts.includes(x)).map(hbBadge).join('')}<button class="btn btn-sm" onclick="openHbCopy(${k})"><i class="ti ti-copy"></i> 複製訂房文字</button></div>
+        </div>`;}).join('')}
+      </div>`;}).join('');
+  }
+  el.innerHTML=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <span class="card-title" style="margin:0"><i class="ti ti-bed"></i> 訂房明細</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--text2)">入住日從</label><input type="date" value="${hbFrom}" style="height:32px;font-size:13px;width:150px" onchange="hbFrom=this.value||'';renderHotelBook()">
+        <input value="${escH(hbQuery)}" placeholder="搜尋酒店／團名" style="height:32px;font-size:13px;width:150px" onchange="hbQuery=this.value;renderHotelBook()">
+      </div>
+    </div>
+    <div class="stat-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
+      <div class="stat-card"><div class="stat-label">未訂房</div><div class="stat-val" style="color:${cnt('un')?'var(--red)':'var(--green)'}">${cnt('un')} 晚</div></div>
+      <div class="stat-card"><div class="stat-label">待付訂金</div><div class="stat-val" style="color:${cnt('dep')?'var(--amber-d)':'var(--green)'}">${cnt('dep')} 晚</div></div>
+      <div class="stat-card"><div class="stat-label">7 天內公司應付尾款（含逾期）</div><div class="stat-val">${fmt(due7)}</div></div>
+      <div class="stat-card"><div class="stat-label">本月公司應付尾款（含逾期）</div><div class="stat-val">${fmt(dueMonth)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm${hbView==='date'?' btn-primary':''}" onclick="setHbView('date')"><i class="ti ti-calendar"></i> 依日期</button><button class="btn btn-sm${hbView==='hotel'?' btn-primary':''}" onclick="setHbView('hotel')"><i class="ti ti-building"></i> 依酒店</button></div>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">預設列出入住日在起始日之後的晚數，以及已過去但訂金／尾款還沒付的晚數。在這裡修改會直接存檔，包車團與拼團住宿排程同步更新。</div>
+    ${body}
+  </div>`;
+}
+async function hbSet(idx,field,val){
+  const e=(window._hbEntries||[])[idx];if(!e)return;
+  setSS('syncing','儲存中…');
+  try{
+    if(e.src==='priv'){
+      const p=privates.find(x=>x.id===e.pid);if(!p||!(p.nightlyHotels||[])[e.i])return;
+      const arr=p.nightlyHotels.map(x=>({...x}));
+      arr[e.i][field]=val;
+      await db.collection('privates').doc(p.id).update({nightlyHotels:arr});
+      p.nightlyHotels=arr;
+    }else{
+      const t=tours.find(x=>x.id===e.tourId);const nights=Math.max(0,(t?.days||1)-1);
+      const id=groupNightlyId(e.tourId,e.gdate,e.busIdx);
+      const real=getGroupNightly(e.tourId,e.gdate,e.busIdx);
+      let arr=(real&&real.nightlyHotels?.length)?real.nightlyHotels.map(x=>({...gnBlankNight(),...x}))
+        :(t?.nightlyHotels||[]).map(nh=>({...gnBlankNight(),hotelId:nh.hotelId,r2:nh.r2||0,r3:nh.r3||0,r4:nh.r4||0,r5:nh.r5||0,r6:nh.r6||0}));
+      while(arr.length<nights)arr.push(gnBlankNight());
+      arr=arr.slice(0,nights);
+      if(!arr[e.i])return;
+      arr[e.i][field]=val;
+      const doc={tourId:e.tourId,date:e.gdate,busIdx:e.busIdx,nightlyHotels:arr};
+      await db.collection('groupNightly').doc(id).set(doc,{merge:true});
+      const gi=groupNightlies.findIndex(g=>g.id===id);
+      if(gi>=0)groupNightlies[gi]={...groupNightlies[gi],...doc};else groupNightlies.push({id,...doc});
+    }
+    setSS('ok','已同步 ✓');
+  }catch(err){console.error(err);setSS('error','儲存失敗');alert('儲存失敗，請稍後再試');}
+  renderHotelBook();
+}
+// ── 複製訂房文字 ──
+function openHbCopy(k){
+  const s=(window._hbStays||[])[k];if(!s)return;
+  window._hbCopy=s;
+  const sid=s.first.salesId&&getSalesList().some(x=>x.id===s.first.salesId)?s.first.salesId:getDefaultSalesId();
+  document.getElementById('hbc-title').innerHTML=`<i class="ti ti-copy"></i> 訂房文字 － ${escH(hotels.find(h=>h.id===s.hotelId)?.name||'')}`;
+  document.getElementById('hbc-content').innerHTML=`
+    <div class="fg2"><div><label>業務</label><select id="hbc-sales" onchange="hbCopyPreview()">${salesOptsHtml(sid)}</select></div><div><label>旅客國籍</label><input id="hbc-nat" value="${escH(window._hbLastNat||'')}" placeholder="例如：新加坡" oninput="hbCopyPreview()"></div></div>
+    <div class="fg2"><div><label>大人</label><input id="hbc-ad" type="number" min="0" value="${s.first.pax||0}" oninput="hbCopyPreview()"></div><div><label>小孩</label><input id="hbc-ch" type="number" min="0" value="0" oninput="hbCopyPreview()"></div></div>
+    <div><label>預覽（可直接修改後再複製）</label><textarea id="hbc-text" rows="9" style="font-size:13px;line-height:1.6;width:100%"></textarea></div>
+    <div id="hbc-msg" style="font-size:12px;color:var(--green-d);min-height:16px"></div>`;
+  hbCopyPreview();
+  om('hbcopy');
+}
+function hbCopyPreview(){
+  const s=window._hbCopy;if(!s)return;
+  const sp=getSalesList().find(x=>x.id===document.getElementById('hbc-sales').value)||{};
+  const nat=document.getElementById('hbc-nat').value.trim();
+  const ad=parseInt(document.getElementById('hbc-ad').value)||0,ch=parseInt(document.getElementById('hbc-ch').value)||0;
+  const n=s.nights.length,bed=(s.first.nh.bedNote||'').trim();
+  document.getElementById('hbc-text').value=[
+    `業務：${sp.name||''} 電話：${sp.phone||''}`,
+    `旅客代表姓名：${s.first.rep}`,
+    `旅客國籍：${nat}`,
+    `旅客人數：${ad}大${ch>0?ch+'小':''}`,
+    `飯店名稱：${hotels.find(h=>h.id===s.hotelId)?.name||''}`,
+    `入住日期：${rocDate(s.checkin)}`,
+    `退房日期：${rocDate(s.checkout)}${n>=2?'(共'+n+'晚)':''}`,
+    `客房型數量：${hbRoomsText(s.first.nh,true)}${bed?'（'+bed+'）':''}`
+  ].join('\n');
+  document.getElementById('hbc-msg').textContent='';
+}
+async function hbDoCopy(){
+  const ta=document.getElementById('hbc-text');if(!ta)return;
+  window._hbLastNat=document.getElementById('hbc-nat').value.trim();
+  try{await navigator.clipboard.writeText(ta.value);}
+  catch(e){ta.select();document.execCommand('copy');}
+  document.getElementById('hbc-msg').textContent='✅ 已複製，可以貼到 LINE 或 email';
+}
+// ── 設定：業務名單 ──
+function salesRowHtml(s,def){return `<div class="sales-row" data-id="${s.id}" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+  <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="radio" name="sales-def" value="${s.id}" ${s.id===def?'checked':''}> 預設</label>
+  <input class="sales-name" value="${escH(s.name||'')}" placeholder="姓名" style="max-width:140px">
+  <input class="sales-phone" value="${escH(s.phone||'')}" placeholder="電話" style="max-width:160px">
+  <button class="btn btn-sm btn-danger" onclick="this.closest('.sales-row').remove()"><i class="ti ti-trash"></i></button></div>`;}
+function salesCardHtml(){
+  const def=getDefaultSalesId();
+  return `<div class="card"><div class="card-title"><i class="ti ti-id-badge-2"></i> 業務名單（訂房文字用）</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">包車團表單與拼團住宿排程可選業務；沒選的訂單會帶入「預設」業務。</div>
+    <div id="sales-rows">${getSalesList().map(s=>salesRowHtml(s,def)).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:4px"><button class="btn btn-sm" onclick="document.getElementById('sales-rows').insertAdjacentHTML('beforeend',salesRowHtml({id:'s_'+uid().slice(0,8),name:'',phone:''},''))"><i class="ti ti-plus"></i> 新增業務</button><button class="btn btn-sm btn-primary" onclick="saveSales()"><i class="ti ti-device-floppy"></i> 儲存業務名單</button></div>
+  </div>`;
+}
+async function saveSales(){
+  const list=[...document.querySelectorAll('#sales-rows .sales-row')].map(r=>({id:r.dataset.id,name:r.querySelector('.sales-name').value.trim(),phone:r.querySelector('.sales-phone').value.trim()})).filter(s=>s.name);
+  if(!list.length)return alert('至少要有一位業務');
+  let defaultId=document.querySelector('input[name="sales-def"]:checked')?.value||'';
+  if(!list.some(s=>s.id===defaultId))defaultId=list[0].id;
+  setSS('syncing','儲存中…');
+  try{await db.collection('meta').doc('salesStaff').set({list,defaultId});salesStaff={list,defaultId};setSS('ok','已同步 ✓');alert('業務名單已儲存');}
+  catch(e){console.error(e);setSS('error','儲存失敗');alert('儲存失敗，請稍後再試');}
+}
+
 function renderSettings(){
   const el=document.getElementById('p-settings');
-  el.innerHTML=adminListCardHtml()+securityCardHtml()+`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
+  el.innerHTML=adminListCardHtml()+securityCardHtml()+salesCardHtml()+`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-users"></i> 自家司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','own')"><i class="ti ti-plus"></i> 新增</button></div>
     ${!drivers.filter(d=>d.type==='own').length?'<div class="empty" style="padding:1rem">尚無司機</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>姓名</th><th>電話</th><th>常用車輛</th><th>月薪</th><th>每趟</th><th>備註</th><th>登入帳號</th><th></th></tr></thead><tbody>${drivers.filter(d=>d.type==='own').map(d=>`<tr><td style="font-weight:600">${d.name}</td><td>${d.phone||'-'}</td><td style="font-size:12px">${d.preferredCar?'<span class="badge badge-blue">'+d.preferredCar+'</span>':'-'}</td><td>${d.salary?'$'+d.salary.toLocaleString():'-'}</td><td>${d.perTrip?'$'+d.perTrip.toLocaleString():'-'}</td><td style="font-size:12px;color:var(--text2)">${d.note||'-'}</td><td style="white-space:nowrap">${d.authUid?'<span class="badge badge-green"><i class="ti ti-lock"></i> 已開通</span>':(d.loginDisabled?'<span class="badge badge-red"><i class="ti ti-ban"></i> 已停用</span>':'<span class="badge badge-amber"><i class="ti ti-lock-open"></i> 未開通</span>')}<button class="btn btn-sm" style="margin-left:6px;padding:2px 7px;font-size:11px" onclick="setDriverPassword('${d.id}')"><i class="ti ti-key"></i> 設定密碼</button>${d.authUid?`<button class="btn btn-sm btn-danger" style="margin-left:4px;padding:2px 7px;font-size:11px" onclick="disableDriverLogin('${d.id}')"><i class="ti ti-ban"></i> 停用</button>`:''}</td><td><button class="btn btn-sm" onclick="openDriver('${d.id}')"><i class="ti ti-edit"></i></button></td></tr>`).join('')}</tbody></table></div>`}
   </div>
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="card-title" style="margin:0"><i class="ti ti-user-bolt"></i> 外派司機</span><button class="btn btn-primary btn-sm" onclick="openDriver('','external')"><i class="ti ti-plus"></i> 新增</button></div>
