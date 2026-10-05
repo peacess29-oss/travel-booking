@@ -7301,7 +7301,9 @@ function openHbCopy(k){
   const sid=s.first.salesId&&getSalesList().some(x=>x.id===s.first.salesId)?s.first.salesId:getDefaultSalesId();
   document.getElementById('hbc-title').innerHTML=`<i class="ti ti-copy"></i> 訂房文字 － ${escH(hotels.find(h=>h.id===s.hotelId)?.name||'')}`;
   document.getElementById('hbc-content').innerHTML=`
-    <div class="fg2"><div><label>業務</label><select id="hbc-sales" onchange="hbCopyPreview()">${salesOptsHtml(sid)}</select></div><div><label>旅客國籍</label><input id="hbc-nat" value="${escH(window._hbLastNat||'')}" placeholder="例如：新加坡" oninput="hbCopyPreview()"></div></div>
+    <div class="fg2"><div><label>業務</label><select id="hbc-sales" onchange="hbCopyPreview()">${salesOptsHtml(sid)}</select></div><div><label>旅客國籍</label>${(()=>{const last=window._hbLastNat||'',preset=['馬來西亞','新加坡','台灣'],isPre=!last||preset.includes(last);
+      return `<select id="hbc-nat-sel" onchange="document.getElementById('hbc-nat').style.display=this.value==='__other__'?'':'none';hbCopyPreview()">${preset.map(n=>`<option value="${n}"${(last||'馬來西亞')===n?' selected':''}>${n}</option>`).join('')}<option value="__other__"${isPre?'':' selected'}>自行輸入</option></select>
+      <input id="hbc-nat" value="${isPre?'':escH(last)}" placeholder="輸入國籍" style="margin-top:6px;${isPre?'display:none':''}" oninput="hbCopyPreview()">`;})()}</div></div>
     <div class="fg2"><div><label>大人</label><input id="hbc-ad" type="number" min="0" value="${s.first.pax||0}" oninput="hbCopyPreview()"></div><div><label>小孩</label><input id="hbc-ch" type="number" min="0" value="0" oninput="hbCopyPreview()"></div></div>
     <div><label>預覽（可直接修改後再複製）</label><textarea id="hbc-text" rows="9" style="font-size:13px;line-height:1.6;width:100%"></textarea></div>
     <div id="hbc-msg" style="font-size:12px;color:var(--green-d);min-height:16px"></div>`;
@@ -7311,12 +7313,12 @@ function openHbCopy(k){
 function hbCopyPreview(){
   const s=window._hbCopy;if(!s)return;
   const sp=getSalesList().find(x=>x.id===document.getElementById('hbc-sales').value)||{};
-  const nat=document.getElementById('hbc-nat').value.trim();
+  const nat=hbCopyNat();
   const ad=parseInt(document.getElementById('hbc-ad').value)||0,ch=parseInt(document.getElementById('hbc-ch').value)||0;
   const n=s.nights.length,bed=(s.first.nh.bedNote||'').trim();
   document.getElementById('hbc-text').value=[
     `業務：${sp.name||''} 電話：${sp.phone||''}`,
-    `旅客代表姓名：${s.first.rep}`,
+    ...(s.first.src==='group'?[]:[`旅客代表姓名：${s.first.rep}`]),
     `旅客國籍：${nat}`,
     `旅客人數：${ad}大${ch>0?ch+'小':''}`,
     `飯店名稱：${hotels.find(h=>h.id===s.hotelId)?.name||''}`,
@@ -7326,9 +7328,10 @@ function hbCopyPreview(){
   ].join('\n');
   document.getElementById('hbc-msg').textContent='';
 }
+function hbCopyNat(){const sel=document.getElementById('hbc-nat-sel')?.value||'';return sel==='__other__'?(document.getElementById('hbc-nat')?.value||'').trim():sel;}
 async function hbDoCopy(){
   const ta=document.getElementById('hbc-text');if(!ta)return;
-  window._hbLastNat=document.getElementById('hbc-nat').value.trim();
+  window._hbLastNat=hbCopyNat();
   try{await navigator.clipboard.writeText(ta.value);}
   catch(e){ta.select();document.execCommand('copy');}
   document.getElementById('hbc-msg').textContent='✅ 已複製，可以貼到 LINE 或 email';
