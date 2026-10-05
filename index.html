@@ -5359,8 +5359,8 @@ function renderBalance(){
   el.style.minHeight='200px';
   const selMonth=document.getElementById('bal-month')?.value||balMonth;
   const filterByMonth=(date)=>!selMonth||date.startsWith(selMonth);
-  const tourItems=tours.flatMap(t=>[...new Set(getBks(t.id).map(b=>b.date))].sort().filter(d=>filterByMonth(d)).map(d=>{const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);if(!bks.length)return null;const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price'),bal=pr-dep;return{label:t.name+' / '+d,bks:bks.map(b=>({...b,perPax:bal})),subtotal:bks.reduce((s,b)=>s+b.count*bal,0)};}).filter(Boolean));
-  const pvItems=privates.filter(p=>!p.balancePaid&&filterByMonth(p.start||'')).map(p=>{
+  const tourItems=tours.flatMap(t=>[...new Set(getBks(t.id).map(b=>b.date))].sort().filter(d=>filterByMonth(d)).map(d=>{const bks=getDateBks(t.id,d).filter(b=>!b.balancePaid);if(!bks.length)return null;const dep=getPrice(t,d,'deposit'),pr=getPrice(t,d,'price'),bal=pr-dep;return{label:t.name+' / '+d,bks:bks.map(b=>({...b,perPax:bal})),subtotal:bks.reduce((s,b)=>s+b.count*bal,0)};}).filter(x=>x&&x.subtotal>0)); // 尾款為0（客人已全額付清）不列入待收
+  const pvItems=privates.filter(p=>!p.balancePaid&&filterByMonth(p.start||'')&&((p.price||0)-(p.deposit||0))>0).map(p=>{
     // 代墊房費：booked + company + hotelPaid + 尾款未收
     const advHotel=calcPrivAdvanceHotel(p);
     return{label:p.name+'（'+(p.type==='car+hotel'?'車+住宿':'純包車')+'）'+p.start,subtotal:p.price-p.deposit,id:p.id,advHotel};
@@ -7991,6 +7991,7 @@ function extIsSettled(remitType,remitId,shouldRemit,waive,endDate){
   const confirmed=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitType&&r.remitLinkId===remitId&&extRecConfirmed(r)).reduce((s,r)=>s+(r.amount||0),0);
   return (shouldRemit>0&&confirmed>=shouldRemit)||(waive>0&&shouldRemit<=0);
 }
+const EXT_NO_BALANCE_NOTE='<div style="font-size:12px;color:var(--green-d);margin:12px 0;padding:8px 10px;background:var(--green-l);border-radius:8px">✅ 客人尾款已付清（客收 $0），現場不用收款，也不需要通知客收</div>';
 const EXT_SETTLED_BANNER='<div style="font-size:13px;font-weight:600;color:var(--green-d);padding:10px 12px;background:var(--green-l);border-radius:8px;margin-bottom:14px">✅ 本團帳務已結清，謝謝您！辛苦了~</div>';
 // 已通知清單（每筆一行：日期、金額、後5碼、確認狀態）
 function extPriorListHtml(recs,withLast5){
@@ -8077,12 +8078,12 @@ function renderExternalSummary(d){
       </div>
       <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
-      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
+      ${balance<=0&&!priorReports.length?EXT_NO_BALANCE_NOTE:`<div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
       ${extPriorListHtml(priorReports,false)}
-      <div style="display:${settled?'none':'flex'};gap:6px;margin-bottom:14px">
+      <div style="display:${settled||balance<=0?'none':'flex'};gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
         <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
-      </div>
+      </div>`}
       ${extRemitSectionHtml('priv',p.id,shouldRemit,d.driverId,d.driverName,'reportPrivRemit')}
       ${disclaimer}
     `;
@@ -8136,10 +8137,11 @@ function renderExternalSummary(d){
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
         const action=repRec
           ?`<div style="font-size:12px;white-space:nowrap"><span style="color:var(--green)"><i class="ti ti-check"></i> 已通知</span><div style="font-size:11px">${extRecStatusHtml(repRec)}</div></div>`
-          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
+          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'<span style="font-size:12px;color:var(--text2);white-space:nowrap">已付清・免通知</span>');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
 `}
+      ${custRows.length&&totalBalance<=0?EXT_NO_BALANCE_NOTE:''}
       ${extrasHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收合計',totalBalance)}
