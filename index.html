@@ -1201,6 +1201,7 @@ function renderGroup(){
 
   el.innerHTML=`
   ${unsettledGHtml}
+  ${roomCheckAlertHtml('group')}
   <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid var(--border)">
     <button class="nav-tab${gfTab==='active'?' active':''}" onclick="setGfTab('active')"><i class="ti ti-users-group"></i> 拼團行程（${tours.length}）</button>
     <button class="nav-tab${gfTab==='records'?' active':''}" onclick="setGfTab('records')"><i class="ti ti-history"></i> 出團記錄（${doneRecords.length}）</button>
@@ -1736,6 +1737,7 @@ function renderPrivate(){
   </div>`:'';
   el.innerHTML=`
   ${unsettledHtml}
+  ${roomCheckAlertHtml('priv')}
   ${hotelWarnHtml}
   <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
     <button class="nav-tab${pvTab==='active'?' active':''}" style="border-radius:0" onclick="setPvTab('active')"><i class="ti ti-car"></i> 進行中（${activePrivs.length}）</button>
@@ -7083,7 +7085,7 @@ function getHotelBookEntries(){
   });
   return out;
 }
-let hbFilter='all',hbView='date',hbFrom='',hbQuery='';
+let hbFilter='all',hbView='check',hbFrom='',hbQuery='';
 function setHbFilter(f){hbFilter=f;renderHotelBook();}
 function setHbView(v){hbView=v;renderHotelBook();}
 function renderHotelBook(){
@@ -7111,7 +7113,8 @@ function renderHotelBook(){
   const shown=hbFilter==='all'?all:all.filter(e=>e.st===hbFilter);
   const srcTag=e=>e.src==='priv'?'<span class="badge badge-blue">包車</span>':`<span class="badge" style="background:#EEEDFE;color:#3C3489">拼團</span>${e.formed===false?' <span class="badge" style="font-size:10px;background:var(--bg2);color:var(--text2)">未成團</span>':''}`;
   let body='';
-  if(!all.length)body='<div class="empty">這個範圍內沒有住宿晚數</div>';
+  if(hbView==='check')body=roomCheckViewHtml();
+  else if(!all.length)body='<div class="empty">這個範圍內沒有住宿晚數</div>';
   else if(hbView==='date'){
     body=!shown.length?'<div class="empty">這個狀態沒有晚數</div>':`<div class="tbl-wrap"><table class="xtable"><thead><tr><th>入住</th><th>酒店／團</th><th>房型・床型備註</th><th>已訂房</th><th>訂金</th><th>尾款</th><th>狀態</th></tr></thead><tbody>${shown.map(e=>{
       const idx=all.indexOf(e),nh=e.nh,drv=isDriverPayNight(nh),bal=nightBalanceDue(e.quote,nh);
@@ -7165,13 +7168,81 @@ function renderHotelBook(){
       <div class="stat-card"><div class="stat-label">本月公司應付尾款（含逾期）</div><div class="stat-val">${fmt(dueMonth)}</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
-      <div style="display:flex;gap:6px"><button class="btn btn-sm${hbView==='date'?' btn-primary':''}" onclick="setHbView('date')"><i class="ti ti-calendar"></i> 依日期</button><button class="btn btn-sm${hbView==='hotel'?' btn-primary':''}" onclick="setHbView('hotel')"><i class="ti ti-building"></i> 依酒店</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${hbView==='check'?'':chips}</div>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm${hbView==='check'?' btn-primary':''}" onclick="setHbView('check')"><i class="ti ti-list-check"></i> 出團前檢查</button><button class="btn btn-sm${hbView==='date'?' btn-primary':''}" onclick="setHbView('date')"><i class="ti ti-calendar"></i> 依日期</button><button class="btn btn-sm${hbView==='hotel'?' btn-primary':''}" onclick="setHbView('hotel')"><i class="ti ti-building"></i> 依酒店</button></div>
     </div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">預設列出入住日在起始日之後的晚數，以及已過去但訂金／尾款還沒付的晚數。在這裡修改會直接存檔，包車團與拼團住宿排程同步更新。</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px">${hbView==='check'?'列出所有還沒出發、需要住宿的包車團（車＋住宿）與多天拼團（每車），每一晚都檢查，包含還沒選酒店的晚數。':'預設列出入住日在起始日之後的晚數，以及已過去但訂金／尾款還沒付的晚數。在這裡修改會直接存檔，包車團與拼團住宿排程同步更新。'}</div>
     ${body}
   </div>`;
 }
+// ── 出團前訂房檢查：以「團」為單位，每晚三種狀態 ok(已訂)／no(未訂)／nh(還沒選酒店) ──
+function hbDaysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function getRoomCheckTrips(){
+  const today=localDateStr(),out=[];
+  privates.forEach(p=>{
+    if(!p.start||p.start<today)return;
+    const needHotel=p.type==='car+hotel'||(!p.type&&(p.nightlyHotels||[]).some(n=>n&&n.hotelId));
+    if(!needHotel)return;
+    const nights=p.end&&p.end>p.start?hbDaysBetween(p.start,p.end):Math.max(0,(p.days||1)-1);
+    if(!nights)return;
+    const cells=[];for(let i=0;i<nights;i++){const nh=(p.nightlyHotels||[])[i];cells.push(!nh||!nh.hotelId?'nh':nh.booked?'ok':'no');}
+    out.push({src:'priv',id:p.id,start:p.start,title:p.name||'',sub:'包車・'+(nights+1)+'天'+nights+'夜',cells,formed:true,open:`openPriv('${p.id}')`});
+  });
+  tours.forEach(t=>{
+    const nights=Math.max(0,(t.days||1)-1);if(!nights)return;
+    getDates(t.id).filter(d=>d>=today).forEach(d=>{
+      const formed=isFormed(t,d);
+      buildBuses(getDateBks(t.id,d),t.busMax||8,t.id,d).forEach(bus=>{
+        const real=getGroupNightly(t.id,d,bus.busIdx);
+        const disp=getGroupNightlyForDisplay(t.id,d,bus.busIdx).gn;
+        const cells=[];
+        for(let i=0;i<nights;i++){const r=(real?.nightlyHotels||[])[i],dn=(disp?.nightlyHotels||[])[i];cells.push(!(r?.hotelId||dn?.hotelId)?'nh':(r?.hotelId&&r.booked)?'ok':'no');}
+        out.push({src:'group',id:groupNightlyId(t.id,d,bus.busIdx),start:d,title:t.name+' '+bus.label+'車',sub:'拼團・'+(nights+1)+'天'+nights+'夜・'+bus.seats+'人',cells,formed,open:`openGroupNightly('${t.id}','${d}',${bus.busIdx})`});
+      });
+    });
+  });
+  out.forEach(x=>{x.daysLeft=hbDaysBetween(today,x.start);x.complete=x.cells.every(c=>c==='ok');});
+  return out.sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
+}
+function roomCheckGapText(cells){
+  const no=[],nh=[];cells.forEach((c,i)=>{if(c==='no')no.push(i+1);if(c==='nh')nh.push(i+1);});
+  return [no.length?'第'+no.join('、')+'晚未訂':'',nh.length?'第'+nh.join('、')+'晚沒選酒店':''].filter(Boolean).join('、');
+}
+function roomCheckCellsHtml(cells){
+  const st={ok:'background:var(--green-l);color:var(--green-d)',no:'background:var(--red-l);color:var(--red-d)',nh:'border:1px dashed var(--text3);color:var(--text3)'};
+  const ic={ok:'<i class="ti ti-check"></i>',no:'<i class="ti ti-x"></i>',nh:'?'};
+  return cells.map((c,i)=>`<span title="第${i+1}晚" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;font-size:12px;margin-right:3px;${st[c]}">${ic[c]}</span>`).join('');
+}
+function roomCheckRowHtml(x){
+  const urgent=!x.complete&&x.daysLeft<=14;
+  return `<div style="display:grid;grid-template-columns:96px minmax(0,1fr) minmax(0,170px);gap:10px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer" onclick="${x.open}" title="點擊打開住宿排程">
+    <div><div style="font-weight:600">${x.start.slice(5).replace('-','/')} 出發</div><div style="font-size:12px;color:${urgent?'var(--red)':'var(--text2)'}">${x.daysLeft===0?'今天':x.daysLeft+' 天後'}</div></div>
+    <div style="min-width:0"><div>${escH(x.title)} <span style="font-size:11px;color:var(--text2)">${x.sub}</span>${x.formed?'':' <span class="badge" style="font-size:10px;background:var(--bg2);color:var(--text2)">未成團</span>'}</div><div style="margin-top:4px">${roomCheckCellsHtml(x.cells)}</div></div>
+    <div style="font-size:12px;color:${x.complete?'var(--green-d)':urgent?'var(--red)':'var(--amber-d)'}">${x.complete?'✅ 已全部訂好':roomCheckGapText(x.cells)}</div>
+  </div>`;
+}
+function roomCheckViewHtml(){
+  const trips=getRoomCheckTrips();
+  if(!trips.length)return '<div class="empty">目前沒有需要住宿的未出發行程</div>';
+  const inc=trips.filter(x=>!x.complete),done=trips.filter(x=>x.complete);
+  const sec=(title,color,icon,list)=>list.length?`<div style="font-size:13px;font-weight:700;color:${color};margin:12px 0 4px"><i class="ti ${icon}"></i> ${title}（${list.length} 團）</div>${list.map(roomCheckRowHtml).join('')}`:'';
+  return `<div style="display:flex;gap:14px;font-size:12px;color:var(--text2);margin-bottom:4px;flex-wrap:wrap">
+      <span>${roomCheckCellsHtml(['ok'])}已訂房</span><span>${roomCheckCellsHtml(['no'])}未訂房</span><span>${roomCheckCellsHtml(['nh'])}還沒選酒店</span><span>點任一團可直接打開住宿排程</span></div>
+    ${sec('14 天內出發，還沒訂齊','var(--red)','ti-alert-triangle',inc.filter(x=>x.daysLeft<=14))}
+    ${sec('15–30 天內出發，還沒訂齊','var(--amber-d)','ti-clock',inc.filter(x=>x.daysLeft>14&&x.daysLeft<=30))}
+    ${sec('30 天以後出發，還沒訂齊','var(--text2)','ti-calendar',inc.filter(x=>x.daysLeft>30))}
+    ${done.length?`<details style="margin-top:12px"><summary style="font-size:13px;font-weight:700;color:var(--green-d);cursor:pointer"><i class="ti ti-circle-check"></i> 已全部訂好（${done.length} 團）</summary>${done.map(roomCheckRowHtml).join('')}</details>`:''}`;
+}
+// 包車團／拼團頁上方提醒：30 天內出發但還沒訂齊（拼團只提醒已成團的）
+function roomCheckAlertHtml(src){
+  const list=getRoomCheckTrips().filter(x=>x.src===src&&!x.complete&&x.daysLeft<=30&&x.formed);
+  if(!list.length)return '';
+  return `<div class="warn-box" style="margin-bottom:12px;border-color:#F09595;background:var(--red-l);color:var(--red-d)">
+    <div style="font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span><i class="ti ti-bed"></i> 30 天內出發，尚未訂好房（${list.length}團）</span><button class="btn btn-sm" onclick="hbView='check';showPage('p-hotel-book',[...document.querySelectorAll('.nav-tab')].find(b=>b.textContent.includes('訂房明細')))">查看出團前檢查</button></div>
+    <ul style="padding-left:16px;margin:0">${list.map(x=>`<li style="margin-bottom:3px;cursor:pointer" onclick="${x.open}"><strong>${escH(x.title)}</strong>　${x.start} 出發（${x.daysLeft===0?'今天':x.daysLeft+' 天後'}）　${roomCheckGapText(x.cells)}</li>`).join('')}</ul>
+  </div>`;
+}
+
 async function hbSet(idx,field,val){
   const e=(window._hbEntries||[])[idx];if(!e)return;
   setSS('syncing','儲存中…');
