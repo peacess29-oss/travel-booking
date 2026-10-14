@@ -133,8 +133,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 const FIREBASE_CONFIG={apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDomain:"travel-booking-89df8.firebaseapp.com",projectId:"travel-booking-89df8",storageBucket:"travel-booking-89df8.firebasestorage.app",messagingSenderId:"436528685102",appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"};
 firebase.initializeApp(FIREBASE_CONFIG);
 const db=firebase.firestore();
-let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
-const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-28','2025-04-03','2025-04-04','2025-04-05','2025-05-01','2025-05-31','2025-06-01','2025-09-07','2025-10-10','2025-10-11','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-28','2026-04-04','2026-04-05','2026-05-01','2026-06-19','2026-06-20','2026-09-25','2026-09-26','2026-10-10']);
+let tours=[],bookings=[],privates=[],dispatches=[],drivers=[],hotels=[],expenses=[],driverRecs=[],fixedExpenses=[],groupNightlies=[],groupStatus={},salesStaff={list:[],defaultId:''},carsList=['5201','RFT-2692','9713','8680'],costSettings={driverDayRate:5000,driverNightRate:1000};
+const TW_HOL=new Set(['2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-28','2025-04-03','2025-04-04','2025-04-05','2025-05-01','2025-05-31','2025-06-01','2025-09-07','2025-10-10','2025-10-11','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-28','2026-04-04','2026-04-05','2026-05-01','2026-06-19','2026-06-20','2026-09-25','2026-09-26','2026-10-09','2026-10-10','2026-10-26','2026-12-25',
+  // 2027（116年）政府行政機關辦公日曆表：含補假日
+  '2027-01-01','2027-02-04','2027-02-05','2027-02-06','2027-02-07','2027-02-08','2027-02-09','2027-02-10','2027-03-01','2027-04-05','2027-04-06','2027-04-30','2027-06-09','2027-09-15','2027-09-28','2027-10-11','2027-10-25','2027-12-24','2027-12-31']);
 const TW_MKP=new Set(['2025-01-23','2025-04-02']);
 function isHol(d){const w=new Date(d).getDay();if(TW_HOL.has(d))return true;if(TW_MKP.has(d))return false;return w===0||w===6;}
 function calcBookingBalance(b){
@@ -144,7 +146,11 @@ function calcBookingBalance(b){
   const dep=getPrice(t,b.date,'deposit'),pr=getPrice(t,b.date,'price');
   return (pr*b.count)+(b.roomCost||0)-(dep*b.count);
 }
+function privDriverCollect(p){if(!p||p.balanceToCompany)return 0;return Math.max(0,(p.price||0)-(p.deposit||0));}
 function getPrice(t,d,f){const h=isHol(d);if(f==='deposit')return h?(t.depositWk||t.deposit||0):(t.depositWd||t.deposit||0);return h?(t.priceWk||t.price||0):(t.priceWd||t.price||0);}
+function hm2min(v){const m=/^(\d{1,2}):(\d{2})$/.exec(String(v||'').trim());return m?(+m[1])*60+(+m[2]):null;}
+function normHM(v){const n=hm2min(v);return n==null?'':String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
+function dispTimeText(d){if(!d)return'';const st=hm2min(d.startTime)!=null?normHM(d.startTime):(d.startTime==='pm'?'下午':''),et=hm2min(d.endTime)!=null?normHM(d.endTime):(d.endTime==='am'?'中午':'');if(!st&&!et)return'';return(st?'出車 '+st:'')+(st&&et?'｜':'')+(et?'下團 '+et:'');}
 let busAssignMap={};
 function getBusIdx(tourId,date,bookId){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
@@ -204,6 +210,7 @@ function calcGroupBusExtras(tour,pax){
     return{name:e.name,detail:pax+'人 × $'+e.price,amount:pax*e.price};
   });
 }
+function escH(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function getHotelRoomRate(hotel,dateStr,roomType){
   if(!hotel)return 0;
   const isWeekend=isHol(dateStr);
@@ -271,7 +278,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-04c';
+const APP_VERSION='2026-10-14a';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -330,7 +337,7 @@ function extTripInfoHtml(p,d){
   if(p.type==='car+hotel'&&p.nightlyHotels?.length){
     const rows=p.nightlyHotels.map((n,i)=>{
       const h=hotels.find(x=>x.id===n.hotelId);
-      const name=h?h.name:(n.hotelId||'-');
+      const name=n.selfBooked?'客人自訂'+(n.selfHotel?'（'+escH(n.selfHotel)+'）':''):h?h.name:(n.hotelId||'-');
       const area=h?.area||'';
       const dt=p.start?(()=>{const x=new Date(p.start);x.setDate(x.getDate()+i);return(x.getMonth()+1)+'/'+x.getDate();})():'';
       // 司機現場付尾款的晚數：顯示應付金額（多車包車團只顯示給A車）
@@ -347,6 +354,7 @@ function extTripInfoHtml(p,d){
     <div style="font-size:12px;color:var(--text2)">行程</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name}</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${p.start}${p.start!==p.end?'～'+p.end:''}｜<strong style="color:var(--text)">${p.pax||1} 人</strong>${(p.cars||1)>1?'｜共'+(p.cars||1)+'輛':''}${d.car?'｜'+d.car:''}</div>
+    ${dispTimeText(d)?`<div style="font-size:14px;font-weight:600;color:var(--blue-d);margin:-6px 0 12px">🕗 ${dispTimeText(d)}</div>`:''}
     ${gearHtml}
     ${contactHtml}
     ${hotelHtml}
@@ -420,6 +428,7 @@ function extIsSettled(remitType,remitId,shouldRemit,waive,endDate){
   const confirmed=driverRecs.filter(r=>r.type==='remit'&&r.remitLinkType===remitType&&r.remitLinkId===remitId&&extRecConfirmed(r)).reduce((s,r)=>s+(r.amount||0),0);
   return (shouldRemit>0&&confirmed>=shouldRemit)||(waive>0&&shouldRemit<=0);
 }
+const EXT_NO_BALANCE_NOTE='<div style="font-size:12px;color:var(--green-d);margin:12px 0;padding:8px 10px;background:var(--green-l);border-radius:8px">✅ 客人尾款已付清（客收 $0），現場不用收款，也不需要通知客收</div>';
 const EXT_SETTLED_BANNER='<div style="font-size:13px;font-weight:600;color:var(--green-d);padding:10px 12px;background:var(--green-l);border-radius:8px;margin-bottom:14px">✅ 本團帳務已結清，謝謝您！辛苦了~</div>';
 function extPriorListHtml(recs,withLast5){
   if(!recs.length)return '';
@@ -481,7 +490,7 @@ function renderExternalSummary(d){
       `;
       return;
     }
-    const balance=(p.price||0)-(p.deposit||0);
+    const balance=privDriverCollect(p); // 尾款由公司收時為 0
     let hotelAdvance=0;
     if(window._extSnap){hotelAdvance=window._extSnap.hotelAdvance||0;}
     else hotelAdvance=calcPrivHotelAdvance(p);
@@ -504,12 +513,12 @@ function renderExternalSummary(d){
       </div>
       <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
-      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
+      ${balance<=0&&!priorReports.length?EXT_NO_BALANCE_NOTE:`<div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
       ${extPriorListHtml(priorReports,false)}
-      <div style="display:${settled?'none':'flex'};gap:6px;margin-bottom:14px">
+      <div style="display:${settled||balance<=0?'none':'flex'};gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
         <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
-      </div>
+      </div>`}
       ${extRemitSectionHtml('priv',p.id,shouldRemit,d.driverId,d.driverName,'reportPrivRemit')}
       ${disclaimer}
     `;
@@ -563,10 +572,11 @@ function renderExternalSummary(d){
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
         const action=repRec
           ?`<div style="font-size:12px;white-space:nowrap"><span style="color:var(--green)"><i class="ti ti-check"></i> 已通知</span><div style="font-size:11px">${extRecStatusHtml(repRec)}</div></div>`
-          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'-');
+          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'<span style="font-size:12px;color:var(--text2);white-space:nowrap">已付清・免通知</span>');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
 `}
+      ${custRows.length&&totalBalance<=0?EXT_NO_BALANCE_NOTE:''}
       ${extrasHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收合計',totalBalance)}
@@ -585,6 +595,7 @@ function renderExternalSummary(d){
     el.innerHTML=`
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${d.start}${d.start!==d.end?'～'+d.end:''}${d.car?'｜'+d.car:''}</div>
+      ${dispTimeText(d)?`<div style="font-size:14px;font-weight:600;color:var(--blue-d);margin:-8px 0 14px">🕗 ${dispTimeText(d)}</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${statBox('您的外派車資',d.outwage||0,'var(--green)')}${(d.nightAllowance||0)>0?statBox('外宿補貼',d.nightAllowance,'var(--green)'):''}</div>
       ${disclaimer}
     `;
