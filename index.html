@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="旅遊管理">
+<meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
+<title>旅遊業務管理系統</title>
+<script>
+// 公開模式先轉走：外派連結 → ext.html；報名頁 → booking.html（舊網址照常可用）
+(function(){
+  var q=new URLSearchParams(location.search);
+  if(q.has('ext')){window.__shellRedirecting=true;location.replace('ext.html'+location.search);return;}
+  if(location.hash==='#booking'){window.__shellRedirecting=true;location.replace('booking.html');}
+})();
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<style id="sh-style">
+#sh-root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,#dbeafe,#dcfce7);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;color:#1a1a1a}
+#sh-root *{box-sizing:border-box}
+.sh-card{background:#fff;border-radius:16px;padding:28px 30px;width:400px;max-width:100%;box-shadow:0 4px 32px rgba(0,0,0,.12)}
+.sh-wide{width:560px}
+.sh-title{font-size:21px;font-weight:700;text-align:center;margin-bottom:4px}
+.sh-sub{font-size:13px;color:#666;text-align:center;margin-bottom:18px}
+.sh-center{text-align:center;font-size:14px;color:#666;padding:10px 0}
+.sh-lbl{font-size:13px;color:#666;display:block;margin:0 0 3px}
+.sh-in{width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;height:38px;margin-bottom:10px;background:#fff}
+.sh-btn{width:100%;padding:11px;border:1px solid #ccc;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:#1a1a1a}
+.sh-btn:disabled{opacity:.5;cursor:not-allowed}
+.sh-green{background:#3B6D11;color:#EAF3DE;border-color:#3B6D11}
+.sh-blue{background:#185FA5;color:#E6F1FB;border-color:#185FA5}
+.sh-red{background:#fff;color:#A32D2D;border-color:#F09595}
+.sh-sep{border-top:1px solid #e0e0e0;margin:14px 0;padding-top:14px}
+.sh-err{color:#A32D2D;font-size:13px;margin-bottom:8px}
+.sh-note{font-size:12px;color:#666;margin-top:8px;line-height:1.6}
+.sh-box{background:#f6f6f6;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:12px;word-break:break-all}
+.sh-ok{background:#EAF3DE;color:#27500A}
+.sh-bad{background:#FCEBEB;color:#791F1F}
+.sh-row{display:flex;gap:8px;margin-top:10px}
+.sh-hide{display:none!important}
+</style>
+</head>
+<body>
+<div id="sh-root">
+  <div class="sh-card" id="sh-card">
+    <div class="sh-title">🚌 旅遊業務管理</div>
+    <div class="sh-sub" id="sh-sub">請選擇身份登入</div>
+
+    <div id="sh-v-checking" class="sh-center"><i class="ti ti-loader"></i> 檢查登入狀態…</div>
+
+    <div id="sh-v-login" class="sh-hide">
+      <button class="sh-btn" id="sh-google"><i class="ti ti-brand-google" style="font-size:20px;color:#185FA5"></i> 業務管理員（Google 登入）</button>
+      <div class="sh-sep">
+        <label class="sh-lbl">司機登入</label>
+        <select class="sh-in" id="sh-drv-sel"><option value="">載入中…</option></select>
+        <label class="sh-lbl">密碼</label>
+        <input class="sh-in" type="password" id="sh-drv-pwd" placeholder="請輸入密碼">
+        <div class="sh-err sh-hide" id="sh-err"></div>
+        <button class="sh-btn sh-green" id="sh-drv-btn"><i class="ti ti-steering-wheel"></i> 司機登入</button>
+        <div class="sh-note">登入後此裝置會自動記住，按「登出」才會解除。</div>
+      </div>
+    </div>
+
+    <div id="sh-v-loading" class="sh-center sh-hide"><i class="ti ti-loader"></i> 載入系統中…</div>
+
+    <div id="sh-v-msg" class="sh-hide">
+      <div class="sh-box sh-bad" id="sh-msg-text"></div>
+      <button class="sh-btn" id="sh-msg-logout"><i class="ti ti-logout"></i> 登出</button>
+    </div>
+
+    <div id="sh-v-update" class="sh-hide">
+      <div class="sh-box" id="sh-up-current">讀取目前版本中…</div>
+      <label class="sh-lbl">選擇完整版 index.html（原始檔，不是空殼）</label>
+      <input class="sh-in" type="file" id="sh-up-file" accept=".html,text/html" style="height:auto">
+      <div class="sh-box sh-hide" id="sh-up-check"></div>
+      <div class="sh-row">
+        <button class="sh-btn sh-blue" id="sh-up-go" disabled><i class="ti ti-upload"></i> 上傳新版</button>
+        <button class="sh-btn sh-red" id="sh-up-rollback" disabled><i class="ti ti-arrow-back-up"></i> 還原上一版</button>
+      </div>
+      <div class="sh-note">上傳只會寫入 appCode 集合，不會動到任何訂單、派車、記帳資料。<br>上傳完成後，重新整理系統頁面即可使用新版。</div>
+      <div class="sh-row"><button class="sh-btn" id="sh-up-open"><i class="ti ti-external-link"></i> 開啟系統</button><button class="sh-btn" id="sh-up-logout"><i class="ti ti-logout"></i> 登出</button></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+'use strict';
+if(window.__shellRedirecting)return;
+// ═══ 空殼載入器：登入後才從 Firestore（appCode）下載主程式 ═══
+// 只會寫入 appCode 集合（且只在 ?update 上傳頁），不碰任何營運資料。
+var CFG={apiKey:"AIzaSyAaLeoi0fR2o8bXimtPmlKvBtKjIrGdgX8",authDomain:"travel-booking-89df8.firebaseapp.com",projectId:"travel-booking-89df8",storageBucket:"travel-booking-89df8.firebasestorage.app",messagingSenderId:"436528685102",appId:"1:436528685102:web:a090cdf0cf9875ceddbfbf"};
+if(!firebase.apps.length)firebase.initializeApp(CFG);
+var auth=firebase.auth(),fdb=firebase.firestore();
+var CODE=fdb.collection('appCode');
+var UPDATE_MODE=new URLSearchParams(location.search).has('update');
+var VIEWS=['checking','login','loading','msg','update'];
+function $(id){return document.getElementById(id);}
+function view(v){VIEWS.forEach(function(x){$('sh-v-'+x).classList.toggle('sh-hide',x!==v);});}
+function msg(t){$('sh-msg-text').textContent=t;$('sh-sub').textContent='';view('msg');}
+function loginErr(t){var e=$('sh-err');e.textContent=t;e.classList.remove('sh-hide');}
+
+// ── 本機快取（IndexedDB）：版本沒變就不重新下載 ──
+function idb(){return new Promise(function(res,rej){var r=indexedDB.open('jt-shell',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv');};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function cacheOp(mode,fn){return idb().then(function(d){return new Promise(function(res){var t=d.transaction('kv',mode);var q=fn(t.objectStore('kv'));t.oncomplete=function(){res(q&&q.result);};t.onerror=t.onabort=function(){res(null);};});}).catch(function(){return null;});}
+function cacheGet(){return cacheOp('readonly',function(s){return s.get('main');});}
+function cacheSet(v){return cacheOp('readwrite',function(s){return s.put(v,'main');});}
+function cacheClear(){return cacheOp('readwrite',function(s){return s.delete('main');});}
+async function sha256(t){var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');}
+
+// ── 下載主程式 ──
+async function fetchParts(ptr,opts){
+  var snaps=await Promise.all(ptr.parts.map(function(id){return CODE.doc(id).get(opts);}));
+  var text=snaps.map(function(s){if(!s.exists)throw {code:'missing-part'};return s.data().d;}).join('');
+  if(await sha256(text)!==ptr.sha)throw {code:'checksum'};
+  return text;
+}
+async function loadPayload(){
+  var ptrSnap;
+  try{ptrSnap=await CODE.doc('main').get();}
+  catch(e){
+    if(e&&e.code==='permission-denied')throw e;
+    var c0=await cacheGet();if(c0&&c0.payload)return c0.payload; // 網路不穩時用上次的版本
+    throw e;
+  }
+  if(!ptrSnap.exists)throw {code:'no-code'};
+  var ptr=ptrSnap.data();
+  var c=await cacheGet();
+  if(c&&c.version===ptr.version&&c.sha===ptr.sha&&c.payload)return c.payload;
+  var payload=JSON.parse(await fetchParts(ptr));
+  await cacheSet({version:ptr.version,sha:ptr.sha,payload:payload});
+  return payload;
+}
+function loadScript(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('load '+src));};document.head.appendChild(s);});}
+async function runPayload(p){
+  (p.links||[]).forEach(function(h){if(!document.querySelector('link[href="'+h+'"]')){var l=document.createElement('link');l.rel='stylesheet';l.href=h;document.head.appendChild(l);}});
+  for(var i=0;i<(p.scripts||[]).length;i++){var src=p.scripts[i];if(!document.querySelector('script[src="'+src+'"]'))await loadScript(src);}
+  var st=document.createElement('style');st.textContent=p.css||'';document.head.appendChild(st);
+  $('sh-root').remove();$('sh-style').remove();
+  document.body.insertAdjacentHTML('afterbegin',p.body);
+  var s=document.createElement('script');s.textContent=p.script;document.body.appendChild(s);
+}
+
+// ── 登入 ──
+var busy=false,booted=false,unsub=null;
+function loadDriverList(){
+  fdb.collection('meta').doc('driverLogin').get().then(function(s){
+    var list=(s.exists&&s.data().list)||[];window.__shDrv=list;
+    $('sh-drv-sel').innerHTML=list.length?list.map(function(d){return '<option value="'+String(d.id).replace(/"/g,'&quot;')+'">'+String(d.name).replace(/</g,'&lt;')+'</option>';}).join(''):'<option value="">（尚無可登入的司機）</option>';
+  }).catch(function(){$('sh-drv-sel').innerHTML='<option value="">（名單載入失敗）</option>';});
+}
+async function googleLogin(){
+  var provider=new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  try{await auth.signInWithPopup(provider);}
+  catch(e){
+    if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){await auth.signInWithRedirect(provider);return;}
+    if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request')return;
+    alert('Google 登入失敗：'+(e.message||e.code));
+  }
+}
+async function driverLogin(){
+  $('sh-err').classList.add('sh-hide');
+  var id=$('sh-drv-sel').value,pwd=$('sh-drv-pwd').value;
+  var it=(window.__shDrv||[]).find(function(x){return x.id===id;});
+  if(!it){loginErr('請選擇司機');return;}
+  if(!pwd){loginErr('請輸入密碼');return;}
+  $('sh-drv-btn').disabled=true;
+  try{await auth.signInWithEmailAndPassword(it.email,pwd);}
+  catch(e){loginErr(e.code==='auth/too-many-requests'?'嘗試次數過多，請稍後再試':'密碼錯誤');$('sh-drv-pwd').value='';}
+  $('sh-drv-btn').disabled=false;
+}
+$('sh-google').addEventListener('click',googleLogin);
+$('sh-drv-btn').addEventListener('click',driverLogin);
+$('sh-drv-pwd').addEventListener('keydown',function(e){if(e.key==='Enter')driverLogin();});
+$('sh-msg-logout').addEventListener('click',function(){auth.signOut().then(function(){location.href=location.pathname;});});
+
+async function boot(user){
+  busy=true;view('loading');$('sh-sub').textContent='';
+  var isGoogle=user.providerData.some(function(p){return p.providerId==='google.com';});
+  var payload;
+  try{payload=await loadPayload();}
+  catch(e){
+    busy=false;
+    var code=e&&e.code;
+    if(code==='permission-denied'){
+      await auth.signOut();await cacheClear();
+      view('login');$('sh-sub').textContent='請選擇身份登入';
+      if(isGoogle)alert('此 Google 帳號（'+user.email+'）不在管理員名單中，請聯繫主管理員加入。');
+      else loginErr('此帳號已停用或密碼已更換，請向管理員索取新密碼');
+      return;
+    }
+    if(code==='no-code'){msg('系統程式尚未上傳。管理員請在網址後面加上 ?update 開啟上傳頁。');return;}
+    msg('系統載入失敗，請檢查網路後重新整理頁面。（'+(code||e.message||e)+'）');return;
+  }
+  booted=true;if(unsub)unsub();
+  try{await runPayload(payload);}
+  catch(e){console.error(e);alert('系統啟動失敗：'+(e.message||e)+'\n請重新整理頁面。');}
+}
+
+// ── 上傳新版（?update，只限管理員）──
+var built=null,curPtr=null;
+function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function ptrLine(p){return p?('版本 '+esc(p.appVersion||'-')+'（代號 '+esc(p.version)+'）｜更新於 '+esc((p.updatedAt||'').replace('T',' ').slice(0,16))+'｜'+esc(p.updatedBy||'')):'（無）';}
+async function showUpdater(user){
+  view('update');$('sh-card').classList.add('sh-wide');$('sh-sub').textContent='更新系統程式（'+user.email+'）';
+  try{
+    var s=await CODE.doc('main').get();curPtr=s.exists?s.data():null;
+    $('sh-up-current').innerHTML='<b>目前線上：</b>'+ptrLine(curPtr)+'<br><b>上一版：</b>'+ptrLine(curPtr&&curPtr.prev);
+    $('sh-up-rollback').disabled=!(curPtr&&curPtr.prev);
+  }catch(e){
+    $('sh-up-current').innerHTML=e&&e.code==='permission-denied'?'⛔ 此帳號沒有更新權限（只限管理員）':'讀取失敗：'+esc(e.message||e);
+    if(e&&e.code==='permission-denied')$('sh-up-file').disabled=true;
+  }
+}
+function buildPayload(text){
+  if(text.indexOf('id="sh-root"')>=0)throw new Error('這是空殼檔，請選擇完整版的 index.html（原始檔）');
+  var doc=new DOMParser().parseFromString(text,'text/html');
+  var bodyScripts=Array.from(doc.body.querySelectorAll('script'));
+  if(bodyScripts.some(function(s){return s.src;}))throw new Error('body 裡有外部 script，不符合預期格式');
+  var inline=bodyScripts.filter(function(s){return !s.src;});
+  if(inline.length!==1)throw new Error('body 裡應該剛好有 1 段主程式 script，實際 '+inline.length+' 段');
+  var main=inline[0].textContent;
+  var target='firebase.initializeApp(FIREBASE_CONFIG);';
+  var n=main.split(target).length-1;
+  if(n!==1)throw new Error('找不到唯一的 firebase.initializeApp(FIREBASE_CONFIG);（找到 '+n+' 個）——這可能不是完整版 index.html');
+  main=main.replace(target,'if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);');
+  if(main.indexOf('startAuthRouting')<0)throw new Error('找不到 startAuthRouting，這可能不是完整版 index.html');
+  try{new Function(main);}catch(e){throw new Error('主程式語法錯誤：'+e.message);}
+  bodyScripts.forEach(function(s){s.remove();});
+  var mv=main.match(/const APP_VERSION='([^']*)'/);
+  return {
+    v:1,
+    appVersion:mv?mv[1]:'',
+    css:Array.from(doc.head.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n'),
+    scripts:Array.from(doc.head.querySelectorAll('script[src]')).map(function(s){return s.getAttribute('src');}),
+    links:Array.from(doc.head.querySelectorAll('link[rel="stylesheet"][href]')).map(function(l){return l.getAttribute('href');}),
+    body:doc.body.innerHTML,
+    script:main
+  };
+}
+function splitText(t,max){var out=[],i=0;while(i<t.length){var e=Math.min(i+max,t.length);var c=t.charCodeAt(e-1);if(e<t.length&&c>=0xD800&&c<=0xDBFF)e--;out.push(t.slice(i,e));i=e;}return out;}
+$('sh-up-file').addEventListener('change',function(ev){
+  var f=ev.target.files[0];built=null;$('sh-up-go').disabled=true;
+  var box=$('sh-up-check');box.classList.remove('sh-hide','sh-ok','sh-bad');
+  if(!f){box.classList.add('sh-hide');return;}
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      built=buildPayload(r.result);
+      box.classList.add('sh-ok');
+      box.innerHTML='✅ 檢查通過<br>檔案：'+esc(f.name)+'（'+Math.round(f.size/1024)+' KB）<br>程式版本：'+esc(built.appVersion||'（未標示）')+'<br>外部函式庫：'+built.scripts.length+' 個｜語法檢查：正常';
+      $('sh-up-go').disabled=false;
+    }catch(e){box.classList.add('sh-bad');box.textContent='❌ '+e.message;}
+  };
+  r.readAsText(f,'utf-8');
+});
+$('sh-up-go').addEventListener('click',async function(){
+  if(!built)return;
+  if(!confirm('確定要上傳「'+(built.appVersion||'新版')+'」嗎？\n（只會更新系統程式，不會動到任何資料）'))return;
+  var btn=this;btn.disabled=true;var box=$('sh-up-check');box.classList.remove('sh-ok','sh-bad');
+  try{
+    var text=JSON.stringify(built),sha=await sha256(text),ver=Date.now().toString(36);
+    var chunks=splitText(text,200000),ids=chunks.map(function(_,i){return 'p_'+ver+'_'+i;});
+    for(var i=0;i<chunks.length;i++){box.textContent='上傳中… '+(i+1)+'/'+chunks.length;await CODE.doc(ids[i]).set({d:chunks[i],ver:ver,i:i});}
+    var s=await CODE.doc('main').get({source:'server'});var old=s.exists?s.data():null;
+    var ptr={version:ver,sha:sha,parts:ids,size:text.length,appVersion:built.appVersion||'',updatedAt:new Date().toISOString(),updatedBy:auth.currentUser.email,
+      prev:old?{version:old.version,sha:old.sha,parts:old.parts,size:old.size||0,appVersion:old.appVersion||'',updatedAt:old.updatedAt||'',updatedBy:old.updatedBy||''}:null};
+    await CODE.doc('main').set(ptr);
+    box.textContent='驗證中…';
+    await fetchParts(ptr,{source:'server'}); // 從伺服器重新下載並比對指紋
+    await cleanup(ptr);
+    box.classList.add('sh-ok');box.innerHTML='✅ 已上傳並驗證完成（'+esc(ptr.appVersion||ver)+'）<br>請重新整理系統頁面使用新版。';
+    showUpdater(auth.currentUser);
+  }catch(e){console.error(e);box.classList.add('sh-bad');box.textContent='❌ 上傳失敗：'+(e.message||e.code||e)+'（線上版本沒有被改變）';btn.disabled=false;}
+});
+$('sh-up-rollback').addEventListener('click',async function(){
+  if(!curPtr||!curPtr.prev)return;
+  if(!confirm('確定要還原成上一版「'+(curPtr.prev.appVersion||curPtr.prev.version)+'」嗎？'))return;
+  var box=$('sh-up-check');box.classList.remove('sh-hide','sh-ok','sh-bad');box.textContent='還原中…';
+  try{
+    var p=curPtr.prev;
+    var np={version:p.version,sha:p.sha,parts:p.parts,size:p.size||0,appVersion:p.appVersion||'',updatedAt:new Date().toISOString(),updatedBy:auth.currentUser.email,
+      prev:{version:curPtr.version,sha:curPtr.sha,parts:curPtr.parts,size:curPtr.size||0,appVersion:curPtr.appVersion||'',updatedAt:curPtr.updatedAt||'',updatedBy:curPtr.updatedBy||''}};
+    await fetchParts(np,{source:'server'}); // 先確認上一版完整
+    await CODE.doc('main').set(np);
+    box.classList.add('sh-ok');box.textContent='✅ 已還原（再按一次「還原上一版」可切回來）';
+    showUpdater(auth.currentUser);
+  }catch(e){box.classList.add('sh-bad');box.textContent='❌ 還原失敗：'+(e.message||e.code||e)+'（線上版本沒有被改變）';}
+});
+async function cleanup(ptr){
+  // 只刪除 appCode 裡「目前版」與「上一版」以外的舊程式碼分段
+  var keep=new Set(['main'].concat(ptr.parts,ptr.prev?ptr.prev.parts:[]));
+  try{var all=await CODE.get();for(var i=0;i<all.docs.length;i++){var d=all.docs[i];if(!keep.has(d.id)&&d.id.indexOf('p_')===0)await d.ref.delete();}}
+  catch(e){console.warn('[cleanup]',e);}
+}
+$('sh-up-open').addEventListener('click',function(){location.href=location.pathname;});
+$('sh-up-logout').addEventListener('click',function(){auth.signOut().then(function(){location.href=location.pathname;});});
+
+// ── 入口 ──
+unsub=auth.onAuthStateChanged(function(user){
+  if(booted||busy)return;
+  if(!user){cacheClear();view('login');$('sh-sub').textContent='請選擇身份登入';loadDriverList();return;}
+  if(UPDATE_MODE){
+    if(user.providerData.some(function(p){return p.providerId==='google.com';}))showUpdater(user);
+    else msg('只有管理員可以更新系統程式。');
+    return;
+  }
+  boot(user);
+});
+})();
+</script>
+</body>
+</html>
