@@ -151,6 +151,67 @@ function getPrice(t,d,f){const h=isHol(d);if(f==='deposit')return h?(t.depositWk
 function hm2min(v){const m=/^(\d{1,2}):(\d{2})$/.exec(String(v||'').trim());return m?(+m[1])*60+(+m[2]):null;}
 function normHM(v){const n=hm2min(v);return n==null?'':String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
 function dispTimeText(d){if(!d)return'';const st=hm2min(d.startTime)!=null?normHM(d.startTime):(d.startTime==='pm'?'下午':''),et=hm2min(d.endTime)!=null?normHM(d.endTime):(d.endTime==='am'?'中午':'');if(!st&&!et)return'';return(st?'出車 '+st:'')+(st&&et?'｜':'')+(et?'下團 '+et:'');}
+function hotelMapUrl(h,fallback){const q=String((h&&(h.address||((h.name||'')+' '+(h.area||''))))||fallback||'').trim();return q?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q):'';}
+function privExtraAmount(e,pax){if(!e||!e.price)return 0;if(e.mode==='table')return Math.ceil((pax||0)/(e.tableSize||8))*e.price;if(e.mode==='fixed')return e.price;return (pax||0)*e.price;}
+function privExtraDetail(e,pax){if(e.mode==='table')return Math.ceil((pax||0)/(e.tableSize||8))+'桌 × $'+e.price;if(e.mode==='fixed')return '整筆 $'+e.price;return (pax||0)+'人 × $'+e.price;}
+function privExtraItems(p){const pax=p?.pax||0;return (p?.extras||[]).filter(e=>e&&e.name&&e.price).map(e=>({name:e.name,detail:privExtraDetail(e,pax),amount:privExtraAmount(e,pax),charge:e.charge==='extra'?'extra':'incl',payer:e.payer==='company'?'company':'driver'}));}
+function privDriverExtras(p){return privExtraItems(p).filter(x=>x.payer==='driver');}
+function nightDateOf(start,i){if(!start)return'';const d=new Date(start);d.setDate(d.getDate()+i);return d.toISOString().slice(0,10);}
+function nightRoomsText(n){return[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');}
+function nightDroom(nh,nightDate){
+  if(!nh||nh.selfBooked||!nh.hotelId)return{on:false,fee:0,payer:'driver',note:''};
+  const h=hotels.find(x=>x.id===nh.hotelId);
+  const explicit=nh.driverRoom===true||nh.driverRoom===false;
+  const on=explicit?nh.driverRoom:(!!h?.driverRoom&&!!nightDate&&nightDate>=localDateStr());
+  const hasFee=nh.driverRoomFee!==undefined&&nh.driverRoomFee!==null&&nh.driverRoomFee!=='';
+  const fee=on?(hasFee?(parseInt(nh.driverRoomFee)||0):(h?.driverRoomFee||0)):0;
+  const payer=nh.driverRoomPayer||(isDriverPayNight(nh)?'driver':'company');
+  return{on,fee,payer,note:h?.driverRoomNote||''};
+}
+function nightBooker(nh){if(nh?.bookerName)return{name:nh.bookerName,phone:nh.bookerPhone||''};const h=hotels.find(x=>x.id===nh?.hotelId);return h?.defaultBookerName?{name:h.defaultBookerName,phone:h.defaultBookerPhone||''}:null;}
+function privHotelRows(p,dueArr){
+  return (p.nightlyHotels||[]).map((n,i)=>{
+    const nd=nightDateOf(p.start,i),dt=nd?(+nd.slice(5,7))+'/'+(+nd.slice(8,10)):'';
+    if(n.selfBooked)return{dt,name:'客人自訂'+(n.selfHotel?'（'+n.selfHotel+'）':''),area:'',rooms:'',self:true,mapUrl:n.selfHotel?hotelMapUrl(null,n.selfHotel):''};
+    const h=hotels.find(x=>x.id===n.hotelId),drv=isDriverPayNight(n);
+    const hd=dueArr?dueArr[i]:(drv?{due:nightBalanceDue(calcNightQuote(p,n,i),n),paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0}:null);
+    return{dt,name:h?h.name:(n.hotelId||'-'),area:h?.area||'',rooms:nightRoomsText(n),mapUrl:hotelMapUrl(h),booker:nightBooker(n),code:n.bookingCode||'',
+      driverPay:drv,due:hd?.due||0,paid:!!hd?.paid,paidAmt:hd?.paidAmt||0,hasDeposit:nightDeposit(n)>0,droom:nightDroom(n,nd)};
+  });
+}
+function nightCardsHtml(rows,opts){
+  opts=opts||{};rows=(rows||[]).filter(Boolean);if(!rows.length)return'';
+  const money=n=>'$'+(n||0).toLocaleString();
+  const box=(bg,fg,html)=>`<div style="font-size:12px;margin-top:5px;padding:5px 8px;border-radius:6px;background:${bg};color:${fg}">${html}</div>`;
+  return `<div style="margin-top:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:3px">住宿安排</div>`+rows.map(r=>{
+    const map=r.mapUrl?`<a href="${r.mapUrl}" target="_blank" rel="noopener" style="flex-shrink:0;font-size:12px;padding:2px 8px;border-radius:6px;background:var(--blue-l);color:var(--blue-d);text-decoration:none;white-space:nowrap"><i class="ti ti-map-pin"></i> 地圖</a>`:'';
+    let body='';
+    if(!r.self){
+      if(r.rooms)body+=`<div style="font-size:12px;color:var(--text2)">${r.rooms}</div>`;
+      if(r.booker||r.code)body+=`<div style="font-size:12px;margin-top:4px"><i class="ti ti-user"></i> ${r.booker?'跟櫃台報：<strong>'+escH(r.booker.name)+'</strong>'+(r.booker.phone?' '+escH(r.booker.phone):''):''}${r.code?(r.booker?'｜':'')+'訂房代號 '+escH(r.code):''}</div>`;
+      const dr=r.droom||{on:false};
+      const drvRoom=dr.on&&dr.payer==='driver'&&dr.fee>0;
+      if(opts.showPay){
+        const items=[];
+        if(r.driverPay&&!r.paid)items.push(['客房尾款',r.due]);
+        if(drvRoom)items.push(['你的寄鋪',dr.fee]);
+        if(r.driverPay&&r.paid)body+=box('var(--green-l)','var(--green-d)','✅ 已付客房尾款 '+money(r.paidAmt));
+        if(items.length){
+          body+=`<div style="margin-top:5px;padding:6px 8px;border-radius:6px;background:var(--bg2)"><div style="font-size:11px;color:var(--text2)">請在櫃台付款</div>${items.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px"><span>${x[0]}</span><span>${money(x[1])}</span></div>`).join('')}${items.length>1?`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid var(--border);margin-top:3px;padding-top:3px"><span>櫃台合計</span><span>${money(items.reduce((s,x)=>s+x[1],0))}</span></div>`:''}${r.driverPay&&!r.paid&&r.hasDeposit?'<div style="font-size:11px;color:var(--text2)">客房訂金公司已付</div>':''}</div>`;
+        }
+        if(!r.driverPay)body+=box('var(--green-l)','var(--green-d)',dr.on&&dr.payer==='company'?'✅ 客房和寄鋪已由公司付清，櫃台不用付':'✅ 客房已由公司付清，櫃台不用付');
+      }
+      if(dr.on){
+        let t='🛏 今晚寄鋪：'+escH(r.name)+(dr.payer==='company'?'（已由公司付清）':(dr.fee?'（寄鋪費 '+money(dr.fee)+'）':''))+(dr.note?'｜'+escH(dr.note):'');
+        if(drvRoom&&opts.allow!==null&&opts.allow!==undefined)t+=opts.allow>0?'<div style="font-size:11px">寄鋪用外宿補貼支付</div>':'<div style="font-size:11px">寄鋪費自付（本趟沒有外宿補貼）</div>';
+        body+=box('var(--green-l)','var(--green-d)',t);
+      } else {
+        body+=box('var(--amber-l)','var(--amber-d)','🚫 這晚沒有寄鋪，請自行安排住宿'+(opts.allow===0?'（本趟沒有外宿補貼）':''));
+      }
+    }
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><div style="font-size:13px"><span style="color:var(--text2);font-size:12px">${r.dt}</span>　<strong>${escH(r.name)}</strong>${r.area?' <span style="font-size:12px;color:var(--text2)">('+escH(r.area)+')</span>':''}</div>${map}</div>${body}</div>`;
+  }).join('')+'</div>';
+}
 let busAssignMap={};
 function getBusIdx(tourId,date,bookId){
   const key=tourId+'_'+date.replace(/-/g,'')+'_'+bookId;
@@ -229,7 +290,9 @@ function groupBusHotelRows(tourId,date,busIdx){
     const nd=new Date(date);nd.setDate(nd.getDate()+i);
     const rooms=[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');
     const drv=isDriverPayNight(n);
+    const ndStr=nd.toISOString().slice(0,10);
     return{dt:(nd.getMonth()+1)+'/'+nd.getDate(),name:h?h.name:'（未指定酒店）',area:h?.area||'',rooms,
+      mapUrl:hotelMapUrl(h),booker:fromTemplate?null:nightBooker(n),code:fromTemplate?'':(n.bookingCode||''),droom:fromTemplate?nightDroom({hotelId:n.hotelId},ndStr):nightDroom(n,ndStr),
       driverPay:drv&&!fromTemplate,due:drv&&!fromTemplate?nightBalanceDue(calcGroupNightQuote(gn,n,i),n):0,paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0,hasDeposit:nightDeposit(n)>0};
   }).filter(Boolean);
 }
@@ -278,7 +341,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-14a';
+const APP_VERSION='2026-10-16a';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -335,18 +398,11 @@ function extTripInfoHtml(p,d){
   </div>`;
   let hotelHtml='';
   if(p.type==='car+hotel'&&p.nightlyHotels?.length){
-    const rows=p.nightlyHotels.map((n,i)=>{
-      const h=hotels.find(x=>x.id===n.hotelId);
-      const name=n.selfBooked?'客人自訂'+(n.selfHotel?'（'+escH(n.selfHotel)+'）':''):h?h.name:(n.hotelId||'-');
-      const area=h?.area||'';
-      const dt=p.start?(()=>{const x=new Date(p.start);x.setDate(x.getDate()+i);return(x.getMonth()+1)+'/'+x.getDate();})():'';
-      // 司機現場付尾款的晚數：顯示應付金額（多車包車團只顯示給A車）
-      const isAcc=(d?.privateBusIdx??0)===0;
-      const hd=!isAcc?null:(window._extSnap?(window._extSnap.hotelDue||[])[i]:(isDriverPayNight(n)?{due:nightBalanceDue(calcNightQuote(p,n,i),n),paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0}:null));
-      const payHtml=hd?`<div style="font-size:12px;font-weight:600;color:${hd.paid?'var(--green-d)':'var(--red)'}">${hd.paid?'✅ 已付酒店尾款 $'+(hd.paidAmt||0).toLocaleString():'💵 請現場付酒店尾款 $'+(hd.due||0).toLocaleString()}${nightDeposit(n)?'（訂金公司已付）':''}</div>`:'';
-      return`<tr style="border-bottom:0.5px solid var(--border)"><td style="padding:5px 0;white-space:nowrap;color:var(--text2);font-size:12px;vertical-align:top">${dt}</td><td style="padding:5px 0 5px 10px;font-size:13px">${name}${area?'（'+area+'）':''}${payHtml}</td></tr>`;
-    }).join('');
-    hotelHtml=`<div style="font-size:12px;font-weight:600;margin-bottom:6px">住宿安排</div><table style="width:100%;border-collapse:collapse;margin-bottom:14px">${rows}</table>`;
+    const isAcc=(d?.privateBusIdx??0)===0;
+    const snap=window._extSnap;
+    const rows=snap&&snap.privHotels?snap.privHotels:privHotelRows(p,snap?(snap.hotelDue||[]):null);
+    const allow=isAcc?(snap?(snap.remitNight||0):calcRemitNightAllowance(d)):null;
+    hotelHtml=`<div style="margin-bottom:14px">${nightCardsHtml(rows,{showPay:isAcc,allow})}</div>`;
   }
   const itin=(p.itinerary||'').trim();
   const itinHtml=itin?`<div style="font-size:12px;font-weight:600;margin-bottom:6px">行程內容</div><div style="font-size:13px;white-space:pre-wrap;line-height:1.7;margin-bottom:14px;color:var(--text2)">${itin}</div>`:'';
@@ -496,22 +552,26 @@ function renderExternalSummary(d){
     else hotelAdvance=calcPrivHotelAdvance(p);
     const outwage=d.outwage||0;
     const waive=dispWaive(d);
-    const shouldRemit=balance-hotelAdvance-outwage-nightAllow-waive;
+    const privExItems=window._extSnap?(window._extSnap.privExtras||[]):privDriverExtras(p);
+    const privExAdv=privExItems.reduce((s,x)=>s+(x.amount||0),0);
+    const shouldRemit=balance-hotelAdvance-privExAdv-outwage-nightAllow-waive;
     const priorReports=driverRecs.filter(r=>r.type==='income'&&r.incomeLinkType==='priv'&&r.incomeLinkId===p.id);
     const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
     const settled=extIsSettled('priv',p.id,shouldRemit,waive,p.end||p.start||d.end);
     el.innerHTML=`
       ${settled?`<div style="font-size:12px;color:var(--text2)">行程</div><div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name||'-'}</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start||''}${p.end&&p.end!==p.start?'～'+p.end:''}</div>${EXT_SETTLED_BANNER}`:tripInfoHtml}
+      ${privExItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px"><div style="font-size:12px;font-weight:600;color:#5C3A00;margin-bottom:4px">附加費用（請現場代付）</div>${privExItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px;color:#5C3A00"><span>${escH(x.name)}　<span style="font-size:11px;color:#8A6A3A">(${x.detail})</span></span><span style="font-weight:600">$${(x.amount||0).toLocaleString()}</span></div>`).join('')}</div>`:''}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收',balance)}
-        ${statBox('住宿尾款代付',hotelAdvance,'var(--red)')}
+        ${statBox('代付客房尾款',hotelAdvance,'var(--red)')}
+        ${privExAdv?statBox('附加費用代付',privExAdv,'var(--red)'):''}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('外宿補貼',nightAllow,'var(--green)')}
         ${waive?statBox('公司免回帳',waive,'var(--green)'):''}
         ${remitBox(shouldRemit)}
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－住宿尾款代付－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－代付客房尾款${privExAdv?'－附加費用代付':''}－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
       ${balance<=0&&!priorReports.length?EXT_NO_BALANCE_NOTE:`<div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
       ${extPriorListHtml(priorReports,false)}
@@ -564,7 +624,8 @@ function renderExternalSummary(d){
       ${(()=>{
         const gh=window._extSnap?(window._extSnap.groupHotels||[]):groupBusHotelRows(tourId,date,busIdx);
         if(!gh.length)return '';
-        return `<div style="font-size:12px;font-weight:600;margin-bottom:6px">住宿安排</div><table style="width:100%;border-collapse:collapse;margin-bottom:14px">${gh.map(r=>`<tr style="border-bottom:0.5px solid var(--border)"><td style="padding:5px 0;white-space:nowrap;color:var(--text2);font-size:12px;vertical-align:top">${r.dt}</td><td style="padding:5px 0 5px 10px;font-size:13px">${r.name}${r.area?'（'+r.area+'）':''}${r.rooms?'<div style="font-size:12px;color:var(--text2)">'+r.rooms+'</div>':''}${r.driverPay?`<div style="font-size:12px;font-weight:600;color:${r.paid?'var(--green-d)':'var(--red)'}">${r.paid?'✅ 已付酒店尾款 $'+(r.paidAmt||0).toLocaleString():'💵 請現場付酒店尾款 $'+(r.due||0).toLocaleString()}${r.hasDeposit?'（訂金公司已付）':''}</div>`:''}</td></tr>`).join('')}</table>`;
+        const allow=window._extSnap?(window._extSnap.remitNight||0):calcRemitNightAllowance(d);
+        return `<div style="margin-bottom:14px">${nightCardsHtml(gh,{showPay:true,allow})}</div>`;
       })()}
       ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
@@ -580,14 +641,14 @@ function renderExternalSummary(d){
       ${extrasHtml}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${statBox('客收合計',totalBalance)}
-        ${statBox('住宿尾款代付',hotelAdvance,'var(--red)')}
+        ${statBox('代付客房尾款',hotelAdvance,'var(--red)')}
         ${extraAdvance?statBox('附加費用代付',extraAdvance,'var(--red)'):''}
         ${statBox('您的外派車資',outwage,'var(--green)')}
         ${statBox('外宿補貼',nightAllow,'var(--green)')}
         ${waive?statBox('公司免回帳',waive,'var(--green)'):''}
         ${remitBox(shouldRemit)}
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－住宿尾款代付${extraAdvance?'－附加費用代付':''}－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收合計－代付客房尾款${extraAdvance?'－附加費用代付':''}－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${extRemitSectionHtml('group',d.groupTourId,shouldRemit,d.driverId,d.driverName,'reportGroupRemit')}
       ${disclaimer}
     `;
