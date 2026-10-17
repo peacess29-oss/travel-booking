@@ -264,6 +264,19 @@ function buildBuses(bks,max,tourId,date){
     seats:(manualBuses[i]||[]).reduce((s,b)=>s+b.count,0)  // 總人數（用於成團判斷）
   }));
 }
+const GEAR_ITEMS=[['carSeat','安全座椅'],['booster','增高墊'],['stroller','嬰兒車'],['wheelchair','輪椅']];
+function gearListText(g,sep){return GEAR_ITEMS.filter(([k])=>(g?.[k]||0)>0).map(([k,n])=>n+(sep||'×')+g[k]);}
+function privGearTotal(p){return GEAR_ITEMS.reduce((s,[k])=>s+(p?.[k]||0),0);}
+function privGearForBus(p,busIdx,sep){
+  const cars=getPrivBusCars(p);
+  if(cars>1&&privGearTotal(p)>0){
+    const g=p.busGear?.[busIdx??0];
+    if(g)return {list:gearListText(g,sep),note:''};
+    return {list:gearListText(p,sep),note:'（全團合計，尚未分配各車，請跟公司確認）'};
+  }
+  return {list:gearListText(p,sep),note:''};
+}
+function getPrivBusCars(p){return p.cars||1;}
 function calcGroupBusExtras(tour,pax){
   if(!tour?.extras?.length||!pax)return [];
   return tour.extras.filter(e=>e.mode!=='room'&&e.price).map(e=>{
@@ -341,7 +354,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-16a';
+const APP_VERSION='2026-10-17a';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -382,12 +395,9 @@ function extReportToRec(rid,r){
   return rec;
 }
 function extTripInfoHtml(p,d){
-  const gear=[];
-  if(p.carSeat>0)gear.push(`安全座椅×${p.carSeat}`);
-  if(p.booster>0)gear.push(`增高墊×${p.booster}`);
-  if(p.stroller>0)gear.push(`嬰兒車×${p.stroller}`);
-  if(p.wheelchair>0)gear.push(`輪椅×${p.wheelchair}`);
-  const gearHtml=gear.length?`<div style="font-size:12px;padding:8px 10px;background:var(--amber-l);color:#9A6000;border-radius:8px;margin-bottom:14px">⚠️ 特殊需求裝備：${gear.join('、')}</div>`:'';
+  const _gb=privGearForBus(p,d?.privateBusIdx);
+  const gear=_gb.list;
+  const gearHtml=gear.length?`<div style="font-size:12px;padding:8px 10px;background:var(--amber-l);color:#9A6000;border-radius:8px;margin-bottom:14px">⚠️ 特殊需求裝備${getPrivBusCars(p)>1&&!_gb.note?'（本車）':''}：${gear.join('、')}${_gb.note}</div>`:'';
   const chMap={WhatsApp:'WhatsApp',LINE官方:'LINE官方',LINE個人:'LINE個人',FB:'FB',微信:'微信'};
   const ch=chMap[p.channel]||p.channel||'';
   const contactHtml=`<div style="border-radius:8px;padding:10px 12px;background:var(--bg2);margin-bottom:14px">
