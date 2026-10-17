@@ -295,6 +295,55 @@ function getHotelRoomRate(hotel,dateStr,roomType){
   if(roomType==='r6')return isWeekend?(hotel.r6wk||hotel.r6||0):(hotel.r6||0);
   return 0;
 }
+const PAYMODE_N={firstDay:'第一天上車付全額',daily:'每日上車付當日車資',company:'已全額付給公司',deposit:'訂金＋上車付尾款'};
+const CF_WD='日一二三四五六';
+function cfMDs(ds){const d=new Date(ds);return (d.getMonth()+1)+'/'+d.getDate()+'（'+CF_WD[d.getDay()]+'）';}
+function cfMoney(v){return 'NT$'+(Math.round(v||0)).toLocaleString();}
+function privPlanDates(start,end,freeDays){
+  if(!start)return[];const out=[];const d=new Date(start);const e=new Date(end||start);const fr=new Set(freeDays||[]);
+  let guard=0;while(d<=e&&guard++<120){const ds=d.toISOString().slice(0,10);if(!fr.has(ds))out.push(ds);d.setDate(d.getDate()+1);}
+  return out;
+}
+function privDayPlans(p){
+  const dates=new Set(privPlanDates(p?.start,p?.end,p?.freeDays));
+  return (p?.dayPlans||[]).filter(x=>x&&dates.has(x.date)).sort((a,b)=>a.date>b.date?1:-1);
+}
+function dayPlanCarAmt(x){return x&&x.mode!=='incl'?(x.amt||0):0;}
+function otRuleText(p){
+  const rate=p?.otRate||0;if(!rate)return'';const buf=p.otBuffer||0;
+  return '超過約定結束時間，每小時 '+cfMoney(rate)+'，'+(buf?'零頭 '+buf+' 分鐘內不計、超過 '+buf+' 分鐘以 1 小時計':'未滿 1 小時以 1 小時計')+'，當天現場支付';
+}
+function cfStayText(p,x){
+  if(p.type==='car+hotel'&&p.start){
+    const i=Math.round((new Date(x.date)-new Date(p.start))/86400000);
+    const nh=(p.nightlyHotels||[])[i];
+    if(nh){
+      if(nh.selfBooked)return (nh.selfHotel||'旅客自訂住宿')+'（旅客自訂）';
+      const h=hotels.find(z=>z.id===nh.hotelId);
+      if(h)return h.name+(nightRoomsText(nh)?'　'+nightRoomsText(nh):'');
+    }
+  }
+  return (x.stay||'').trim();
+}
+function privDayPlanHtml(p,opts){
+  const plans=privDayPlans(p);if(!plans.length&&!p.payMode&&!p.otRate)return'';
+  const daily=p.payMode==='daily'&&!p.balanceToCompany;
+  const rows=plans.map(x=>{
+    const t=(x.st||'')+(x.et?'–'+x.et:'');
+    const stay=cfStayText(p,x);
+    const col=daily&&dayPlanCarAmt(x)?`<span style="color:var(--red);font-weight:600;white-space:nowrap">收 $${dayPlanCarAmt(x).toLocaleString()}</span>`:'';
+    return `<div style="padding:6px 0;border-bottom:1px dashed var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span><strong>${cfMDs(x.date)}</strong>${t?'　🕗 '+escH(t):''}</span>${col}</div>
+      ${x.from?`<div style="font-size:13px">📍 ${escH(x.from)}</div>`:''}
+      ${x.desc?`<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">${escH(x.desc)}</div>`:''}
+      ${stay?`<div style="font-size:12px;color:var(--blue-d)">🏨 ${escH(stay)}</div>`:''}
+    </div>`;
+  }).join('');
+  const pay=p.payMode?`<div style="font-size:12px;margin-top:6px"><span style="color:var(--text2)">付款方式：</span>${PAYMODE_N[p.payMode]||''}</div>`:'';
+  const ot=otRuleText(p)?`<div style="font-size:12px;margin-top:2px"><span style="color:var(--text2)">超時：</span>${escH(otRuleText(p))}</div>`:'';
+  return `<div style="margin:8px 0;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+    <div style="font-size:11px;color:var(--text2);margin-bottom:2px;font-weight:600">逐日行程</div>${rows}${pay}${ot}</div>`;
+}
 function groupBusHotelRows(tourId,date,busIdx){
   const {gn,fromTemplate}=getGroupNightlyForDisplay(tourId,date,busIdx);
   return (gn?.nightlyHotels||[]).map((n,i)=>{
@@ -423,6 +472,7 @@ function extTripInfoHtml(p,d){
     ${dispTimeText(d)?`<div style="font-size:14px;font-weight:600;color:var(--blue-d);margin:-6px 0 12px">🕗 ${dispTimeText(d)}</div>`:''}
     ${gearHtml}
     ${contactHtml}
+    ${privDayPlanHtml(p)?`<div style="margin-bottom:14px">${privDayPlanHtml(p)}</div>`:''}
     ${hotelHtml}
     ${itinHtml}
   `;
