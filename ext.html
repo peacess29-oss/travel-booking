@@ -408,7 +408,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-20a';
+const APP_VERSION='2026-10-20b';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
