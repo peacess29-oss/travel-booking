@@ -156,6 +156,59 @@ function privExtraAmount(e,pax){if(!e||!e.price)return 0;if(e.mode==='table')ret
 function privExtraDetail(e,pax){if(e.mode==='table')return Math.ceil((pax||0)/(e.tableSize||8))+'桌 × $'+e.price;if(e.mode==='fixed')return '整筆 $'+e.price;return (pax||0)+'人 × $'+e.price;}
 function privExtraItems(p){const pax=p?.pax||0;return (p?.extras||[]).filter(e=>e&&e.name&&e.price).map(e=>({name:e.name,detail:privExtraDetail(e,pax),amount:privExtraAmount(e,pax),charge:e.charge==='extra'?'extra':'incl',payer:e.payer==='company'?'company':'driver'}));}
 function privDriverExtras(p){return privExtraItems(p).filter(x=>x.payer==='driver');}
+function dateAddDays(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dateRangeList(s,e){const r=[];if(!s)return r;const end=e&&e>=s?e:s;let c=s;while(c<=end&&r.length<62){r.push(c);c=dateAddDays(c,1);}return r;}
+function sessMD(ds){if(!ds)return '';const p=String(ds).split('-');return p.length===3?(+p[1])+'/'+(+p[2]):ds;}
+function sessFmtAt(iso){const d=new Date(iso);if(!iso||isNaN(d))return '';return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function sessSort(a,b){return (a.date+' '+a.time)>(b.date+' '+b.time)?1:-1;}
+function dispSessItems(d){
+  if(!d)return [];
+  if(d.privateId){
+    const p=privates.find(x=>x.id===d.privateId);if(!p)return [];
+    const ds=dateRangeList(p.start,p.end);
+    return (p.extras||[]).filter(e=>e&&e.sess&&e.name&&normHM(e.sessTime)).map(e=>({name:e.name,date:ds.includes(e.sessDate)?e.sessDate:(p.start||''),time:normHM(e.sessTime)})).sort(sessSort);
+  }
+  if(d.groupTourId){
+    const m=String(d.groupTourId).match(/^(.+)_(\d{4}-\d{2}-\d{2})_bus(\d+)$/);
+    const tId=m?m[1]:String(d.groupTourId).split('_')[0],date=m?m[2]:d.start;
+    const t=tours.find(x=>x.id===tId);if(!t||!date)return [];
+    const ov=d.sessTimes||{};
+    return (t.extras||[]).filter(e=>e&&e.sess&&e.name&&e.mode!=='room').map(e=>{
+      const time=normHM(ov[e.name]||e.sessTime);if(!time)return null;
+      const day=Math.min(Math.max(parseInt(e.sessDay)||1,1),Math.max(t.days||1,1));
+      return {name:e.name,date:dateAddDays(date,day-1),time};
+    }).filter(Boolean).sort(sessSort);
+  }
+  return [];
+}
+function sessSig(items){return (items||[]).map(x=>x.name+'|'+x.date+'|'+x.time).join(';');}
+function sessState(items,ack,drvName){
+  if(!items||!items.length)return '';
+  if(!ack||!ack.sig||(drvName&&ack.by&&ack.by!==drvName))return 'none';
+  return ack.sig===sessSig(items)?'ok':'changed';
+}
+function sessChangeNotes(items,ack){
+  const old=(ack&&ack.items)||[];
+  const fmt=(x,same)=>(same?'':sessMD(x.date)+' ')+x.time;
+  return items.map(x=>{
+    const o=old.find(y=>y.name===x.name);
+    if(!o)return x.name+' 是新加的場次';
+    if(o.time!==x.time||o.date!==x.date){const same=o.date===x.date;return x.name+' 場次已由公司改為 '+fmt(x,same)+'（原 '+fmt(o,same)+'）';}
+    return null;
+  }).filter(Boolean).concat(old.filter(o=>!items.some(x=>x.name===o.name)).map(o=>o.name+' 的場次已取消'));
+}
+function sessBoxHtml(items,ack,drvName,onclick){
+  const st=sessState(items,ack,drvName);if(!st)return '';
+  const c=st==='ok'?{bg:'var(--green-l)',bd:'var(--green)',tx:'var(--green-d)',t:'活動場次'}
+    :st==='changed'?{bg:'var(--amber-l)',bd:'var(--amber)',tx:'var(--amber-d)',t:'場次有變更，請重新確認'}
+    :{bg:'var(--red-l)',bd:'var(--red)',tx:'var(--red-d)',t:'有場次的活動，請準時抵達'};
+  const rows=items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 0"><span style="font-size:14px;color:var(--text)">${sessMD(x.date)}　${escH(x.name)}</span><span style="font-size:20px;font-weight:700;color:${c.tx}">${x.time}</span></div>`).join('');
+  const notes=st==='changed'?sessChangeNotes(items,ack).map(n=>`<div style="font-size:13px;color:${c.tx};margin-top:4px">⚠️ ${escH(n)}，請重新確認</div>`).join(''):'';
+  const btn=st==='ok'
+    ?`<div style="font-size:12px;color:${c.tx};margin-top:6px">✅ 已確認 ${sessFmtAt(ack.at)}</div>`
+    :`<button class="btn" style="width:100%;margin-top:8px;height:42px;font-size:15px;font-weight:700;justify-content:center;background:${c.tx};border-color:${c.tx};color:#fff" onclick="${onclick}">我已確認場次時間</button>`;
+  return `<div style="margin:0 0 10px;padding:10px 12px;background:${c.bg};border:2px solid ${c.bd};border-radius:10px"><div style="font-size:13px;font-weight:700;color:${c.tx};margin-bottom:4px">⏰ ${c.t}</div>${rows}${notes}${btn}</div>`;
+}
 function nightDateOf(start,i){if(!start)return'';const d=new Date(start);d.setDate(d.getDate()+i);return d.toISOString().slice(0,10);}
 function nightRoomsText(n){return[n.r2?`雙人房×${n.r2}`:'',n.r3?`三人房×${n.r3}`:'',n.r4?`四人房×${n.r4}`:'',n.r5?`五人房×${n.r5}`:'',n.r6?`六人房×${n.r6}`:''].filter(Boolean).join('、');}
 function nightDroom(nh,nightDate){
@@ -355,7 +408,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-17a';
+const APP_VERSION='2026-10-20a';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -373,7 +426,8 @@ function enterExternalMode(token){
     try{
       const rs=await db.collection('extViews').doc(token).collection('reports').get();
       const have=new Set(driverRecs.map(r=>r.id));
-      rs.docs.forEach(x=>{if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,x.data()));});
+      window._extSessAcks=[];
+      rs.docs.forEach(x=>{const xd=x.data();if(xd.type==='sessAck'){window._extSessAcks.push(xd);return;}if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,xd));});
     }catch(e){console.warn('[ext reports]',e);}
     renderExternalSummary({id:v.dispId,...v.disp});
     // 版本標記：用來確認司機手機載入的是不是最新版（舊版會被瀏覽器快取）
@@ -434,6 +488,30 @@ async function submitExtReport(r){
   const ref=db.collection('extViews').doc(window._extToken).collection('reports').doc();
   await ref.set(data);
   driverRecs=[...driverRecs,extReportToRec(ref.id,data)];
+}
+function extSessAck(){
+  const v=window._extSnap,list=[];
+  const base=v?v.sessAck:(window._extDisp&&window._extDisp.sessAck);
+  if(base&&base.sig)list.push(base);
+  (window._extSessAcks||[]).forEach(r=>{if(r&&r.sig)list.push({sig:r.sig,items:r.items||[],at:r.createdAt||'',by:r.driverName||''});});
+  list.sort((a,b)=>(a.at||'')>(b.at||'')?1:-1);
+  return list.length?list[list.length-1]:null;
+}
+function extSessBoxHtml(d){
+  const v=window._extSnap;
+  const items=v?(v.sess||[]):dispSessItems(d);
+  if(!items.length||!items.some(x=>x.date>=localDateStr()))return '';
+  return '<div style="margin-bottom:14px">'+sessBoxHtml(items,extSessAck(),d.driverName||'','reportExtSessAck()')+'</div>';
+}
+async function reportExtSessAck(){
+  const v=window._extSnap;if(!v){alert('預覽畫面不能按確認，司機開連結時才能按');return;}
+  const items=(v.sess||[]).map(x=>({name:x.name,date:x.date,time:x.time}));if(!items.length)return;
+  const d=window._extDisp||{};
+  const data={type:'sessAck',sig:sessSig(items),items,driverName:d.driverName||'',linkType:v.linkType,linkId:v.linkId,date:localDateStr(),createdAt:new Date().toISOString(),imported:false};
+  try{await db.collection('extViews').doc(window._extToken).collection('reports').doc().set(data);}
+  catch(e){console.error('[sessAck]',e);alert('確認失敗，請檢查網路連線後再試一次');return;}
+  (window._extSessAcks=window._extSessAcks||[]).push(data);
+  if(window._extDisp)renderExternalSummary(window._extDisp);
 }
 async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds){
   const r={type:'income',amount,note:note||'外派司機回報客收',driverName:driverName||''};
@@ -546,6 +624,7 @@ function renderExternalSummary(d){
     // 包車團多車：帳務統一由A車負責，B/C車只顯示行程資訊，不顯示金額/應回帳
     if((d.privateBusIdx??0)!==0){
       el.innerHTML=`
+        ${extSessBoxHtml(d)}
         <div style="font-size:12px;padding:8px 10px;background:var(--blue-l);color:var(--blue-d);border-radius:8px;margin-bottom:14px">ℹ️ 本團帳務統一由A車司機負責回帳，此頁僅供查詢行程資訊</div>
         ${tripInfoHtml}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -570,6 +649,7 @@ function renderExternalSummary(d){
     const priorTotal=priorReports.reduce((s,r)=>s+(r.amount||0),0);
     const settled=extIsSettled('priv',p.id,shouldRemit,waive,p.end||p.start||d.end);
     el.innerHTML=`
+      ${settled?'':extSessBoxHtml(d)}
       ${settled?`<div style="font-size:12px;color:var(--text2)">行程</div><div style="font-size:18px;font-weight:700;margin-bottom:4px">${p.name||'-'}</div><div style="font-size:13px;color:var(--text2);margin-bottom:14px">${p.start||''}${p.end&&p.end!==p.start?'～'+p.end:''}</div>${EXT_SETTLED_BANNER}`:tripInfoHtml}
       ${privExItems.length?`<div style="margin-bottom:10px;padding:8px 10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px"><div style="font-size:12px;font-weight:600;color:#5C3A00;margin-bottom:4px">附加費用（請現場代付）</div>${privExItems.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:8px;color:#5C3A00"><span>${escH(x.name)}　<span style="font-size:11px;color:#8A6A3A">(${x.detail})</span></span><span style="font-weight:600">$${(x.amount||0).toLocaleString()}</span></div>`).join('')}</div>`:''}
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">帳務資訊</div>
@@ -627,6 +707,7 @@ function renderExternalSummary(d){
         <div style="display:flex;justify-content:space-between;font-size:13px;padding-top:4px;margin-top:4px;border-top:1px solid var(--amber);color:#5C3A00"><span>合計</span><strong>$${extraAdvance.toLocaleString()}</strong></div>
       </div>`:'';
     el.innerHTML=`
+      ${settled?'':extSessBoxHtml(d)}
       <div style="font-size:12px;color:var(--text2)">行程</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:4px">${t?.name||d.label||'-'}</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${date}｜<strong style="color:var(--text)">本車 ${bks.reduce((s,b)=>s+(b.count||0),0)} 人</strong>${d.car?'｜'+d.car:''}</div>
