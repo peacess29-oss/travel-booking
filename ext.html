@@ -206,7 +206,7 @@ function sessBoxHtml(items,ack,drvName,onclick){
   const notes=st==='changed'?sessChangeNotes(items,ack).map(n=>`<div style="font-size:13px;color:${c.tx};margin-top:4px">⚠️ ${escH(n)}，請重新確認</div>`).join(''):'';
   const btn=st==='ok'
     ?`<div style="font-size:12px;color:${c.tx};margin-top:6px">✅ 已確認 ${sessFmtAt(ack.at)}</div>`
-    :`<button class="btn" style="width:100%;margin-top:8px;height:42px;font-size:15px;font-weight:700;justify-content:center;background:${c.tx};border-color:${c.tx};color:#fff" onclick="${onclick}">我已確認場次時間</button>`;
+    :`<div style="font-size:13px;color:var(--text);margin-top:8px">👉 記住場次時間後，<strong style="color:${c.tx}">一定要按下面「我已確認場次時間」</strong>，公司才知道你已經看到${st==='changed'?'新的場次':'場次'}。</div><button class="btn" style="width:100%;margin-top:6px;height:42px;font-size:15px;font-weight:700;justify-content:center;background:${c.tx};border-color:${c.tx};color:#fff" onclick="${onclick}">我已確認場次時間</button>`;
   return `<div style="margin:0 0 10px;padding:10px 12px;background:${c.bg};border:2px solid ${c.bd};border-radius:10px"><div style="font-size:13px;font-weight:700;color:${c.tx};margin-bottom:4px">⏰ ${c.t}</div>${rows}${notes}${btn}</div>`;
 }
 function nightDateOf(start,i){if(!start)return'';const d=new Date(start);d.setDate(d.getDate()+i);return d.toISOString().slice(0,10);}
@@ -258,9 +258,7 @@ function nightCardsHtml(rows,opts){
         let t='🛏 今晚寄鋪：'+escH(r.name)+(dr.payer==='company'?'（已由公司付清）':(dr.fee?'（寄鋪費 '+money(dr.fee)+'）':''))+(dr.note?'｜'+escH(dr.note):'');
         if(drvRoom&&opts.allow!==null&&opts.allow!==undefined)t+=opts.allow>0?'<div style="font-size:11px">寄鋪用外宿補貼支付</div>':'<div style="font-size:11px">寄鋪費自付（本趟沒有外宿補貼）</div>';
         body+=box('var(--green-l)','var(--green-d)',t);
-      } else {
-        body+=box('var(--amber-l)','var(--amber-d)','🚫 這晚沒有寄鋪，請自行安排住宿'+(opts.allow===0?'（本趟沒有外宿補貼）':''));
-      }
+      } // 沒有寄鋪：不顯示任何提醒（2026-10-20）
     }
     return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><div style="font-size:13px"><span style="color:var(--text2);font-size:12px">${r.dt}</span>　<strong>${escH(r.name)}</strong>${r.area?' <span style="font-size:12px;color:var(--text2)">('+escH(r.area)+')</span>':''}</div>${map}</div>${body}</div>`;
   }).join('')+'</div>';
@@ -408,7 +406,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-20b';
+const APP_VERSION='2026-10-20d';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -519,7 +517,7 @@ async function submitExtIncome(driverId,driverName,amount,note,relatedBookingIds
   await submitExtReport(r);
 }
 async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
-  if(!confirm(`確定要通知「${name}」已客收 $${balance.toLocaleString()} 嗎？`))return;
+  if(!confirm(`確定已收到「${name}」的尾款 $${balance.toLocaleString()} 嗎？\n按確定後公司會收到通知`))return;
   try{await submitExtIncome(driverId,driverName,balance,'外派司機通知已客收：'+name,[bookingId]);}
   catch(e){alert('通知失敗，請檢查網路後再試');return;}
   alert('已通知，謝謝！');
@@ -528,7 +526,7 @@ async function reportGroupIncome(bookingId,name,balance,driverId,driverName){
 async function reportPrivIncome(privId,driverId,driverName){
   const amt=parseInt(document.getElementById('ext-inc-amt')?.value)||0;
   if(!amt){alert('請輸入金額');return;}
-  if(!confirm(`確定要通知已客收 $${amt.toLocaleString()} 嗎？`))return;
+  if(!confirm(`確定已收到客人尾款 $${amt.toLocaleString()} 嗎？\n按確定後公司會收到通知`))return;
   try{await submitExtIncome(driverId,driverName,amt,'外派司機通知已客收');}
   catch(e){alert('通知失敗，請檢查網路後再試');return;}
   alert('已通知，謝謝！');
@@ -664,11 +662,11 @@ function renderExternalSummary(d){
       </div>
       <div style="font-size:11px;color:var(--text2);margin-top:6px">應回帳＝客收－代付客房尾款${privExAdv?'－附加費用代付':''}－外派車資－外宿補貼${waive?'－公司免回帳'+(d.remitWaiveNote?'（'+d.remitWaiveNote+'）':''):''}</div>
       ${splitNote}
-      ${balance<=0&&!priorReports.length?EXT_NO_BALANCE_NOTE:`<div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已客收</div>
+      ${balance<=0&&!priorReports.length?EXT_NO_BALANCE_NOTE:`<div style="margin:14px 0 6px;padding:8px 10px;border:2px solid ${priorTotal>=balance?'var(--green)':'var(--red)'};background:${priorTotal>=balance?'var(--green-l)':'var(--red-l)'};border-radius:8px;font-size:13px;color:var(--text)">${priorTotal>=balance?'<strong style="color:var(--green-d)">✅ 尾款已通知公司，謝謝！</strong>':'<strong style="color:var(--red-d)">💰 收到客人尾款後</strong>，請填金額並按「已收到尾款」，公司才知道已經收了。'}</div>
       ${extPriorListHtml(priorReports,false)}
       <div style="display:${settled||balance<=0?'none':'flex'};gap:6px;margin-bottom:14px">
         <input type="number" id="ext-inc-amt" value="${Math.max(balance-priorTotal,0)}" style="flex:1;height:34px;font-size:13px" placeholder="收到的金額">
-        <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 通知</button>
+        <button class="btn btn-primary btn-sm" onclick="reportPrivIncome('${p.id}','${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')" style="font-weight:700;white-space:nowrap">已收到尾款</button>
       </div>`}
       ${extRemitSectionHtml('priv',p.id,shouldRemit,d.driverId,d.driverName,'reportPrivRemit')}
       ${disclaimer}
@@ -719,13 +717,13 @@ function renderExternalSummary(d){
         const allow=window._extSnap?(window._extSnap.remitNight||0):calcRemitNightAllowance(d);
         return `<div style="margin-bottom:14px">${nightCardsHtml(gh,{showPay:true,allow})}</div>`;
       })()}
-      ${custRows.length?`<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
+      ${custRows.length?`${(()=>{const _todo=custRows.filter(r=>r.balance>0&&!driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId)));return _todo.length?`<div style="margin-bottom:8px;padding:8px 10px;border:2px solid var(--red);background:var(--red-l);border-radius:8px;font-size:13px;color:var(--text)"><strong style="color:var(--red-d)">💰 還有 ${_todo.length} 位客人的尾款沒通知</strong><br>收到客人尾款後，請按該客人旁的「已收到尾款」，公司才知道已經收了。</div>`:'';})()}<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
         const repRec=driverRecs.find(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
         const action=repRec
           ?`<div style="font-size:12px;white-space:nowrap"><span style="color:var(--green)"><i class="ti ti-check"></i> 已通知</span><div style="font-size:11px">${extRecStatusHtml(repRec)}</div></div>`
-          :(r.balance>0?`<button class="btn btn-sm" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')">通知已客收</button>`:'<span style="font-size:12px;color:var(--text2);white-space:nowrap">已付清・免通知</span>');
+          :(r.balance>0?`<button class="btn btn-sm btn-primary" onclick="reportGroupIncome('${r.bookingId}','${nameEsc}',${r.balance},'${d.driverId}','${(d.driverName||'').replace(/'/g,"\\'")}')" style="font-weight:700;white-space:nowrap">已收到尾款</button>`:'<span style="font-size:12px;color:var(--text2);white-space:nowrap">已付清・免通知</span>');
         return `<tr><td style="font-size:12px">${r.name}</td><td style="text-align:center">${r.count}</td><td style="text-align:right">$${r.balance.toLocaleString()}</td><td>${action}</td></tr>`;
       }).join('')}</tbody></table></div>`:'<div class="empty" style="padding:8px;margin-bottom:10px">目前這車次尚無報名資料</div>'}
 `}
