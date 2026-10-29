@@ -161,7 +161,7 @@ function privExtraAmount(e,pax){if(!e||!e.price)return 0;if(e.mode==='table')ret
 function privExtraDetail(e,pax){if(e.mode==='table')return Math.ceil((pax||0)/(e.tableSize||8))+'桌 × $'+e.price;if(e.mode==='fixed')return '整筆 $'+e.price;return (pax||0)+'人 × $'+e.price;}
 function privExtraItems(p){const pax=p?.pax||0;return (p?.extras||[]).filter(e=>e&&e.name&&e.price).map(e=>({name:e.name,detail:privExtraDetail(e,pax),amount:privExtraAmount(e,pax),charge:e.charge==='extra'?'extra':'incl',payer:e.payer==='company'?'company':'driver',date:e.sess&&e.sessDate?e.sessDate:''}));}
 function privDriverExtras(p){return privExtraItems(p).filter(x=>x.payer==='driver');}
-function privDispsOf(pid){return dispatches.filter(d=>d.privateId===pid);}
+function privDispsOf(pid){const seen=new Set();return dispatches.filter(d=>d.privateId===pid&&!seen.has(d.id)&&seen.add(d.id));}
 function privBusDisps(p,busIdx){return p?privDispsOf(p.id).filter(d=>(d.privateBusIdx??0)===(busIdx||0)).sort((a,b)=>(a.start||'').localeCompare(b.start||'')||String(a.id).localeCompare(String(b.id))):[];}
 function privAcctDisp(p){return privBusDisps(p,0)[0]||null;}
 function dispIsPartial(d,p){if(!d||!d.id||!d.privateId)return false;p=p||privates.find(x=>x.id===d.privateId);return !!p&&privBusDisps(p,d.privateBusIdx??0).length>1;}
