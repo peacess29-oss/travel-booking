@@ -411,6 +411,22 @@ function calcGroupBusExtras(tour,pax){
   });
 }
 function escH(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function dropoffBoxHtml(p){
+  if(!p?.dropoff)return '';
+  const md=p.end?(+p.end.slice(5,7))+'/'+(+p.end.slice(8,10)):'';
+  const row=(k,v)=>v?`<div style="display:flex;gap:8px;font-size:14px;margin-top:3px"><span style="color:#7C2D12;min-width:72px">${k}</span><strong>${v}</strong></div>`:'';
+  const leave=p.dropoffLeave?`<div style="font-size:24px;font-weight:800;color:#C2410C;line-height:1.2">🚗 ${escH(p.dropoffLeave)} 出發</div>${p.dropoffFrom?'<div style="font-size:14px;font-weight:700;color:#C2410C">從 '+escH(p.dropoffFrom)+'</div>':''}`
+    :`<div style="font-size:15px;font-weight:700;color:var(--red-d)">⚠️ 公司還沒填出發時間，請先跟公司確認</div>`;
+  return `<div style="margin-bottom:8px;padding:10px 12px;background:#FFF1E6;border:2px solid #E8590C;border-radius:10px">
+    <div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:4px">🛫 送機　${md}${p.end?'（'+'日一二三四五六'[new Date(p.end+'T00:00:00').getDay()]+'）':''}</div>
+    ${leave}
+    <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #F5B78A">
+      ${row('抵達機場',escH(p.dropoffArrive||'')+(p.dropoffAirport?'　'+escH(p.dropoffAirport):''))}
+      ${row('班機起飛',escH(p.dropoffTime||'')+(p.dropoffFlight?'　'+escH(p.dropoffFlight):''))}
+      ${p.dropoffNote?`<div style="font-size:13px;margin-top:4px;color:#7C2D12">${escH(p.dropoffNote)}</div>`:''}
+    </div>
+  </div>`;
+}
 function privHasHotel(p){return !!p&&(p.type==='car+hotel'||(p.type==='conf'&&(p.nightlyHotels||[]).some(n=>n&&(n.hotelId||n.selfBooked))));}
 function confIsDaily(p){return p?.type==='conf'&&p.conf?.payMode==='daily';}
 function getHotelRoomRate(hotel,dateStr,roomType){
@@ -492,7 +508,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-10-31a';
+const APP_VERSION='2026-11-03a';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -543,8 +559,7 @@ function extTripInfoHtml(p,d){
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">貴賓聯絡方式</div>
     <div style="font-size:13px;margin-bottom:4px"><i class="ti ti-phone"></i> ${p.phone||'-'}${ch?'（'+ch+(p.contact?' '+p.contact:'')+'）':''}</div>
     ${p.pickup?`<div style="font-size:13px;margin-bottom:4px"><i class="ti ti-plane-departure"></i> 接機 ${p.pickupTime||''} ${p.pickupFlight||''}${p.pickupNote?'／'+p.pickupNote:''}</div>`:''}
-    ${p.dropoff?`<div style="font-size:13px"><i class="ti ti-plane-arrival"></i> 送機 ${p.dropoffTime||''} ${p.dropoffFlight||''}${p.dropoffNote?'／'+p.dropoffNote:''}</div>`:''}
-  </div>`;
+  </div>${dropoffBoxHtml(p)}`;
   let hotelHtml='';
   if(privHasHotel(p)&&p.nightlyHotels?.length){
     const snap=window._extSnap;
