@@ -454,6 +454,23 @@ function groupBusHotelRows(tourId,date,busIdx){
       driverPay:drv&&!fromTemplate,due:drv&&!fromTemplate?nightBalanceDue(calcGroupNightQuote(gn,n,i),n):0,paid:!!n.driverPaid,paidAmt:n.driverPaidAmount||0,hasDeposit:nightDeposit(n)>0};
   }).filter(Boolean);
 }
+function remitAcctHtml(a){
+  if(!a||!a.acct)return '';
+  const btn=(t,lbl)=>`<button class="btn btn-sm" style="padding:3px 10px;font-size:12px;flex-shrink:0" onclick="copyAcct('${t}',this)"><i class="ti ti-copy"></i> ${lbl}</button>`;
+  return `<div style="margin:6px 0 10px;padding:8px 10px;background:var(--blue-l);border:1px solid #B3D4F5;border-radius:8px;color:var(--blue-d)">
+    <div style="font-size:12px;font-weight:700;margin-bottom:4px">🏦 公司回帳帳號</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:14px"><span>${escH(a.bankCode)} ${escH(a.bankName)}</span>${btn(a.bankCode,'複製代碼')}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:17px;font-weight:700;letter-spacing:.5px;margin-top:3px"><span>${escH(a.acct)}</span>${btn(a.acct,'複製帳號')}</div>
+    <div style="font-size:13px;margin-top:3px">戶名：${escH(a.holder)}</div>
+  </div>`;
+}
+function copyAcct(t,btn){copyText(t).then(()=>{if(btn){const o=btn.innerHTML;btn.innerHTML='✓ 已複製';setTimeout(()=>{btn.innerHTML=o;},1500);}}).catch(()=>alert('複製失敗，請長按文字複製：'+t));}
+function copyText(t){
+  if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t);
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');}finally{ta.remove();}
+  return Promise.resolve();
+}
 function calcNightQuote(p,nh,i){
   if(nh.finalQuote>0)return nh.finalQuote;
   const hotel=hotels.find(h=>h.id===nh.hotelId);if(!hotel)return 0;
@@ -508,7 +525,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-11-04a';
+const APP_VERSION='2026-11-04b';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -692,6 +709,7 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
   if(shouldRemit<=0&&!priorRemits.length)return '';
   return `
     <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已回帳</div>
+    ${remitAcctHtml(window._extSnap?.remitAcct)}
     ${extPriorListHtml(priorRemits,true)}
     ${shouldRemit>0?(priorTotal>=shouldRemit
       ?`<div style="font-size:13px;font-weight:600;color:var(--green-d);margin-bottom:8px">✅ 已回帳完成（應回帳 $${shouldRemit.toLocaleString()}）</div>`
