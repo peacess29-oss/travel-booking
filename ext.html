@@ -525,7 +525,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-11-05a';
+const APP_VERSION='2026-11-05b';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -839,7 +839,7 @@ function renderExternalSummary(d){
         const allow=window._extSnap?(window._extSnap.remitNight||0):calcRemitNightAllowance(d);
         return `<div style="margin-bottom:14px">${nightCardsHtml(gh,{showPay:true,allow})}</div>`;
       })()}
-      ${custRows.length?`${(()=>{const _todo=custRows.filter(r=>r.balance>0&&!driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId)));return _todo.length?`<div style="margin-bottom:8px;padding:8px 10px;border:2px solid var(--red);background:var(--red-l);border-radius:8px;font-size:13px;color:var(--text)"><strong style="color:var(--red-d)">💰 還有 ${_todo.length} 位客人的尾款沒通知</strong><br>收到客人尾款後，請按該客人旁的「已收到尾款」，公司才知道已經收了。</div>`:'';})()}<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
+      ${custRows.length?`${(()=>{const _todo=custRows.filter(r=>r.balance>0&&!driverRecs.some(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId)));return _todo.length?`<div style="margin-bottom:8px;padding:8px 10px;border:2px solid var(--red);background:var(--red-l);border-radius:8px;font-size:13px;color:var(--text)"><strong style="color:var(--red-d)">💰 還有 ${_todo.length} 組客人的尾款沒通知</strong><br>收到客人尾款後，請按該組客人旁的「已收到尾款」，公司才知道已經收了。</div>`:'';})()}<div style="font-size:12px;font-weight:600;margin-bottom:4px">客人尾款明細</div>
       <div class="tbl-wrap" style="margin-bottom:10px"><table class="xtable"><thead><tr><th>客人</th><th style="text-align:center">人數</th><th style="text-align:right">尾款</th><th></th></tr></thead><tbody>${custRows.map(r=>{
         const repRec=driverRecs.find(rec=>rec.type==='income'&&rec.relatedBookingIds?.includes(r.bookingId));
         const nameEsc=(r.name||'').replace(/'/g,"\\'");
