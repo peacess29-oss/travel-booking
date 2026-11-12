@@ -525,7 +525,7 @@ function calcGroupNightQuote(gn,nh,i){
   if(gn.date){const d=new Date(gn.date);d.setDate(d.getDate()+i);nightDate=d.toISOString().slice(0,10);}
   return getHotelRoomRate(hotel,nightDate,'r2')*(nh.r2||0)+getHotelRoomRate(hotel,nightDate,'r3')*(nh.r3||0)+getHotelRoomRate(hotel,nightDate,'r4')*(nh.r4||0)+getHotelRoomRate(hotel,nightDate,'r5')*(nh.r5||0)+getHotelRoomRate(hotel,nightDate,'r6')*(nh.r6||0);
 }
-const APP_VERSION='2026-11-12b';
+const APP_VERSION='2026-11-12c';
 function enterExternalMode(token){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
@@ -544,7 +544,8 @@ function enterExternalMode(token){
       const rs=await db.collection('extViews').doc(token).collection('reports').get();
       const have=new Set(driverRecs.map(r=>r.id));
       window._extSessAcks=[];
-      rs.docs.forEach(x=>{const xd=x.data();if(xd.type==='sessAck'){window._extSessAcks.push(xd);return;}if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,xd));});
+      window._extClaims=[];
+      rs.docs.forEach(x=>{const xd=x.data();if(xd.type==='sessAck'){window._extSessAcks.push(xd);return;}if(xd.type==='claim'){window._extClaims.push(xd);return;}if(!have.has('ext_'+x.id))driverRecs.push(extReportToRec(x.id,xd));});
     }catch(e){console.warn('[ext reports]',e);}
     renderExternalSummary({id:v.dispId,...v.disp});
     // 版本標記：用來確認司機手機載入的是不是最新版（舊版會被瀏覽器快取）
@@ -650,6 +651,57 @@ async function reportPrivIncome(privId,driverId,driverName){
   alert('已通知，謝謝！');
   if(window._extDisp)renderExternalSummary(window._extDisp);
 }
+function extLatestClaim(){
+  const v=window._extSnap;const list=[];
+  if(v&&v.claim)list.push({...v.claim,done:!!v.claimDone});
+  (window._extClaims||[]).forEach(r=>list.push({amount:r.amount,bankCode:r.bankCode,bankName:r.bankName||'',acctNo:r.acctNo,holder:r.holder,note:r.note||'',at:r.createdAt||'',date:r.date||'',done:false}));
+  list.sort((a,b)=>(a.at||'')>(b.at||'')?1:-1);
+  return list.length?list[list.length-1]:null;
+}
+function extClaimHtml(owed,paidOut,priorRemits,driverName){
+  const v=window._extSnap||{};
+  const last=extLatestClaim();
+  const pre=(last&&!last.done?last:null)||v.bankPrefill||{};
+  const head=paidOut>0&&owed<=0
+    ?`<div style="font-size:14px;font-weight:700;color:var(--green-d)">✅ 公司已付款 $${paidOut.toLocaleString()}${v.paidOut?.date?'（'+v.paidOut.date+'）':''}，謝謝！</div>`
+    :`<div style="font-size:16px;font-weight:800;color:#C2410C">💰 公司應付您 $${owed.toLocaleString()}</div>${paidOut>0?`<div style="font-size:12px;color:var(--text2)">公司已先付 $${paidOut.toLocaleString()}</div>`:''}`;
+  let status='';
+  if(owed>0&&last&&!last.done)status=`<div style="font-size:13px;margin-top:6px;padding:6px 8px;background:#fff;border-radius:6px">📨 已申請請款 <strong>$${(last.amount||0).toLocaleString()}</strong>（${last.date||''}），等公司付款<div style="font-size:12px;color:var(--text2)">${escH(last.bankCode)} ${escH(last.bankName||'')}｜${escH(last.acctNo)}｜${escH(last.holder)}</div></div>`;
+  const form=owed>0?`
+    <div style="font-size:13px;margin:8px 0 6px">${status?'帳號填錯或金額要改，可以重新送出（以最新一筆為準）：':'請填您的收款帳號，公司會匯款給您：'}</div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:6px">
+      <div><label style="font-size:11px">銀行代碼 *</label><input id="ext-claim-bank" inputmode="numeric" maxlength="3" value="${escH(pre.bankCode||'')}" placeholder="例：822" style="height:36px;font-size:14px" oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)"></div>
+      <div><label style="font-size:11px">銀行名稱（選填）</label><input id="ext-claim-bankname" maxlength="50" value="${escH(pre.bankName||'')}" placeholder="例：中國信託" style="height:36px;font-size:14px"></div>
+    </div>
+    <div style="margin-top:6px"><label style="font-size:11px">帳號 *</label><input id="ext-claim-acct" inputmode="numeric" maxlength="20" value="${escH(pre.acctNo||'')}" placeholder="只填數字" style="height:36px;font-size:15px;width:100%" oninput="this.value=this.value.replace(/\D/g,'').slice(0,20)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+      <div><label style="font-size:11px">戶名 *</label><input id="ext-claim-holder" maxlength="50" value="${escH(pre.holder||driverName||'')}" style="height:36px;font-size:14px"></div>
+      <div><label style="font-size:11px">請款金額 *</label><input id="ext-claim-amt" type="number" value="${owed}" style="height:36px;font-size:14px"></div>
+    </div>
+    <div style="margin-top:6px"><label style="font-size:11px">備註（選填）</label><input id="ext-claim-note" maxlength="100" style="height:36px;font-size:14px;width:100%"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;font-size:14px;padding:8px;background:#E8590C;border-color:#E8590C" onclick="submitExtClaim('${(driverName||'').replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> 送出請款</button>`:'';
+  return `<div style="margin:14px 0;padding:10px 12px;border:2px solid ${owed>0?'#E8590C':'var(--green)'};background:${owed>0?'#FFF1E6':'var(--green-l)'};border-radius:10px">
+    ${head}${status}${form}
+    ${priorRemits.length?`<div style="font-size:12px;font-weight:600;margin:10px 0 4px">已通知的回帳</div>${extPriorListHtml(priorRemits,true)}`:''}
+  </div>`;
+}
+async function submitExtClaim(driverName){
+  const v=window._extSnap;if(!v){alert('預覽畫面不能送出，司機開連結時才能送');return;}
+  const g=id=>(document.getElementById(id)?.value||'').trim();
+  const bankCode=g('ext-claim-bank'),bankName=g('ext-claim-bankname'),acctNo=g('ext-claim-acct'),holder=g('ext-claim-holder'),note=g('ext-claim-note');
+  const amount=parseInt(g('ext-claim-amt'))||0;
+  if(!/^\d{3}$/.test(bankCode)){alert('請填銀行代碼（3位數字）');return;}
+  if(!/^\d{6,20}$/.test(acctNo)){alert('請填帳號（6～20位數字）');return;}
+  if(!holder){alert('請填戶名');return;}
+  if(amount<=0){alert('請填請款金額');return;}
+  if(!confirm('確定要向公司請款 $'+amount.toLocaleString()+' 嗎？\n'+bankCode+' '+bankName+'\n帳號 '+acctNo+'\n戶名 '+holder))return;
+  const data={type:'claim',amount,date:localDateStr(),note,driverName:driverName||'',linkType:v.linkType,linkId:v.linkId,bankCode,bankName,acctNo,holder,createdAt:new Date().toISOString(),imported:false};
+  try{await db.collection('extViews').doc(window._extToken).collection('reports').doc().set(data);}
+  catch(e){console.error('[claim]',e);alert('送出失敗，請檢查網路連線後再試一次');return;}
+  (window._extClaims=window._extClaims||[]).push(data);
+  alert('已送出請款，公司付款後這裡會顯示「已付款」，謝謝！');
+  if(window._extDisp)renderExternalSummary(window._extDisp);
+}
 async function submitExtRemit(driverId,driverName,amount,last5){
   await submitExtReport({type:'remit',amount,note:'外派司機通知已回帳'+(last5?'｜帳號後5碼 '+last5:''),driverName:driverName||''});
 }
@@ -706,6 +758,10 @@ function extRemitSectionHtml(remitLinkType,remitLinkId,shouldRemit,driverId,driv
   // 公司已設定免回帳，或試算不需回帳（0或負數）→ 不顯示通知已回帳區塊
   const waive=dispWaive(window._extDisp);
   if(waive>0)return `<div style="font-size:12px;color:var(--green-d);margin:12px 0;padding:8px 10px;background:var(--green-l);border-radius:8px">✅ 公司已免除本團回帳${window._extDisp?.remitWaiveNote?'（'+window._extDisp.remitWaiveNote+'）':''}，不需要回帳或通知</div>`;
+  // 帳是負的（公司應付司機）：顯示請款區
+  const _paidOut=window._extSnap?.paidOut?.amount||0;
+  const _owed=priorTotal-shouldRemit-_paidOut;
+  if(shouldRemit<priorTotal&&(_owed>0||_paidOut>0))return extClaimHtml(Math.max(_owed,0),_paidOut,priorRemits,driverName);
   if(shouldRemit<=0&&!priorRemits.length)return '';
   return `
     <div style="font-size:12px;font-weight:600;margin:14px 0 6px">通知已回帳</div>
